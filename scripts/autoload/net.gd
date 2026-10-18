@@ -24,6 +24,9 @@ var players: Dictionary = {}
 ## Server only. Peer id -> the saved progress they joined with (design log
 ## 0038), checked by PlayerShape.sanitize_progress. Not sent to other players.
 var progress: Dictionary = {}
+## Server only. Peer id -> the house chests they joined with (design log
+## 0064), checked like progress.
+var chests: Dictionary = {}
 var mode := Mode.OFFLINE
 var port := DEFAULT_PORT
 var in_session := false
@@ -95,6 +98,7 @@ func describe_session() -> String:
 func _reset() -> void:
 	players.clear()
 	progress.clear()
+	chests.clear()
 	in_session = false
 	_local_info = {}
 
@@ -131,6 +135,7 @@ func _on_server_disconnected() -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	progress.erase(id)
+	chests.erase(id)
 	if multiplayer.is_server() and players.erase(id):
 		print("Peer %d left" % id)
 		_broadcast_players()
@@ -152,6 +157,8 @@ func _admit(id: int, info: Dictionary) -> void:
 	players[id] = _sanitize(info)
 	var raw: Variant = info.get("progress", {})
 	progress[id] = PlayerShape.sanitize_progress(raw if raw is Dictionary else {})
+	var raw_chest: Variant = info.get("chest", [])
+	chests[id] = PlayerShape._clean_items(raw_chest if raw_chest is Array else [], PlayerShape.CHEST_SLOTS)
 
 
 ## Server -> clients: the full player list.
@@ -174,6 +181,7 @@ func player_died(id: int) -> void:
 		return
 	print("Peer %d died" % id)
 	progress.erase(id)
+	chests.erase(id)
 	_you_died.rpc_id(id)
 	if players.erase(id):
 		_broadcast_players()

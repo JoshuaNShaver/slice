@@ -1,7 +1,7 @@
 # 0050: Pick your starting triangle
 
 - **Date:** 2026-10-18
-- **Status:** Accepted
+- **Status:** Superseded by 0065
 - **Decision:** A new family's first triangle is chosen, not rolled. The
   player picks **equilateral**, **isosceles (45° apex)** or **irregular**
   when founding the family. Isosceles is selected by default. Replaces the

@@ -1,15 +1,18 @@
 class_name Cave
 extends StaticBody2D
-## The training cave, west of the Center (design log 0027). Its mouth opens in
-## the Center's west wall. Inside are three rooms, each a different chalk
-## color, and each harder than the last: rose, then mint, then lilac. The
-## Pretender, the boss, waits at the back of the lilac room.
+## The training cave (design log 0027), in the underworld (log 0051). Its
+## mouth opens off the west end of the Undercroft. Inside are three rooms,
+## each a different chalk color, and each harder than the last: rose, then
+## mint, then lilac. The Pretender, the boss, waits at the back of the lilac
+## room. Drawn in chalk on slate, like the rest of the underworld (log 0056).
 ##
-## The floor is flat at the Center's west ground level (y = 120). Rock pillars
-## hang between rooms, leaving a gap to roll under.
+## The layout below is in the cave's own coordinates, with its floor at
+## y = 120; the node sits at OFFSET, which puts that floor on the
+## Undercroft's. Rock pillars hang between rooms, leaving a gap to roll under.
 
 const FLOOR_Y := 120.0
-const MOUTH_X := CenterTerrain.LEFT_EDGE  # -2400
+const OFFSET := Vector2(0, Underworld.FLOOR_Y - FLOOR_Y)
+const MOUTH_X := Underworld.WEST_X  # -2400
 const WEST_X := -6400.0
 const TOP := -1100.0
 const WALL_THICKNESS := 200.0
@@ -62,6 +65,7 @@ const SIGNS: Array[Dictionary] = [
 
 
 func _ready() -> void:
+	position = OFFSET
 	collision_layer = PlayerShape.LAYER_TERRAIN
 	collision_mask = 0
 	physics_material_override = PhysicsMaterial.new()
@@ -77,7 +81,8 @@ func _hot_reload() -> void:
 	_build_collision()
 
 
-## Where enemies stand: [{"type", "pos", "room": Rect2, "color": Color}].
+## Where enemies stand, in world coordinates:
+## [{"type", "pos", "room": Rect2, "color": Color}].
 static func spawn_points() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for room: Dictionary in ROOMS:
@@ -85,8 +90,8 @@ static func spawn_points() -> Array[Dictionary]:
 			var radius: float = Enemy.TYPES[spawn[0]].radius
 			out.append({
 				"type": spawn[0],
-				"pos": Vector2(spawn[1], FLOOR_Y - radius - 10),
-				"room": room.area,
+				"pos": Vector2(spawn[1], FLOOR_Y - radius - 10) + OFFSET,
+				"room": Rect2(room.area.position + OFFSET, room.area.size),
 				"color": room_color(room),
 			})
 	return out
@@ -119,43 +124,43 @@ func _floor_polygon() -> PackedVector2Array:
 	return PackedVector2Array([
 		Vector2(WEST_X - WALL_THICKNESS, FLOOR_Y),
 		Vector2(MOUTH_X, FLOOR_Y),
-		Vector2(MOUTH_X, CenterTerrain.BOTTOM),
-		Vector2(WEST_X - WALL_THICKNESS, CenterTerrain.BOTTOM),
+		Vector2(MOUTH_X, Underworld.BOTTOM - OFFSET.y),
+		Vector2(WEST_X - WALL_THICKNESS, Underworld.BOTTOM - OFFSET.y),
 	])
 
 
 func _draw() -> void:
 	# Each room's air is tinted its color.
 	var tunnel := Rect2(-2760, -60, 360, FLOOR_Y + 60)
-	draw_rect(tunnel, Color(Palette.INK, 0.06))
+	draw_rect(tunnel, Color(Palette.CHALK_LINE, 0.04))
 	for room: Dictionary in ROOMS:
 		var color := Palette.CHALK[room.color]
 		color.a = 0.45
 		draw_rect(Rect2(room.area.position, Vector2(room.area.size.x, FLOOR_Y - room.area.position.y)), color)
 
-	draw_colored_polygon(_rock_polygon(), Palette.PARCHMENT_DARK)
-	draw_colored_polygon(_floor_polygon(), Palette.PARCHMENT_DARK)
+	draw_colored_polygon(_rock_polygon(), Palette.SLATE_DARK)
+	draw_colored_polygon(_floor_polygon(), Palette.SLATE_DARK)
 	_draw_hatching(PackedVector2Array(CEILING), Vector2(-4, -6), Vector2(8, -18))
 	_draw_hatching(PackedVector2Array([Vector2(WEST_X, FLOOR_Y), Vector2(MOUTH_X, FLOOR_Y)]),
 			Vector2(4, 6), Vector2(-8, 18))
 
 	var ceiling := PackedVector2Array(CEILING)
 	ceiling.append(Vector2(WEST_X, FLOOR_Y))
-	draw_polyline(ceiling, Palette.INK, 3.0, true)
-	draw_line(Vector2(WEST_X, FLOOR_Y - 1.5), Vector2(MOUTH_X, FLOOR_Y - 1.5), Palette.INK, 3.0, true)
-	# The hill's face above the mouth.
-	draw_line(Vector2(MOUTH_X, TOP), Vector2(MOUTH_X, CEILING[0].y), Palette.INK, 3.0, true)
+	draw_polyline(ceiling, Palette.CHALK_LINE, 3.0, true)
+	draw_line(Vector2(WEST_X, FLOOR_Y - 1.5), Vector2(MOUTH_X, FLOOR_Y - 1.5), Palette.CHALK_LINE, 3.0, true)
+	# The rock face above the mouth.
+	draw_line(Vector2(MOUTH_X, Underworld.ceiling()[0].y - OFFSET.y), Vector2(MOUTH_X, CEILING[0].y),
+			Palette.CHALK_LINE, 3.0, true)
 
 	var font := ThemeDB.fallback_font
 	for s in SIGNS:
 		var pos: Vector2 = s.pos
-		draw_line(pos + Vector2(0, -20), pos + Vector2(0, 50), Palette.INK_FADED, 2.0)
-		draw_string(font, pos + Vector2(-200, -28), s.text, HORIZONTAL_ALIGNMENT_CENTER, 400, 18, Palette.INK)
+		draw_line(pos + Vector2(0, -20), pos + Vector2(0, 50), Palette.CHALK_FADED, 2.0)
+		draw_string(font, pos + Vector2(-200, -28), s.text, HORIZONTAL_ALIGNMENT_CENTER, 400, 18, Palette.CHALK_LINE)
 
 
 func _draw_hatching(line: PackedVector2Array, from: Vector2, to: Vector2) -> void:
-	var color := Palette.INK_FADED
-	color.a = 0.25
+	var color := Color(Palette.CHALK_FADED, 0.25)
 	for i in line.size() - 1:
 		var a := line[i]
 		var b := line[i + 1]

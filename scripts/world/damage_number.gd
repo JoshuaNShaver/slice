@@ -28,7 +28,8 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	var color := Palette.INK
+	var under := Regions.is_underworld(global_position)
+	var color := Palette.ink_at(global_position)
 	var size := 18
 	var text := str(amount)
 	if kind == "player":
@@ -37,6 +38,7 @@ func _draw() -> void:
 		color = Palette.XP.darkened(0.25)
 		size = 26
 		text += "!"
-	# A parchment-colored rim keeps it readable over ink and shapes.
-	draw_string_outline(font, Vector2(-60, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 120, size, 4, Palette.PARCHMENT)
+	# A rim the color of the ground keeps it readable over ink and shapes.
+	draw_string_outline(font, Vector2(-60, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 120, size, 4,
+			Palette.SLATE if under else Palette.PARCHMENT)
 	draw_string(font, Vector2(-60, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 120, size, color)

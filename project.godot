@@ -33,6 +33,7 @@ window/stretch/mode="canvas_items"
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.937, 0.890, 0.784, 1)
+textures/vram_compression/import_etc2_astc=true
 
 [physics]
 

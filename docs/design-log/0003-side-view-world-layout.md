@@ -1,7 +1,7 @@
 # 0003: Side view and world layout
 
 - **Date:** 2026-10-17
-- **Status:** Accepted
+- **Status:** Accepted (priests' location superseded by 0055)
 - **Decision:** 2-D side view (shapes seen edge-on, like on paper). Gravity
   pulls south. One continuous map: respawn hub at center, war zone west,
   upper class east, priests north, underworld/dungeons south.

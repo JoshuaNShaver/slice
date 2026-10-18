@@ -22,22 +22,68 @@ Gravity pulls **south** (screen down), as in the book.
 
 | Direction | Region | Who goes there |
 |---|---|---|
-| Center | Respawn hub | Everyone |
-| West (left) | War zone | Triangles (soldiers) |
-| East (right) | Upper-class district | Higher ranks |
-| North (up) | Priestly district | Circles / priests (10+ sides) |
-| South (down) | Underworld, dungeons | Everyone; irregulars are confined here |
+| Center | Respawn hub | Everyone (but irregulars) |
+| West (left) | The barracks and drill yard; missions go to the front (logs 0061, 0067–0072, 0077) | Triangles (soldiers), and any higher rank (log 0073) |
+| East, up an elevator | The Noble Quarter (log 0054) | 4+ sides, regular |
+| Further east and north, up a hill | The Priests' Hill and the Temple of the Circle (log 0055) | Same as the Quarter; the sanctum is for circles (10+ sides) |
+| North | Undecided (log 0062) | |
+| South, down an elevator | The underworld: the Undercroft and the training cave | Regulars with 5+ sides may visit (log 0066); irregulars are confined here |
 
-Shape gates access: triangles can only go to war, squares gain access to
-school, and so on. Exact gates per region are TBD (see Open questions).
+Shape gates access, and each rank keeps every activity below it (log
+0073): triangles go to war (and, near equilateral, trade and gather, log
+0074, proposed), squares gain the college (log 0075), circles the
+dimension puzzles (log 0076). Exact gates per region are TBD (see Open
+questions).
+Places and spawn points live in `scripts/world/regions.gd`.
 
 Dungeons and mazes are **procedurally generated**.
 
-*Proposed (log 0019):* the **Center** is a plaza. The land sinks west,
-rises east up a 35° slope, has jump-through ledges climbing north and a
-sealed hatch leading south. Region exits are walls for now.
+**NPCs (log 0052):** every NPC serves some shapes and refuses others, fixed
+per NPC (never a dice roll). Overworld NPCs serve regulars; most underworld
+NPCs refuse them. Press interact (E) by an NPC, elevator or door to use it.
 
-**The training cave (log 0027)** opens in the Center's west wall. Three rooms,
+**Houses (logs 0053, 0060, 0059):** every overworld house is a regular
+pentagon, as the book's law requires: roof to the north, men's door on the
+east, women's smaller door on the west, no windows. They are NPC homes and
+scenery. Underworld houses break the law: crooked, lopsided, even
+triangles and squares.
+
+**The Center (log 0019):** a plaza. The land sinks west to the open
+barracks gate and rises east (a 35° slope) to the elevator up to the Noble
+Quarter. Jump-through ledges climb north; *proposed (log 0062):* they stay
+as platforming that later-game gear may be needed to finish. The old south
+hatch is the elevator down. The priest, a merchant, a workman and a
+shopkeeper (triangles) live here.
+
+**Elevators (logs 0054, 0066):** guards at both ends check your shape.
+- **Down to the underworld:** regulars with 5+ sides (log 0066). Any
+  regular may ride up; irregulars never can.
+- **Up to the Noble Quarter:** regulars with 4+ sides.
+- The ride carries you through the rock in a cage, a few seconds long.
+
+**The Noble Quarter (log 0063, proposed layout):** a plateau high above the
+Center's east end, its cliff too tall to jump. Pentagon houses, a lawyer
+(square) and a gentleman (hexagon). **The Physician** (a pentagon) heals
+regulars anywhere in the quarter. **Your house** is here (§5).
+
+**The Priests' Hill (log 0063, proposed layout):** east of the quarter,
+terraces of about 15° (decagons can stand on them) climb to the **Temple of
+the Circle**. **The High Priest** marries, and heals regulars on the temple
+grounds; an acolyte (12-gon) stands by. The sanctum (circles only) is sealed
+for now.
+
+**The underworld (logs 0051, 0052, 0059):** almost self-contained, since
+irregulars can't leave. Its hub is **the Undercroft**, under the Center:
+- Irregulars spawn here, and the home key (C) brings them here.
+- **The Bonesetter** heals irregulars anywhere in the Undercroft.
+- **The Hedge Priest** (a circle who failed inspection) marries irregulars.
+- **The Fence** deals with anyone, regulars at a markup (no stock yet).
+- Its other people refuse regulars. East is sealed for now.
+- An irregular parent can have a regular heir (§5); that heir is sent up to
+  the Center.
+
+**The training cave (logs 0027, 0051)** opens off the Undercroft's west end.
+Three rooms,
 each a different chalk color, get harder going in:
 
 | Room | Enemies | Levels | Drops |
@@ -53,8 +99,35 @@ potion (§2b).
 Enemies chase players inside their own room only, and respawn after 12 s
 (the boss after 90 s). *Proposed* stats are in `scripts/world/enemy.gd`.
 
-A **priest** (a circle) stands on the Center plaza and marries you (§5). While
-you are in the Center he heals you in full, for free, with a pious line (§2b).
+**The barracks (logs 0061, 0067–0072, 0077):** west of the Center through
+an open gate (`scripts/world/barracks.gd`). East to west:
+- **The drill yard (log 0072):** straw dummies and sparring partners for
+  levels 1–5 (spar until about 3–5). Partners can't bring you below 1
+  health. It drops **leather** gear.
+- **The Quartermaster** (equilateral) sells bronze, iron and steel for
+  combatant pay. **The Surgeon** heals on request.
+- **The General** (a pentagon, proposed) gives missions; squads muster
+  beside him for 10 s.
+
+The army fights the **Colour Revolt** (log 0068): rebels in loud vermilion
+paint. Its bosses are irregular polygons that fight as if wearing a full
+set of underworld gear. Missions are **instanced** (`Mission`,
+`Missions`): each squad gets its own battlefield far from the world. They
+pay XP per kill and **combatant pay** on success, no loot. Levels are a
+guide; you may go under-leveled. Leaving early forfeits the pay.
+
+| Mission (log 0070, proposed) | Levels | Squad | Revolt | Soldiers | Boss | Pay* |
+|---|---|---|---|---|---|---|
+| Recon | 5–10 | up to 4 | 3–5 rebels | 1 | no | 25 |
+| Invasion | 10–20 | up to 8 | 20–24 rebels and agitators | 10 | 1 in 5 (luck helps): a Captain (lilac-buffed) | 80 |
+| Special ops (assassination) | 20 | alone | 5 bodyguards | none | always: Chromatistes (gilded-buffed) | 200 |
+
+Bringing down a Revolt boss completes the campaign (log 0067): every
+squad member still on the field is discharged with a marriage
+certificate. Soldiers wear bronze; players pass through them.
+
+**Priests** (circles) marry you (§5): the priest on the Center plaza and the
+High Priest at the temple for regulars, the Hedge Priest for irregulars.
 
 ## 2. Player and movement
 
@@ -116,8 +189,11 @@ you are in the Center he heals you in full, for free, with a pious line (§2b).
 ## 4. Gear and leveling
 
 - All classes equip **armor**. Collected **trinkets** stack, Risk of Rain style.
-- *Proposed:* armor never changes your outline (it would change your corner
-  angles and so your damage). Show it as fills and hatching.
+- Armor never changes your outline (it would change your corner angles and
+  so your damage). **Shapes are plain (log 0069):** unarmored is an ink
+  outline with an uncoloured fill, and overworld armor is told apart by
+  crosshatch patterns. Colour comes only from the underworld (contraband)
+  and the Colour Revolt.
 - **Leveling:** max level 20, reached in about 30 minutes. After that you earn
   **renown**, the meta currency.
 - *Proposed (log 0028):* kills give XP to everyone who hit the enemy. Level
@@ -129,11 +205,15 @@ you are in the Center he heals you in full, for free, with a pious line (§2b).
   | Slot | What it is | Gives | Shows as |
   |---|---|---|---|
   | Points | caps on your corners | force | dots on your corners |
-  | Plating | armor | rigidity | a colored inner band |
+  | Plating | armor | rigidity | a crosshatched inner band (log 0069) |
   | Pigment | contraband colour (Colour Revolt) | vigor | a tint on your fill |
   | Eye | a lens for sight recognition | luck | nothing yet |
   | Voice | a pipe for your cry (an ability slot later) | mettle | nothing yet |
 
+- **Military tiers (logs 0071, 0072, 0077):** leather (drill yard drops),
+  then bronze, iron and steel (bought: 30 / 90 / 240 pay* each). *Proposed:*
+  +2 / 4 / 7 / 10, plating +3 / 6 / 10 / 15, so steel equals lilac. No
+  pigment slot (colour is contraband), so no military sets.
 - **Tiers (log 0029):** each cave room drops the next tier: rose 1, mint 2,
   lilac 3, the Pretender's gilded 4. *Proposed:* +3 / 6 / 10 / 15, plating
   +4 / 9 / 15 / 22. Loot is per player: each player who hit the enemy gets
@@ -165,11 +245,15 @@ you are in the Center he heals you in full, for free, with a pious line (§2b).
 
 ## 2b. Healing and home (logs 0033, 0034)
 
-- **Home teleport:** C sends you to the Center at once, from anywhere, with
-  no cooldown (like Realm of the Mad God's Nexus key).
+- **Home teleport:** C sends you home at once, from anywhere, with no
+  cooldown (like Realm of the Mad God's Nexus key). Home is the Center, or
+  the Undercroft for irregulars (log 0059).
 - **Healing:**
-  - The **priest** heals you in full, for free, while you are in the Center,
-    and says something pious.
+  - **Healers** heal you in full, for free, while you are in their area, if
+    they serve your kind, and say something: the priest in the Center, the
+    Physician in the Noble Quarter, the High Priest on the temple grounds,
+    the Bonesetter (irregulars only) in the Undercroft. You can also ask
+    them with E.
   - **Passive regen (log 0037)** everywhere: *proposed* 0.5% of max health
     per second in combat, 2% out of combat (5 s without hitting or being hit).
   - **Healing potions (log 0037)** restore *proposed* 40% of max health.
@@ -195,7 +279,7 @@ Values marked * are proposed tuning.
 - **HUD (log 0026):** top left, your shape, level, health and XP bars.
   Bottom right, the 1–5 quick-use slots over a 5×2 bag. **Tab** opens the character sheet
   (equipment, stats); **Esc** the menu (players here, Controls, Leave). Top right is
-  kept for currencies. **Energy** is 4 pips over your own shape, one per
+  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 4 pips over your own shape, one per
   jump, faded while full. Other players show a small health bar under their
   name.
 
@@ -204,12 +288,17 @@ Values marked * are proposed tuning.
 - **Goal of a life:** produce an heir.
 - **Marriage certificates** have a chance to drop from **special events**: area
   bosses, dungeons, mazes and others. The cave's boss always drops one.
+  Triangles earn theirs by completing an army campaign (log 0067);
+  squares will earn them at the college without combat (log 0075).
 - **Redeeming a certificate** at a priest (press E nearby) produces an heir
   with **+1 side** (log 0030). The heir takes over at once and starts fresh:
   level 1, no gear. Only the family carries on, plus spare certificates
   and potions.
-  - **House (log 0041):** once a family reaches a square, it gets a house
-    with chests for storage. Stored gear carries over to later heirs, so
+  - **House (logs 0041, 0054, 0064):** once a family reaches a square, it
+    gets a house with chests for storage, in the Noble Quarter. Press E at
+    its east door to open your chests and drag items between them and the
+    bag. *Proposed:* 20 slots; everyone uses the same door, each sees their
+    own chests; saved on the player's machine (`user://chests.json`). Stored gear carries over to later heirs, so
     only square-or-better runs benefit from past runs' gear; triangle runs
     start with nothing. The chests belong to the player and outlive the
     family (log 0042): a new family gets them back on reaching a square.
@@ -226,8 +315,9 @@ Values marked * are proposed tuning.
     are confined to the underworld and cannot enter the overworld.
 - **Dying without an heir ends the family.** You must create a new one.
   Since the heir takes over at once, any death ends the family.
-- **New families** pick their starting triangle (log 0050): **equilateral**,
-  **isosceles (45° apex)** or **irregular**. All three are beginner classes.
+- **New families** pick their starting triangle (logs 0050, 0065):
+  **isosceles (45° apex)** or **irregular**. Equilateral is earned by
+  climbing, not picked.
 - Past octagon you keep gaining sides. **10+ sides counts as circular: a
   priest.**
 - **Past decagon, marriages don't always produce an heir** (the book's
@@ -264,10 +354,24 @@ As in the book, women are straight lines.
 
 ## 8. Art direction
 
-- **Palette:** pastel chalk colors, a fixed set.
+- **Palette:** pastel chalk colors, a fixed set. The overworld is mostly
+  uncoloured (colour is banned, log 0069); colour returns a little in the
+  underworld and loudly on the Colour Revolt.
 - **Outlines:** dark sepia ink, so pastels stay readable on parchment.
 - **Background:** parchment with ink stains in parallax layers moving at
   different speeds, giving depth as you roll left and right.
+- **Underworld (log 0056, proposed, built):** chalk on slate. Dark ground, pale
+  chalk outlines, the same pastel fills, fading in down the hatch shaft.
+- **Foreground atmosphere (log 0057):** a subtle layer of dust, light or
+  fog in front of the world in every region (`scripts/ui/atmosphere.gd`).
+  *Proposed:* faster than the camera, client-only, under the HUD, can be
+  turned off (no setting yet). Center: paper
+  dust in slanting light. Upper east: nearly clean. Priestly hill: light
+  shafts, incense. Underworld: ash or spores, low fog in pits.
+- **Plain shapes (log 0069):** players and overworld NPCs have an
+  uncoloured fill. Military armor shows as crosshatching: leather single
+  diagonal, bronze cross-diagonal, iron square grid, steel triple. Cave
+  gear keeps its chalk colours (contraband from below).
 - **Hatching:** 2–3 crosshatch styles combined with palette colors as a
   learnable identity system (originally for dimensions; reuse for armor and
   factions).
@@ -287,11 +391,21 @@ As in the book, women are straight lines.
 9. Does a woman's damage scale with relative speed? What counts as "high
    velocity"?
 10. Tone: how much of the book's social satire to keep.
-11. Is the original "hidden dimension / slice view" mechanic part of the game
-    (e.g. as the endgame, the Sphere's visit)?
+11. Beyond the priests' puzzles (log 0076), is the slice view also the
+    endgame (the Sphere's visit)?
 12. Do stat caps differ by rank (sides), as Realm of the Mad God caps differ
     by class? Does rank change base stats?
-13. The square's house (log 0041): where is it (east district?), and how
-    many chest slots?
+13. Confirm 20 chest slots in the square's house (log 0064).
 14. Momentum crits (log 0047): should a corner hit at very high speed
     (e.g. 4× the minimum hit speed) always crit, rewarding movement?
+15. What lies north of the Center (log 0062), and what exactly lies west
+    past the barracks (log 0061)?
+16. The noble lift takes regulars only (an irregular square can't ride).
+    Moot while irregulars can't leave the underworld; confirm.
+17. Confirm the barracks build details (log 0077): General's shape, squad
+    sizes, pay and prices, pay kept by heirs, certificate for every squad
+    member, metal stats.
+18. Should military gear get a set bonus (it would need a non-pigment
+    fifth piece)?
+19. The trading booth and gathering for near-equilateral triangles (log
+    0074): confirm, and what do goods sell for?

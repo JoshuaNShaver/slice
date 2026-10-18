@@ -1,7 +1,7 @@
 # 0036: Five gear slots from the book, and a bag
 
 - **Date:** 2026-10-17
-- **Status:** Accepted (stat numbers Proposed); click-to-wear superseded by 0043
+- **Status:** Accepted (stat numbers Proposed); click-to-wear superseded by 0043; plating look superseded by 0069
 - **Decision:** The book has no equipment, so the slots come from what it
   does have. Each slot gives one stat and never changes your outline:
   **Points** (corner caps, force), **Plating** (armor, rigidity), **Pigment**

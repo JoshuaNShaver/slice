@@ -33,19 +33,25 @@ Mark your own suggestions `Proposed` until the user agrees.
 
 - `scenes/`: `main_menu.tscn` (main scene), `world.tscn` (the Center hub).
 - `scripts/world/`: `PlayerShape` (server-simulated rolling polygon, synced to
-  clients), `CenterTerrain` (hub ground, ledges, signs), `Cave` (training
-  cave west of the Center: rooms, spawns), `Enemy`, `Pickup` (per-player
-  loot) and `Priest` (marriage).
+  clients), `Regions` (where each place is, spawn points, who a gate admits),
+  terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
+  Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
+  off the Undercroft), `Barracks` (drill yard, General, Quartermaster).
+  `Mission` (one squad's instanced battlefield) and `Missions` (server-side
+  musters, pay, discharge). `Npc` (talkers, priests, healers; built from each
+  terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
+  (house drawing), `Enemy`, `Pickup` (per-player loot).
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
-  `user://families/`), `Controls` (input actions, default keys, rebinding saved
+  `user://families/`, house chests in `user://chests.json`), `Controls` (input actions, default keys, rebinding saved
   to `user://controls.cfg`), `Net` (offline / host / join, server-owned player list),
   `HotReload` (dev only, see Running).
-- `scripts/family.gd`: family data, starting-triangle roll, save format.
+- `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette, item slot,
-  theme, HUD, shape icon, stat bar, parchment background, menu.
+  theme, HUD, shape icon, stat bar, parchment background, atmosphere
+  (foreground dust/light/fog), menu.
 - UI is built in code from a bare root node; scenes stay minimal.
 
 ## Running

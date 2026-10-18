@@ -21,6 +21,11 @@ class_name Gear
 ##
 ## Wearing all five slots in one tier completes its set, which adds that
 ## tier's own bonus (design log 0040).
+##
+## Military gear (design logs 0071, 0072) is tiers 5-8: leather from the
+## drill yard, then bronze, iron and steel, bought from the Quartermaster
+## with combatant pay. It is plain, told apart by crosshatching (log 0069),
+## and has no pigment: colour is contraband, and the army doesn't sell it.
 
 const CERTIFICATE := "certificate"
 const BLESSED_CERTIFICATE := "blessed_certificate"
@@ -29,22 +34,37 @@ const CONSUMABLES: Array[String] = [CERTIFICATE, BLESSED_CERTIFICATE, POTION]
 
 ## In order: the HUD lists them this way, and `equipped` is indexed by it.
 const SLOTS: Array[String] = ["points", "plating", "pigment", "eye", "voice"]
+## `bonus` is indexed by tier: the cave's chalk tiers 1-4, then military 5-8.
+## *Proposed:* leather to steel give +2 / 4 / 7 / 10 (plating +3 / 6 / 10 / 15),
+## so steel matches lilac: the army is not the best reward (design log 0073).
 const SLOT_INFO := {
-	"points": {"label": "Points", "noun": "caps", "stat": "force", "bonus": [0, 3, 6, 10, 15]},
-	"plating": {"label": "Plating", "noun": "plating", "stat": "rigidity", "bonus": [0, 4, 9, 15, 22]},
-	"pigment": {"label": "Pigment", "noun": "pigment", "stat": "vigor", "bonus": [0, 3, 6, 10, 15]},
-	"eye": {"label": "Eye", "noun": "lens", "stat": "luck", "bonus": [0, 3, 6, 10, 15]},
-	"voice": {"label": "Voice", "noun": "pipe", "stat": "mettle", "bonus": [0, 3, 6, 10, 15]},
+	"points": {"label": "Points", "noun": "caps", "stat": "force", "bonus": [0, 3, 6, 10, 15, 2, 4, 7, 10]},
+	"plating": {"label": "Plating", "noun": "plating", "stat": "rigidity", "bonus": [0, 4, 9, 15, 22, 3, 6, 10, 15]},
+	"pigment": {"label": "Pigment", "noun": "pigment", "stat": "vigor", "bonus": [0, 3, 6, 10, 15, 2, 4, 7, 10]},
+	"eye": {"label": "Eye", "noun": "lens", "stat": "luck", "bonus": [0, 3, 6, 10, 15, 2, 4, 7, 10]},
+	"voice": {"label": "Voice", "noun": "pipe", "stat": "mettle", "bonus": [0, 3, 6, 10, 15, 2, 4, 7, 10]},
 }
+## Slots military gear comes in: everything but pigment.
+const MILITARY_SLOTS: Array[String] = ["points", "plating", "eye", "voice"]
+const LEATHER := 5
+const BRONZE := 6
+const STEEL := 8
 
 ## Index = tier. Tier 0 is nothing. `set`: the full-set bonus (log 0040).
 ## Torque is speed, rigidity is defense, and vigor is health (10 each).
+## Military tiers are muted, not coloured; `hatch` is their crosshatch:
+## line angles (degrees) and spacing (px at world size). `price`: combatant
+## pay at the Quartermaster (*proposed*); 0 means it isn't sold.
 const TIERS: Array[Dictionary] = [
 	{"name": "", "color": Color.TRANSPARENT, "set": {}},
 	{"name": "Rose", "color": Color("e38f8f"), "set": {"force": 15}},
 	{"name": "Mint", "color": Color("8cc78a"), "set": {"torque": 15}},
 	{"name": "Lilac", "color": Color("a58fd6"), "set": {"rigidity": 15}},
 	{"name": "Gilded", "color": Color("d9b44a"), "set": {"vigor": 15, "luck": 15}},
+	{"name": "Leather", "color": Color("d8c7a4"), "set": {}, "hatch": [[45.0], 9.0], "price": 0},
+	{"name": "Bronze", "color": Color("cdb78e"), "set": {}, "hatch": [[45.0, -45.0], 9.0], "price": 30},
+	{"name": "Iron", "color": Color("b9b3a6"), "set": {}, "hatch": [[0.0, 90.0], 6.0], "price": 90},
+	{"name": "Steel", "color": Color("a3a6a8"), "set": {}, "hatch": [[0.0, 60.0, -60.0], 6.0], "price": 240},
 ]
 
 
@@ -53,7 +73,29 @@ static func item(slot: String, tier: int) -> String:
 
 
 static func random_item(tier: int, rng: RandomNumberGenerator) -> String:
-	return item(SLOTS[rng.randi_range(0, SLOTS.size() - 1)], tier)
+	var slots := MILITARY_SLOTS if is_military_tier(tier) else SLOTS
+	return item(slots[rng.randi_range(0, slots.size() - 1)], tier)
+
+
+static func is_military_tier(tier: int) -> bool:
+	return tier >= LEATHER
+
+
+## What the Quartermaster sells: every military slot in each tier he stocks.
+static func shop_stock() -> Array[String]:
+	var out: Array[String] = []
+	for tier in range(LEATHER, STEEL + 1):
+		if TIERS[tier].get("price", 0) > 0:
+			for slot in MILITARY_SLOTS:
+				out.append(item(slot, tier))
+	return out
+
+
+## Combatant pay the Quartermaster asks for an item, or 0 if he doesn't sell it.
+static func price(it: String) -> int:
+	if not is_gear(it) or slot_of(it) not in MILITARY_SLOTS:
+		return 0
+	return TIERS[tier_of(it)].get("price", 0)
 
 
 ## The slot an item goes in, or "" if it isn't gear.
@@ -74,7 +116,11 @@ static func is_gear(it: String) -> bool:
 
 ## Any real item: gear or a consumable. For checking saves.
 static func is_item(it: String) -> bool:
-	return it in CONSUMABLES or (is_gear(it) and it == item(slot_of(it), tier_of(it)))
+	if it in CONSUMABLES:
+		return true
+	if not is_gear(it) or it != item(slot_of(it), tier_of(it)):
+		return false
+	return not (is_military_tier(tier_of(it)) and slot_of(it) not in MILITARY_SLOTS)
 
 
 ## {"force": 6} for "points_2"; {} for anything that isn't gear.
@@ -86,12 +132,13 @@ static func bonuses(it: String) -> Dictionary:
 
 
 ## The tier whose full set is worn, or 0. `worn` is indexed like SLOTS.
+## Tiers with no set bonus (military) never count as a set.
 static func set_tier(worn: PackedStringArray) -> int:
 	var tier := tier_of(worn[0]) if worn.size() == SLOTS.size() else 0
 	for it in worn:
 		if not is_gear(it) or tier_of(it) != tier:
 			return 0
-	return tier
+	return tier if not TIERS[tier].set.is_empty() else 0
 
 
 ## The full-set bonus for what's worn, e.g. {"force": 15}, or {}.
@@ -146,17 +193,20 @@ static func describe(it: String) -> String:
 		return it
 	var slot := slot_of(it)
 	var info: Dictionary = SLOT_INFO[slot]
+	var tier := tier_of(it)
 	# Set bonuses stay secret until you wear the full set (design log 0045).
-	return "%s (%s, tier %d): +%d %s" % [item_name(it), info.label.to_lower(), tier_of(it),
-			info.bonus[tier_of(it)], info.stat]
+	if is_military_tier(tier):
+		return "%s (%s, military): +%d %s" % [item_name(it), info.label.to_lower(), info.bonus[tier], info.stat]
+	return "%s (%s, tier %d): +%d %s" % [item_name(it), info.label.to_lower(), tier, info.bonus[tier], info.stat]
 
 
-## Draws a shape wearing its gear, centered on `at`: pigment tints the fill,
-## plating is a hatched inner band, points are dots on the corners. The
+## Draws a shape wearing its gear, centered on `at`. The fill is plain (log
+## 0069); pigment tints it, plating is an inner band (crosshatched for
+## military gear, chalk-coloured for the cave's), points are dots on the corners. The
 ## outline (and so the corner angles) never changes (design log 0006).
 ## Shared by the shape in the world and its icons (HUD, main menu), so gear
 ## looks the same everywhere. `equipped` is indexed like SLOTS.
-static func draw_shape(canvas: CanvasItem, pts: PackedVector2Array, sides: int,
+static func draw_shape(canvas: CanvasItem, pts: PackedVector2Array, _sides: int,
 		equipped: PackedStringArray, at := Vector2.ZERO) -> void:
 	var worn := func(slot: String) -> String:
 		var i := SLOTS.find(slot)
@@ -180,7 +230,7 @@ static func draw_shape(canvas: CanvasItem, pts: PackedVector2Array, sides: int,
 		canvas.draw_polyline(halo, Color(tint, 0.25), 7.0 * scale, true)
 		canvas.draw_polyline(halo, Color(tint, 0.85), 2.5 * scale, true)
 
-	var fill := Palette.chalk_for_sides(sides)
+	var fill := Palette.PLAIN  # shapes are plain (design log 0069)
 	var pigment: String = worn.call("pigment")
 	if pigment != "":
 		fill = fill.lerp(color(pigment), 0.45)  # contraband colour
@@ -191,12 +241,20 @@ static func draw_shape(canvas: CanvasItem, pts: PackedVector2Array, sides: int,
 		var band := PackedVector2Array()
 		for p in pts:
 			band.append(p * 0.78 + at)
-		band.append(band[0])
-		canvas.draw_polyline(band, color(plating), 3.0 * scale, true)
-		var hatch := Color(Palette.INK, 0.35)
-		for i in pts.size():
-			var mid := (pts[i] + pts[(i + 1) % pts.size()]) * 0.5
-			canvas.draw_line(mid * 0.72 + at, mid * 0.9 + at, hatch, 1.5 * scale)
+		if is_military_tier(tier_of(plating)):
+			# Plain armor: the tier's crosshatch inside the band (design log 0069).
+			canvas.draw_colored_polygon(band, color(plating))
+			draw_hatch(canvas, band, TIERS[tier_of(plating)].hatch, scale, Color(Palette.INK, 0.45))
+			band.append(band[0])
+			canvas.draw_polyline(band, Color(Palette.INK, 0.6), 1.5 * scale, true)
+		else:
+			# Underworld gear keeps its contraband chalk colour.
+			band.append(band[0])
+			canvas.draw_polyline(band, color(plating), 3.0 * scale, true)
+			var hatch := Color(Palette.INK, 0.35)
+			for i in pts.size():
+				var mid := (pts[i] + pts[(i + 1) % pts.size()]) * 0.5
+				canvas.draw_line(mid * 0.72 + at, mid * 0.9 + at, hatch, 1.5 * scale)
 
 	var outline := placed.duplicate()
 	outline.append(placed[0])
@@ -207,6 +265,28 @@ static func draw_shape(canvas: CanvasItem, pts: PackedVector2Array, sides: int,
 		for p in pts:
 			canvas.draw_circle(p * 0.93 + at, 3.5 * scale, color(caps))
 			canvas.draw_arc(p * 0.93 + at, 3.5 * scale, 0, TAU, 10, Palette.INK, 1.0, true)
+
+
+## Fills `poly` with parallel ink lines, one set per angle in `hatch[0]`,
+## `hatch[1]` px apart (times `scale`). Works for any simple polygon.
+static func draw_hatch(canvas: CanvasItem, poly: PackedVector2Array, hatch: Array, scale: float,
+		ink: Color) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for p in poly:
+		box = box.expand(p)
+	var center := box.get_center()
+	var reach := box.size.length() / 2.0 + 1.0
+	var gap: float = maxf(hatch[1] * scale, 2.0)
+	for angle: float in hatch[0]:
+		var along := Vector2.from_angle(deg_to_rad(angle))
+		var across := along.orthogonal()
+		var offset := -reach
+		while offset <= reach:
+			var a := center + across * offset - along * reach
+			var b := center + across * offset + along * reach
+			for piece: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(PackedVector2Array([a, b]), poly):
+				canvas.draw_polyline(piece, ink, maxf(1.0 * scale, 0.75), true)
+			offset += gap
 
 
 ## The outline pushed out by `gap` on every side, with each corner rounded
@@ -294,6 +374,8 @@ static func draw_icon(canvas: CanvasItem, it: String, at: Vector2, alpha := 1.0)
 	for i in pts.size():
 		pts[i] += at
 	canvas.draw_colored_polygon(pts, fill)
+	if is_military_tier(tier_of(it)):
+		draw_hatch(canvas, pts, TIERS[tier_of(it)].hatch, 0.6, Color(Palette.INK, 0.45 * alpha))
 	var outline := pts.duplicate()
 	outline.append(pts[0])
 	canvas.draw_polyline(outline, ink, 2.0, true)

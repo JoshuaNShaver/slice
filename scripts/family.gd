@@ -14,8 +14,8 @@ const START_APEX := 45
 const APEX_STEP := 5
 const EQUILATERAL_APEX := 60
 
-## The triangles a new family can start as, picked by the player (design log 0050).
-const STARTING_KINDS: Array[String] = ["equilateral", "isosceles", "irregular"]
+## The triangles a new family can start as, picked by the player (design logs 0050, 0065).
+const STARTING_KINDS: Array[String] = ["isosceles", "irregular"]
 
 const POLYGON_NAMES := {
 	3: "triangle", 4: "square", 5: "pentagon", 6: "hexagon", 7: "heptagon",

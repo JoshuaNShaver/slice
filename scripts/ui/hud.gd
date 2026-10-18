@@ -10,6 +10,12 @@ extends CanvasLayer
 ## - Tab: character sheet: your five gear slots (drag gear on or off, or
 ##   double-click to take off) and stats. Esc: menu (players, leave,
 ##   controls). Keys are rebindable (Controls, design log 0035).
+## - Your house's chests (design log 0064): opened at your house's door
+##   (HouseDoor), closed by Esc or by walking away. Drag between them and
+##   the bag; double-click a chest item to take it.
+## - Top right: currencies. Combatant pay (design log 0071).
+## - The General's orders and the Quartermaster's shop (design logs 0070,
+##   0071): opened by talking to them, closed by Esc or walking away.
 ## Energy is drawn by PlayerShape, as pips over your own shape.
 
 signal leave_requested
@@ -40,10 +46,17 @@ var _stat_values: Dictionary = {}  # stat name -> its value Label
 var _bag_slots: Array[ItemSlot] = []  # indexed like PlayerShape.bag, quick slots last
 var _quick_keys: Array[Label] = []
 var _gear_slots: Array[ItemSlot] = []  # indexed like Gear.SLOTS
+var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerShape.chest
+var _storage: Control
+var _orders: Control
+var _shop: Control
+var _shop_pay: Label
+var _pay_label: Label
 var _me: PlayerShape
 var _set_label: Label
 var _message: Label
 var _message_time := 0.0
+var _underground := false  # chalk text, over the underworld's slate
 # Last values seen, to announce changes.
 var _seen := {}
 
@@ -62,8 +75,10 @@ func _hot_reload() -> void:
 	_bag_slots.clear()
 	_quick_keys.clear()
 	_gear_slots.clear()
+	_chest_slots.clear()
 	_control_buttons.clear()
 	_end_capture()
+	_underground = false
 	_build()
 	refresh_players()
 
@@ -76,7 +91,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_menu.visible = false
 		_controls.visible = false
 	elif event.is_action_pressed("menu"):
-		if _controls.visible:
+		if _storage.visible or _orders.visible or _shop.visible:
+			_storage.visible = false
+			close_panel()
+		elif _controls.visible:
 			_controls.visible = false
 			_menu.visible = true
 		elif _character.visible:
@@ -143,7 +161,7 @@ func _hint_text() -> String:
 	var actions: Array[String] = [
 		Controls.describe("roll_left") + " " + Controls.describe("roll_right") + " roll",
 		Controls.describe("jump") + " jump",
-		Controls.describe("interact") + " talk",
+		Controls.describe("interact") + " talk / use",
 		Controls.describe("pickup") + " pick up",
 		Controls.describe("drink") + " drink",
 	]
@@ -159,11 +177,14 @@ func _hint_text() -> String:
 
 func update(me: PlayerShape) -> void:
 	_me = me
+	_set_underground(Regions.is_underworld(me.position))
 	_portrait.sides = me.sides
 	_portrait.kind = me.kind
 	_portrait.apex = me.apex
 	_portrait.equipped = me.equipped
 	_set_text(_level_label, "Level %d" % me.level)
+	_set_text(_pay_label, "Pay: %d" % me.pay)
+	_set_text(_shop_pay, "Your pay: %d" % me.pay)
 	_health_bar.set_values(me.hp, me.max_hp)
 	if me.level >= Stats.MAX_LEVEL:
 		_xp_bar.set_values(1.0, 1.0)
@@ -174,6 +195,8 @@ func update(me: PlayerShape) -> void:
 		_bag_slots[i].item = me.bag[i]
 	for i in _gear_slots.size():
 		_gear_slots[i].item = me.equipped[i]
+	for i in _chest_slots.size():
+		_chest_slots[i].item = me.chest[i]
 	var full_set := Gear.set_tier(me.equipped)
 	_set_text(_set_label, "Full set: none" if full_set == 0 else "Full %s set: %s" % [
 			Gear.TIERS[full_set].name.to_lower(), Gear.describe_bonus(Gear.TIERS[full_set].set)])
@@ -187,6 +210,61 @@ func update(me: PlayerShape) -> void:
 		if from_gear.get(stat, 0) > 0:
 			text += "  (+%d)" % from_gear[stat]
 		_set_text(_stat_values[stat], text)
+
+
+## Your house's chests (PlayerShape asks, from the server).
+func open_storage() -> void:
+	_character.visible = false
+	_menu.visible = false
+	_controls.visible = false
+	_storage.visible = true
+
+
+func close_storage() -> void:
+	_storage.visible = false
+
+
+func storage_open() -> bool:
+	return _storage != null and _storage.visible
+
+
+## The General's or the Quartermaster's panel (PlayerShape asks, from the
+## server): "orders" or "shop".
+func open_panel(panel: String) -> void:
+	_character.visible = false
+	_menu.visible = false
+	_controls.visible = false
+	_storage.visible = false
+	_orders.visible = panel == "orders"
+	_shop.visible = panel == "shop"
+
+
+## "orders", "shop" or "" (neither is open).
+func open_panel_name() -> String:
+	if _orders != null and _orders.visible:
+		return "orders"
+	if _shop != null and _shop.visible:
+		return "shop"
+	return ""
+
+
+func close_panel() -> void:
+	_orders.visible = false
+	_shop.visible = false
+
+
+## Text drawn straight over the world turns to chalk underground (design
+## log 0056); panels keep their parchment.
+func _set_underground(on: bool) -> void:
+	if on == _underground or _message == null:
+		return
+	_underground = on
+	var ink := Palette.CHALK_LINE if on else Palette.INK
+	var faded := Palette.CHALK_FADED if on else Palette.INK_FADED
+	_level_label.add_theme_color_override("font_color", ink)
+	_pay_label.add_theme_color_override("font_color", ink)
+	_message.add_theme_color_override("font_color", ink)
+	_hint.add_theme_color_override("font_color", faded)
 
 
 func show_message(text: String) -> void:
@@ -264,6 +342,19 @@ func _build() -> void:
 	_root.add_child(_menu)
 	_controls = _build_controls()
 	_root.add_child(_controls)
+	_storage = _build_storage()
+	_root.add_child(_storage)
+	_orders = _build_orders()
+	_root.add_child(_orders)
+	_shop = _build_shop()
+	_root.add_child(_shop)
+
+	_pay_label = Label.new()
+	_pay_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
+	_pay_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_pay_label.add_theme_font_size_override("font_size", 18)
+	_pay_label.tooltip_text = "Combatant pay: earned on missions, spent at the Quartermaster."
+	_root.add_child(_pay_label)
 	_on_controls_changed()
 
 	_message = Label.new()
@@ -335,6 +426,8 @@ func _bag_slot(i: int) -> ItemSlot:
 	var slot := ItemSlot.new()
 	slot.drag_source = {"bag": i}
 	slot.accepts = func(data: Dictionary) -> bool:
+		if data.has("chest"):
+			return true
 		if not data.has("worn") or _me == null:
 			return true
 		# Taking gear off: into an empty slot, or swapping with gear for the same slot.
@@ -345,6 +438,8 @@ func _bag_slot(i: int) -> ItemSlot:
 			return
 		if data.has("bag"):
 			_me.request_swap(data.bag, i)
+		elif data.has("chest"):
+			_me.request_swap(PlayerShape.CHEST_BASE + data.chest, i)
 		elif data.has("worn"):
 			_me.request_unequip(data.worn, i))
 	slot.double_clicked.connect(func() -> void:
@@ -417,6 +512,108 @@ func _build_character() -> Control:
 	return panel
 
 
+## Your house's chests: a grid of slots that trade with the bag.
+func _build_storage() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	column.add_child(_heading("Your chests"))
+	column.add_child(_faded("Kept for every heir from square up, whatever the family."))
+	var grid := _slot_grid(BAG_COLUMNS)
+	for i in PlayerShape.CHEST_SLOTS:
+		var slot := ItemSlot.new("", "Drag to the bag, or double-click: take")
+		slot.drag_source = {"chest": i}
+		slot.accepts = func(data: Dictionary) -> bool:
+			return data.has("bag") or data.has("chest")
+		slot.dropped.connect(func(data: Dictionary) -> void:
+			if _me == null:
+				return
+			var from: int = data.bag if data.has("bag") else PlayerShape.CHEST_BASE + data.chest
+			_me.request_swap(from, PlayerShape.CHEST_BASE + i))
+		slot.double_clicked.connect(func() -> void:
+			if _me == null:
+				return
+			var free := _me.bag.find("")
+			if free != -1:
+				_me.request_swap(PlayerShape.CHEST_BASE + i, free))
+		_chest_slots.append(slot)
+		grid.add_child(slot)
+	column.add_child(grid)
+	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	return panel
+
+
+## The General's orders (design log 0070): one row per mission.
+func _build_orders() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = 520
+	column.add_theme_constant_override("separation", 12)
+	panel.add_child(column)
+	column.add_child(_heading("The General's orders"))
+	column.add_child(_faded("Levels are a guide. Missions pay XP and combatant pay, nothing else."))
+	for mission_type in Mission.ORDER:
+		var info: Dictionary = Mission.TYPES[mission_type]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var text := VBoxContainer.new()
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var title := Label.new()
+		var squad := "alone" if info.squad <= 1 else "squad of up to %d" % info.squad
+		title.text = "%s · levels %s · %s · +%d pay" % [info.name, info.levels, squad, info.pay]
+		text.add_child(title)
+		var about := _faded(info.about)
+		about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		about.custom_minimum_size.x = 380
+		text.add_child(about)
+		row.add_child(text)
+		var go := Button.new()
+		go.text = "Take orders"
+		go.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+		go.pressed.connect(func() -> void:
+			if _me != null:
+				_me.request_mission(mission_type)
+			close_panel())
+		row.add_child(go)
+		column.add_child(row)
+	column.add_child(_faded("Bring down a Revolt boss to be discharged with a marriage certificate."))
+	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	return panel
+
+
+## The Quartermaster's stock (design log 0071): a row per tier, a slot per item.
+func _build_shop() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	column.add_child(_heading("The Quartermaster"))
+	_shop_pay = Label.new()
+	column.add_child(_shop_pay)
+	var rows := {}  # tier -> its row
+	for item in Gear.shop_stock():
+		var tier := Gear.tier_of(item)
+		if not rows.has(tier):
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 6)
+			var label := Label.new()
+			label.text = "%s · %d pay each" % [Gear.TIERS[tier].name, Gear.price(item)]
+			label.custom_minimum_size.x = 170
+			row.add_child(label)
+			rows[tier] = row
+			column.add_child(row)
+		var slot := ItemSlot.new("", "Double-click: buy for %d pay" % Gear.price(item))
+		slot.item = item
+		slot.double_clicked.connect(func() -> void:
+			if _me != null:
+				_me.request_buy(item))
+		rows[tier].add_child(slot)
+	column.add_child(_faded("Leather comes from the drill yard. No pigment: colour is contraband."))
+	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	return panel
+
+
 ## Esc: who's here, and the way out.
 func _build_menu() -> Control:
 	var panel := _centered_panel()
@@ -425,7 +622,7 @@ func _build_menu() -> Control:
 	column.add_theme_constant_override("separation", 10)
 	panel.add_child(column)
 
-	column.add_child(_heading("The Center"))
+	column.add_child(_heading("Menu"))
 	column.add_child(_faded(Net.describe_session()))
 	_player_list = VBoxContainer.new()
 	column.add_child(_player_list)

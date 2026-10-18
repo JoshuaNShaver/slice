@@ -3,6 +3,8 @@ extends Control
 ## Parchment with ink stains drifting in parallax layers (design log 0014).
 ## Farther layers (lower index) move slower and look fainter.
 ## In menus the stains drift on their own; in the world they follow the camera.
+## Underground it turns to slate with chalk dust (design log 0056): set `depth`
+## (Regions.underworld_blend) from 0, parchment, to 1, slate.
 
 const LAYER_SPEEDS: Array[float] = [6.0, 14.0, 26.0]
 const STAINS_PER_LAYER := 7
@@ -12,6 +14,7 @@ const PARALLAX_PER_SPEED := 1.0 / 40.0  # world: layer moves speed/40 of the cam
 ## Drift over time (menus). Turn off and set view_offset to follow a camera.
 var auto_drift := true
 var view_offset := Vector2.ZERO
+var depth := 0.0
 
 var _stains: Array[Dictionary] = []
 var _scroll := 0.0
@@ -43,7 +46,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Palette.PARCHMENT)
+	draw_rect(Rect2(Vector2.ZERO, size), Palette.PARCHMENT.lerp(Palette.SLATE, depth))
 	var wrap := size + Vector2(200.0, 200.0)
 	for s in _stains:
 		var layer: int = s.layer
@@ -52,7 +55,7 @@ func _draw() -> void:
 			travel = view_offset * LAYER_SPEEDS[layer] * PARALLAX_PER_SPEED
 		var x := fposmod(s.x * wrap.x - travel.x, wrap.x) - 100.0
 		var y := fposmod(s.y * wrap.y - travel.y, wrap.y) - 100.0
-		var color := Palette.INK_STAIN
+		var color := Palette.INK_STAIN.lerp(Palette.CHALK_DUST, depth)
 		color.a *= 0.6 + 0.4 * layer
 		for blob: Vector3 in s.blobs:
 			draw_circle(Vector2(x + blob.x * s.scale, y + blob.y * s.scale), blob.z * s.scale, color)

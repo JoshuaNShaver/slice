@@ -5,10 +5,14 @@ signal slots_changed
 
 const SLOT_COUNT := 3
 const SAVE_DIR := "user://families"
+## Your house's chests belong to you, not a family (design logs 0042, 0064).
+const CHEST_PATH := "user://chests.json"
 
 ## Slot being played this session, or -1.
 var active_slot := -1
 
+## Item strings in your house's chests ("" for empty slots).
+var chest: Array = []
 var _slots: Array[Family] = []
 var _rng := RandomNumberGenerator.new()
 
@@ -19,6 +23,7 @@ func _ready() -> void:
 	_slots.resize(SLOT_COUNT)
 	for i in SLOT_COUNT:
 		_slots[i] = _load_slot(i)
+	_load_chest()
 
 
 func get_family(slot: int) -> Family:
@@ -60,6 +65,30 @@ func save_slot(slot: int) -> void:
 	file.store_string(JSON.stringify(f.to_dict(), "\t"))
 	file.close()
 	DirAccess.rename_absolute(tmp, _path(slot))
+
+
+func save_chest(items: PackedStringArray) -> void:
+	chest = Array(items)
+	var tmp := CHEST_PATH + ".tmp"
+	var file := FileAccess.open(tmp, FileAccess.WRITE)
+	if file == null:
+		push_error("Couldn't save chests: %s" % error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(JSON.stringify({"items": chest}, "\t"))
+	file.close()
+	DirAccess.rename_absolute(tmp, CHEST_PATH)
+
+
+func _load_chest() -> void:
+	if not FileAccess.file_exists(CHEST_PATH):
+		return
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(CHEST_PATH))
+	if data is Dictionary and data.get("items") is Array:
+		chest = data.items
+	else:
+		# Keep the unreadable file instead of letting empty chests overwrite it.
+		DirAccess.rename_absolute(CHEST_PATH, CHEST_PATH + ".corrupt")
+		push_warning("Unreadable chest save moved to %s.corrupt" % CHEST_PATH)
 
 
 func _path(slot: int) -> String:

@@ -1,7 +1,7 @@
 # 0029: Armor tiers and per-player loot
 
 - **Date:** 2026-10-17
-- **Status:** Accepted (armor-only gear and auto-equip superseded by 0036)
+- **Status:** Accepted (armor-only gear and auto-equip superseded by 0036; plating look by 0069)
 - **Decision:** Each cave room drops the next tier of armor: rose (tier 1),
   mint (2), lilac (3), and the Pretender gilded (4). The boss always drops a
   marriage certificate.

@@ -290,6 +290,7 @@ func _play(slot: int) -> void:
 	FamilyStore.active_slot = slot
 	_save_settings()
 	var info := family.to_session_info()
+	info.chest = FamilyStore.chest
 	match _mode_select.get_selected_id():
 		Net.Mode.OFFLINE:
 			Net.start_offline(info)

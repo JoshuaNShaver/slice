@@ -27,9 +27,19 @@ extends RigidBody2D
 ## while worn. The bag's last QUICK_SLOTS slots are the quick-use slots,
 ## used with keys 1-5 (design log 0043).
 ##
-## Home and healing (logs 0033-0034, 0037): the home key teleports you to
-## the Center, and the priest heals you in full whenever you're in the Center.
-## Health also regenerates, faster out of combat, and potions heal at once.
+## Home and healing (logs 0033-0034, 0037, 0059): the home key teleports you
+## home: the Center, or the Undercroft for irregulars. Healers (Npc) heal you
+## in full inside their areas, if they serve your kind. Health also
+## regenerates, faster out of combat, and potions heal at once.
+##
+## Interact (E) uses the nearest NPC, elevator or door (World.interact).
+## Elevators carry you with start_ride (design logs 0054, 0058). Your house's
+## chests (log 0064) are `chest`; swaps reach them while you're at the door.
+##
+## The army (design logs 0067-0072): `pay` is combatant pay, earned on
+## missions and spent at the Quartermaster. The General's orders and the
+## Quartermaster's stock open as HUD panels (open_panel); the owner asks for
+## a mission or a purchase, and the server decides.
 ##
 ## Saved progress (log 0038): progress() is what the owner's family save
 ## keeps of this heir; create() restores it, checked by sanitize_progress().
@@ -65,7 +75,8 @@ const FACE_TILT := 0.14
 const JUMP_COST := 25.0
 const WEAK_JUMP := 0.55  # jump speed multiplier when you can't pay the cost
 
-const FALL_LIMIT := 2000.0  # fall below this and you go back to the spawn point
+const TELEPORT_GHOST_STEPS := 3
+const FALL_LIMIT := 4500.0  # fall below this and you go back to the spawn point
 
 const LAYER_TERRAIN := 1
 const LAYER_PLAYERS := 2
@@ -74,6 +85,10 @@ const INVULNERABLE_TIME := 0.6  # s after being hit before you can be hit again
 const BAG_SLOTS := 10  # the bag proper
 const QUICK_SLOTS := 5  # quick-use slots (keys 1-5), the bag's last five
 const BAG_SIZE := BAG_SLOTS + QUICK_SLOTS
+const CHEST_SLOTS := 20  # your house's chests (design log 0064)
+const CHEST_BASE := 100  # swap indices from here on are chest slots
+const RIDE_SPEED := 650.0  # px/s, elevators
+const MAX_PAY := 1000000
 
 var peer_id := 0
 var family_name := ""
@@ -105,9 +120,11 @@ var hp := Stats.BASE_HP
 var max_hp := Stats.BASE_HP
 var energy := Stats.MAX_ENERGY
 var xp := 0  # toward the next level
+var pay := 0  # combatant pay (design log 0071)
 # Items (design log 0036): set by the server, synced to clients. "" is empty.
 var bag := _blank(BAG_SIZE)
 var equipped := _blank(Gear.SLOTS.size())  # indexed like Gear.SLOTS
+var chest := _blank(CHEST_SLOTS)  # kept by the player, not the family (log 0042)
 
 var _points: PackedVector2Array
 var _corners: PackedVector2Array  # collision outline
@@ -122,7 +139,9 @@ var _invulnerable := 0.0
 var _since_combat := INF  # s since you last hit or were hit
 var _regen_carry := 0.0  # health regen builds up in fractions
 var _teleport_to: Variant = null  # Vector2 to move to on the next physics step
+var _ghost_steps := 0  # physics steps left with collisions off after a teleport
 var _dead := false
+var _ride := {}  # server only: an elevator ride, {"from", "to", "time", "length"}
 # Server-side state.
 var _move := 0.0
 var _jump_timer := 0.0
@@ -152,6 +171,9 @@ static func create(data: Dictionary) -> PlayerShape:
 	p.position = data.pos
 	p._rebuild_outline()
 	p._apply_progress(data.get("progress", {}))
+	var saved_chest: Variant = data.get("chest", [])
+	if saved_chest is Array or saved_chest is PackedStringArray:
+		p.chest = _clean_items(Array(saved_chest), CHEST_SLOTS)
 
 	# Players pass through each other for now; they hit terrain and enemies.
 	p.collision_layer = LAYER_PLAYERS
@@ -175,7 +197,7 @@ static func create(data: Dictionary) -> PlayerShape:
 		config.property_set_spawn(prop, true)
 		config.property_set_replication_mode(prop, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	for stat: String in ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck", "hp", "max_hp",
-			"xp", "bag", "equipped", "sides", "kind", "apex", "generation"]:
+			"xp", "pay", "bag", "equipped", "chest", "sides", "kind", "apex", "generation"]:
 		var prop := ".:" + stat
 		config.add_property(prop)
 		config.property_set_spawn(prop, true)
@@ -226,7 +248,7 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("jump"):
 		_submit_jump.rpc_id(1)
 	if Input.is_action_just_pressed("interact"):
-		_submit_marry.rpc_id(1)
+		_submit_interact.rpc_id(1)
 	if Input.is_action_just_pressed("pickup"):
 		_submit_pickup.rpc_id(1)
 	if Input.is_action_just_pressed("drink"):
@@ -261,20 +283,28 @@ func _submit_jump() -> void:
 		_jump_timer = JUMP_BUFFER
 
 
-## Owner -> server: marry at the priest, using a certificate (design log 0030).
+## Owner -> server: use whatever is nearest (an NPC, elevator or door).
 @rpc("any_peer", "call_local", "reliable")
-func _submit_marry() -> void:
+func _submit_interact() -> void:
 	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0]:
 		return
+	if not _dead and _ride.is_empty():
+		get_tree().call_group(World.GROUP, "interact", self)
+
+
+## Server only. A priest marries you (design log 0030), using a certificate.
+## False if you have none.
+func marry() -> bool:
 	var certificate := marriage_certificate()
-	if _dead or certificate == "" or position.distance_to(Priest.POSITION) > Priest.REACH:
-		return
+	if _dead or certificate == "":
+		return false
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	take_from_bag(certificate)
 	var heir := Family.roll_heir(sides, kind, apex, rng, certificate == Gear.BLESSED_CERTIFICATE)
 	become_heir(heir)
 	Net.heir_born_on_server(peer_id, heir)
+	return true
 
 
 ## The certificate marrying would use, or "". A triangle short of
@@ -289,11 +319,119 @@ func marriage_certificate() -> String:
 	return Gear.BLESSED_CERTIFICATE if blessed else ""
 
 
-## Owner -> server: teleport to the Center, from anywhere, any time (log 0034).
+## Owner -> server: teleport home, from anywhere, any time (logs 0034, 0059).
 @rpc("any_peer", "call_local", "reliable")
 func _submit_home() -> void:
 	if multiplayer.is_server() and multiplayer.get_remote_sender_id() in [peer_id, 0] and not _dead:
-		_teleport_to = spawn_point
+		teleport(spawn_point)
+
+
+## Server only. Moves the shape to `pos` on the next physics step.
+## Collisions stay off for a few steps around the jump, as on an elevator:
+## with them on, continuous collision treats a long jump (the Undercroft to
+## the Center) as one fast move and drives the shape into the ground.
+func teleport(pos: Vector2) -> void:
+	_ride = {}
+	_teleport_to = pos
+	_ghost_steps = TELEPORT_GHOST_STEPS
+	collision_mask = 0
+
+
+## Server only. An elevator carries you from `from` to `to`. Collisions are
+## off for the ride, so the shaft can pass through rock.
+func start_ride(from: Vector2, to: Vector2) -> void:
+	if _dead or not _ride.is_empty():
+		return
+	_ride = {"from": from, "to": to, "time": 0.0, "length": 0.6 + from.distance_to(to) / RIDE_SPEED}
+	collision_mask = 0
+
+
+func _end_ride() -> void:
+	if _ride.is_empty():
+		return
+	_ride = {}
+	if _ghost_steps == 0:
+		set_deferred("collision_mask", LAYER_TERRAIN | Enemy.LAYER)
+
+
+## Server only. Fills your health (healers, design log 0033).
+func heal_full() -> void:
+	if not _dead:
+		hp = max_hp
+
+
+## Server only. Shows this player a line, e.g. an NPC's words.
+func tell(speaker: String, line: String) -> void:
+	_told.rpc_id(peer_id, speaker, line)
+
+
+## Server -> this player.
+@rpc("authority", "call_local", "reliable")
+func _told(speaker: String, line: String) -> void:
+	var text := line if speaker == "" else "%s: “%s”" % [speaker, line]
+	get_tree().call_group(Hud.GROUP, "show_message", text)
+
+
+## Server only. Opens a HUD panel on your screen: "orders" (the General's
+## missions) or "shop" (the Quartermaster's stock).
+func open_panel(panel: String) -> void:
+	_panel_opened.rpc_id(peer_id, panel)
+
+
+## Server -> this player.
+@rpc("authority", "call_local", "reliable")
+func _panel_opened(panel: String) -> void:
+	get_tree().call_group(Hud.GROUP, "open_panel", panel)
+
+
+## Owner side: take the General's orders for a mission (design log 0070).
+func request_mission(mission_type: String) -> void:
+	_submit_mission.rpc_id(1, mission_type)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _submit_mission(mission_type: String) -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
+		return
+	if Npc.near_role(self, "general"):
+		get_tree().call_group(World.GROUP, "request_mission", self, mission_type)
+
+
+## Owner side: buy an item from the Quartermaster (design log 0071).
+func request_buy(item: String) -> void:
+	_submit_buy.rpc_id(1, item)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _submit_buy(item: String) -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
+		return
+	var cost := Gear.price(item)
+	if cost <= 0 or not Npc.near_role(self, "quartermaster"):
+		return
+	if pay < cost:
+		tell("The Quartermaster", "That's %d pay. You have %d. Earn it first." % [cost, pay])
+		return
+	if not add_to_bag(item):
+		tell("The Quartermaster", "Your bag's full, soldier.")
+		return
+	pay -= cost
+
+
+## Server only. Wages for a mission (design log 0071).
+func add_pay(amount: int) -> void:
+	pay = clampi(pay + amount, 0, MAX_PAY)
+
+
+## Server only. Opens your house's chests on your screen (design log 0064).
+func open_storage() -> void:
+	_storage_opened.rpc_id(peer_id)
+
+
+## Server -> this player.
+@rpc("authority", "call_local", "reliable")
+func _storage_opened() -> void:
+	get_tree().call_group(Hud.GROUP, "open_storage")
 
 
 ## Owner -> server: drink a potion (design log 0037), from a bag slot or,
@@ -325,18 +463,18 @@ func _regenerate(step: float) -> void:
 		hp = mini(hp + whole, max_hp)
 
 
-## Server only. In the Center the priest heals you in full, for free (log 0033).
-func _priest_heal() -> void:
-	if _dead or hp >= max_hp or not CenterTerrain.contains(position):
+## Server only. A healer whose area you're in heals you in full, for free,
+## if they serve your kind (design logs 0033, 0052).
+func _area_heal() -> void:
+	if _dead or hp >= max_hp:
 		return
-	hp = max_hp
-	_priest_blessed.rpc_id(peer_id, Priest.random_blessing())
-
-
-## Server -> the healed player.
-@rpc("authority", "call_local", "reliable")
-func _priest_blessed(line: String) -> void:
-	get_tree().call_group(Hud.GROUP, "show_message", "The Priest: “%s”" % line)
+	for node in get_tree().get_nodes_in_group(Npc.HEALERS):
+		var healer := node as Npc
+		if healer.heal_area.has_point(position) and healer.serves_player(self):
+			hp = max_hp
+			if not healer.heal_lines.is_empty():
+				tell(healer.display_name, healer.heal_lines.pick_random())
+			return
 
 
 ## Owner -> server. Debug builds only.
@@ -364,13 +502,14 @@ func level_up(rng: RandomNumberGenerator) -> void:
 
 
 ## Server only. A hit from an enemy's corner; `push` points from it to you.
-func take_hit(raw: float, push: Vector2) -> void:
+## A sparring partner's hits aren't `lethal`: they stop at 1 health (log 0072).
+func take_hit(raw: float, push: Vector2, lethal := true) -> void:
 	if _dead or _invulnerable > 0.0:
 		return
 	_invulnerable = INVULNERABLE_TIME
 	_since_combat = 0.0
 	var damage := roundi(Stats.damage_taken(raw, rigidity))
-	hp = maxi(hp - damage, 0)
+	hp = maxi(hp - damage, 0 if lethal else 1)
 	get_tree().call_group(World.GROUP, "show_damage", position + Vector2(0, -24), damage, "player")
 	apply_central_impulse(push * Combat.KNOCKBACK * mass)
 	if hp == 0:
@@ -442,22 +581,47 @@ func request_use(bag_index: int) -> void:
 		request_equip(bag_index)
 
 
-## Drag and drop between bag slots: move, or swap with what's there.
+## Drag and drop between bag and chest slots: move, or swap with what's
+## there. Chest slots are CHEST_BASE + i.
 func request_swap(from: int, to: int) -> void:
 	_submit_swap.rpc_id(1, from, to)
+
+
+## Your chests can be used only at your house's door, as a square or better
+## (design logs 0041, 0064).
+func can_use_chest() -> bool:
+	return Regions.admits(HouseDoor.RULE, sides, kind) and HouseDoor.in_reach(self)
+
+
+static func _is_slot(i: int) -> bool:
+	return (i >= 0 and i < BAG_SIZE) or (i >= CHEST_BASE and i < CHEST_BASE + CHEST_SLOTS)
 
 
 @rpc("any_peer", "call_local", "reliable")
 func _submit_swap(from: int, to: int) -> void:
 	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
 		return
-	if from == to or from < 0 or to < 0 or from >= BAG_SIZE or to >= BAG_SIZE:
+	if from == to or not _is_slot(from) or not _is_slot(to):
 		return
-	var moving := bag[from]
+	if (from >= CHEST_BASE or to >= CHEST_BASE) and not can_use_chest():
+		return
+	# Copies, then reassigned whole, so the sync sees the change.
 	var new_bag := bag
-	new_bag[from] = bag[to]
-	new_bag[to] = moving
+	var new_chest := chest
+	var moving := _slot(from)
+	var other := _slot(to)
+	for pair in [[from, other], [to, moving]]:
+		var i: int = pair[0]
+		if i >= CHEST_BASE:
+			new_chest[i - CHEST_BASE] = pair[1]
+		else:
+			new_bag[i] = pair[1]
 	bag = new_bag
+	chest = new_chest
+
+
+func _slot(i: int) -> String:
+	return chest[i - CHEST_BASE] if i >= CHEST_BASE else bag[i]
 
 
 ## Owner -> server: grab the nearest of your items on the ground.
@@ -585,7 +749,7 @@ func _apply_gains(gains: Dictionary, direction: int) -> void:
 
 ## Server only. The heir takes over this shape, starting fresh at level 1 with
 ## no gear, back at the spawn point (design log 0030). The certificate used
-## is already gone; spare certificates and potions are kept, gear is not.
+## is already gone; spare certificates, potions and pay are kept, gear is not.
 func become_heir(heir: Dictionary) -> void:
 	var kept := bag  # consumables stay where they were, e.g. potions on the hotbar
 	for i in kept.size():
@@ -598,6 +762,7 @@ func become_heir(heir: Dictionary) -> void:
 	apex = heir.apex
 	luck = heir.luck
 	generation += 1
+	spawn_point = Regions.spawn_for(kind)  # an irregular heir goes below (log 0059)
 	_rebuild_outline()
 	level = 1
 	xp = 0
@@ -607,7 +772,7 @@ func become_heir(heir: Dictionary) -> void:
 	max_hp = Stats.max_hp(vigor)
 	hp = max_hp
 	energy = Stats.MAX_ENERGY
-	_teleport_to = spawn_point
+	teleport(spawn_point)
 
 
 # --- Saved progress (design log 0038) -------------------------------------
@@ -628,6 +793,7 @@ func progress() -> Dictionary:
 	return {
 		"level": level,
 		"xp": xp,
+		"pay": pay,
 		"stats": base,
 		"bag": Array(bag),
 		"equipped": Array(equipped),
@@ -640,6 +806,7 @@ func _apply_progress(saved: Dictionary) -> void:
 		return
 	level = saved.level
 	xp = saved.xp
+	pay = saved.get("pay", 0)
 	for stat: String in Stats.LEVELED:
 		set(stat, saved.stats[stat])
 	bag = PackedStringArray(saved.bag)
@@ -672,6 +839,7 @@ static func sanitize_progress(raw: Dictionary) -> Dictionary:
 	return {
 		"level": clean_level,
 		"xp": clampi(_as_int(raw.get("xp"), 0), 0, top_xp),
+		"pay": clampi(_as_int(raw.get("pay"), 0), 0, MAX_PAY),
 		"stats": stats,
 		"bag": clean_bag,
 		"equipped": clean_equipped,
@@ -698,9 +866,22 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	energy = minf(energy + Stats.energy_regen(mettle) * state.step, Stats.MAX_ENERGY)
 	_invulnerable -= state.step
 	_regenerate(state.step)
-	_priest_heal()
+	_area_heal()
+	if not _ride.is_empty():
+		_ride.time += state.step
+		var k := clampf(_ride.time / _ride.length, 0.0, 1.0)
+		state.transform = Transform2D(0.0, (_ride.from as Vector2).lerp(_ride.to, smoothstep(0.0, 1.0, k)))
+		state.linear_velocity = Vector2.ZERO
+		state.angular_velocity = 0.0
+		if k >= 1.0:
+			_end_ride()
+		return
+	if _ghost_steps > 0 and _teleport_to == null:
+		_ghost_steps -= 1
+		if _ghost_steps == 0:
+			set_deferred("collision_mask", LAYER_TERRAIN | Enemy.LAYER)
 	if _teleport_to == null and state.transform.origin.y > FALL_LIMIT:
-		_teleport_to = spawn_point
+		teleport(spawn_point)
 	if _teleport_to != null:
 		state.transform = Transform2D(0.0, _teleport_to)
 		state.linear_velocity = Vector2.ZERO
@@ -757,7 +938,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 	if not _dead:
 		for hit in Combat.find_hits(state, _corners, _prev_linear, _prev_angular,
-				func(o: Object) -> bool: return o is Enemy, _hit_cooldowns):
+				func(o: Object) -> bool: return o is Enemy and (o as Enemy).players_can_hit(), _hit_cooldowns):
 			var enemy: Enemy = hit.target
 			enemy.apply_central_impulse(hit.push * Combat.KNOCKBACK * enemy.mass)
 			var crit := randf() < Stats.lucky_chance(Stats.CRIT_CHANCE, luck)
@@ -821,7 +1002,7 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, -rotation)
 	var font := ThemeDB.fallback_font
 	var tag := family_name + (" (you)" if is_local() else "")
-	draw_string(font, Vector2(-150, -RADIUS - 12), tag, HORIZONTAL_ALIGNMENT_CENTER, 300, 15, Palette.INK_FADED)
+	draw_string(font, Vector2(-150, -RADIUS - 12), tag, HORIZONTAL_ALIGNMENT_CENTER, 300, 15, Palette.faded_at(position))
 	# Under the name: other players' health; your energy (your health is in the HUD).
 	if is_local():
 		_draw_energy_pips()
