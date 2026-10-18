@@ -1,16 +1,14 @@
 class_name ShapeGeometry
 ## Outline points for player shapes, centered on (0, 0) with a flat face down.
 ##
-## Triangle angles are placeholders until design decides them (DESIGN.md open
-## question 1): right = 45-45-90, acute = isosceles with a 30° tip.
+## Isosceles triangles have their apex up and their base on the floor; the
+## apex angle widens toward 60° each generation (design log 0031).
 
 
-static func points(sides: int, kind: String, radius: float) -> PackedVector2Array:
+static func points(sides: int, kind: String, radius: float, apex := 45.0) -> PackedVector2Array:
 	var pts: PackedVector2Array
-	if sides == 3 and kind == "right":
-		pts = PackedVector2Array([Vector2(-1, 1), Vector2(1, 1), Vector2(-1, -1)])
-	elif sides == 3 and kind == "acute":
-		var half_base := 2.0 * tan(deg_to_rad(15.0))
+	if sides == 3 and kind == "isosceles":
+		var half_base := 2.0 * tan(deg_to_rad(apex / 2.0))
 		pts = PackedVector2Array([Vector2(-half_base, 1), Vector2(half_base, 1), Vector2(0, -1)])
 	elif kind == "irregular":
 		pts = _irregular(sides)
@@ -50,4 +48,21 @@ static func _fit(pts: PackedVector2Array, radius: float) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for p in pts:
 		out.append((p - center) / far * radius)
+	return out
+
+
+## Interior angle at each corner, in degrees. Dents (reflex corners) come out
+## over 180, so they deal no damage.
+static func corner_angles(pts: PackedVector2Array) -> PackedFloat32Array:
+	var area := 0.0
+	for i in pts.size():
+		area += pts[i].cross(pts[(i + 1) % pts.size()])
+	var out := PackedFloat32Array()
+	for i in pts.size():
+		var p := pts[i]
+		var to_prev := pts[i - 1] - p
+		var to_next := pts[(i + 1) % pts.size()] - p
+		var angle := rad_to_deg(to_prev.angle_to(to_next))
+		# Which way round counts as "inside" depends on the winding.
+		out.append(fposmod(angle if area < 0.0 else -angle, 360.0))
 	return out

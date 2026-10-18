@@ -27,10 +27,20 @@ const SPIN_PER_TORQUE := 0.07
 # Rigidity (armor only) -> flat damage reduction
 const MIN_DAMAGE_TAKEN := 0.15  # a hit always does at least 15%
 
+# Health regen and potions (design log 0037). Shares of max health.
+const REGEN_IN_COMBAT := 0.005  # per second
+const REGEN_OUT_OF_COMBAT := 0.02  # per second
+const OUT_OF_COMBAT_TIME := 5.0  # s without hitting or being hit
+const POTION_HEAL := 0.4
+
 # Luck -> chance rolls
-const LUCK_FOR_DOUBLE := 50.0  # 50 luck doubles every chance
+const LUCK_FOR_DOUBLE := 20.0  # 20 luck doubles every chance (design log 0049)
 const BIRTH_LUCK_MAX := 10  # regular shapes are born with 0-10
-const IRREGULAR_LUCK_MULT := 2
+const IRREGULAR_LUCK_BONUS := 20  # irregulars are born with double odds on everything (log 0049)
+
+# Critical hits (design log 0047)
+const CRIT_CHANCE := 0.1  # per player corner hit, before luck
+const CRIT_MULT := 2.0
 
 ## Stats that grow when you level up.
 const LEVELED: Array[String] = ["vigor", "mettle", "force", "torque"]
@@ -40,6 +50,15 @@ const GAIN_MAX := 2
 
 static func max_hp(vigor: int) -> int:
 	return BASE_HP + HP_PER_VIGOR * vigor
+
+
+## Health per second.
+static func hp_regen(max_health: int, in_combat: bool) -> float:
+	return max_health * (REGEN_IN_COMBAT if in_combat else REGEN_OUT_OF_COMBAT)
+
+
+static func potion_heal(max_health: int) -> int:
+	return roundi(max_health * POTION_HEAL)
 
 
 static func energy_regen(mettle: int) -> float:
@@ -67,7 +86,7 @@ static func lucky_chance(chance: float, luck: int) -> float:
 
 static func roll_birth_luck(kind: String, rng: RandomNumberGenerator) -> int:
 	var luck := rng.randi_range(0, BIRTH_LUCK_MAX)
-	return luck * IRREGULAR_LUCK_MULT if kind == "irregular" else luck
+	return luck + IRREGULAR_LUCK_BONUS if kind == "irregular" else luck
 
 
 ## Points gained on one level-up: {"vigor": 2, "mettle": 1, ...}
@@ -76,3 +95,13 @@ static func roll_level_gains(rng: RandomNumberGenerator) -> Dictionary:
 	for stat in LEVELED:
 		gains[stat] = rng.randi_range(GAIN_MIN, GAIN_MAX)
 	return gains
+
+
+# XP (design log 0028). Level 20 takes about 2,950 XP in all.
+const XP_BASE := 20
+const XP_PER_LEVEL := 15
+
+
+## XP needed to go from `level` to the next one.
+static func xp_to_next(level: int) -> int:
+	return XP_BASE + XP_PER_LEVEL * (level - 1)

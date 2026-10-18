@@ -29,9 +29,9 @@ func active_family() -> Family:
 	return null if active_slot < 0 else _slots[active_slot]
 
 
-func found_family(slot: int, family_name: String) -> Family:
+func found_family(slot: int, family_name: String, start_kind: String) -> Family:
 	assert(_slots[slot] == null, "slot %d is already taken" % slot)
-	var f := Family.found(family_name, _rng)
+	var f := Family.found(family_name, start_kind, _rng)
 	_slots[slot] = f
 	save_slot(slot)
 	slots_changed.emit()

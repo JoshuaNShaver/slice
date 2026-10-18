@@ -6,6 +6,12 @@ var label := ""
 var value := 0.0
 var max_value := 1.0
 var fill := Palette.HEALTH
+## A thin bar with no text, like the XP bar.
+var compact := false:
+	set(value):
+		compact = value
+		custom_minimum_size.y = 8.0 if compact else 24.0
+		queue_redraw()
 
 
 func _init(bar_label: String, fill_color: Color) -> void:
@@ -28,7 +34,9 @@ func _draw() -> void:
 	draw_rect(box, Palette.PARCHMENT_LIGHT)
 	var ratio := clampf(value / maxf(max_value, 0.001), 0.0, 1.0)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * ratio, size.y)), fill)
-	draw_rect(box, Palette.INK, false, 2.0)
+	draw_rect(box, Palette.INK, false, 1.5 if compact else 2.0)
+	if compact:
+		return
 	var font := get_theme_default_font()
 	var font_size := 15
 	var y := (size.y + font.get_ascent(font_size) - font.get_descent(font_size)) / 2.0

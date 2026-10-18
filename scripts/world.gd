@@ -1,30 +1,46 @@
+class_name World
 extends Node2D
-## The world. For now it holds only the Center, the respawn hub (DESIGN §1).
+## The world: the Center, the respawn hub (DESIGN §1), and the training cave
+## to its west (design log 0027).
 ##
-## The server spawns a PlayerShape for each registered player and runs the
-## physics. The MultiplayerSpawner copies those shapes to every client.
+## The server spawns a PlayerShape for each registered player, the cave's
+## enemies and their loot, and runs the physics. MultiplayerSpawners copy
+## all of these to every client.
+##
+## Each player's own machine saves their heir's progress into the family
+## save every few seconds and on leaving (design log 0038).
 
 const MENU_SCENE := "res://scenes/main_menu.tscn"
-const HUD_MARGIN := 24
-const HUD_PANEL_WIDTH := 0.25  # share of the screen
-const BAG_SLOTS := 8
-const STAT_ROWS: Array[String] = ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck"]
+const GROUP := "world"  # PlayerShape asks the world to drop items
+const DamageNumber := preload("res://scripts/world/damage_number.gd")
+const ENEMY_RESPAWN := 12.0  # s
+const BOSS_RESPAWN := 90.0
+## Chance (before luck) that a cave enemy drops a piece of its room's gear
+## tier for each player who hit it. The boss always drops (design log 0029).
+const GEAR_DROP_CHANCE := 0.15
+## Chances (before luck) for a healing potion from a cave enemy, and a
+## blessed certificate from the boss (design logs 0032, 0037). The boss
+## always drops a potion.
+const POTION_DROP_CHANCE := 0.1
+const BLESSED_DROP_CHANCE := 0.05
+const SAVE_INTERVAL := 3.0  # s between progress saves
 
 var _players_root: Node2D
 var _spawner: MultiplayerSpawner
 var _camera: Camera2D
 var _background: ParchmentBackground
-var _player_list: VBoxContainer
-var _session_label: Label
-var _health_bar: StatBar
-var _energy_bar: StatBar
-var _stat_values: Dictionary = {}  # stat name -> its value Label
-var _hud: CanvasLayer
+var _hud: Hud
+var _priest: Priest
+var _enemies_root: Node2D
+var _enemy_spawner: MultiplayerSpawner
+var _pickups_root: Node2D
+var _pickup_spawner: MultiplayerSpawner
+var _pickup_count := 0
+var _rng := RandomNumberGenerator.new()
+var _save_timer := 0.0
 
 
 func _ready() -> void:
-	PlayerShape.ensure_input_actions()
-
 	var back := CanvasLayer.new()
 	back.layer = -1
 	add_child(back)
@@ -32,7 +48,17 @@ func _ready() -> void:
 	_background.auto_drift = false
 	back.add_child(_background)
 
+	add_to_group(GROUP)
+	_rng.randomize()
 	add_child(CenterTerrain.new())
+	add_child(Cave.new())
+	_priest = Priest.new()
+	add_child(_priest)
+
+	_enemies_root = _add_spawned_root("Enemies", Enemy.create)
+	_enemy_spawner = get_node("EnemiesSpawner")
+	_pickups_root = _add_spawned_root("Pickups", Pickup.create)
+	_pickup_spawner = get_node("PickupsSpawner")
 
 	_players_root = Node2D.new()
 	_players_root.name = "Players"
@@ -47,33 +73,65 @@ func _ready() -> void:
 	_camera.position = CenterTerrain.SPAWN_POINT
 	_camera.position_smoothing_enabled = true
 	_camera.position_smoothing_speed = 6.0
-	_camera.limit_left = int(CenterTerrain.LEFT_EDGE - 100)
+	_camera.limit_left = int(Cave.WEST_X - 100)
 	_camera.limit_right = int(CenterTerrain.RIGHT_EDGE + 100)
 	_camera.limit_bottom = 400
 	add_child(_camera)
 
-	_build_hud()
+	_hud = Hud.new()
+	_hud.leave_requested.connect(_leave)
+	add_child(_hud)
 
 	Net.players_changed.connect(_on_players_changed)
 	Net.session_ended.connect(_on_session_ended)
+	Net.heir_born.connect(_on_heir_born)
 	if multiplayer.is_server():
+		_spawn_all_enemies()
 		_on_players_changed()
 	else:
 		Net.announce_ready()
 
 
-func _process(_delta: float) -> void:
-	var me := _players_root.get_node_or_null(str(multiplayer.get_unique_id()))
+func _process(delta: float) -> void:
+	var me := _local_player()
 	if me != null:
 		_camera.position = me.position
-		_update_stat_hud(me)
+		_hud.update(me)
+		_priest.prompt = _priest_prompt(me)
+		_save_timer -= delta
+		if _save_timer <= 0.0:
+			_save_timer = SAVE_INTERVAL
+			_save_progress(me)
 	_background.view_offset = _camera.get_screen_center_position()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_save_progress(_local_player())
+
+
+func _local_player() -> PlayerShape:
+	return _players_root.get_node_or_null(str(multiplayer.get_unique_id())) as PlayerShape
+
+
+## Owner's machine: keep the family save in step with this heir. Waits while
+## a new heir's shape hasn't synced yet, so the old heir's level can't be
+## saved onto the new one.
+func _save_progress(me: PlayerShape) -> void:
+	var family := FamilyStore.active_family()
+	if me == null or family == null or family.extinct or me.generation != family.generation:
+		return
+	var now := me.progress()
+	if now == family.progress:
+		return
+	family.progress = now
+	FamilyStore.save_slot(FamilyStore.active_slot)
 
 
 func _on_players_changed() -> void:
 	if multiplayer.is_server():
 		_sync_player_shapes()
-	_refresh_player_list()
+	_hud.refresh_players()
 
 
 ## Server only: one shape per registered player.
@@ -89,7 +147,10 @@ func _sync_player_shapes() -> void:
 				"family": info.family,
 				"sides": info.sides,
 				"kind": info.kind,
+				"apex": info.apex,
 				"luck": info.luck,
+				"generation": info.generation,
+				"progress": Net.progress.get(id, {}),
 				"pos": CenterTerrain.SPAWN_POINT + offset,
 			})
 	for shape: PlayerShape in _players_root.get_children():
@@ -100,181 +161,110 @@ func _sync_player_shapes() -> void:
 			shape.sync.update_visibility()
 
 
-func _build_hud() -> void:
-	_hud = CanvasLayer.new()
-	add_child(_hud)
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.theme = UiTheme.build()
-	_hud.add_child(root)
-
-	# Top left: where you are, who's here, controls.
-	var column := VBoxContainer.new()
-	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, HUD_MARGIN)
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_theme_constant_override("separation", 6)
-	root.add_child(column)
-
-	var top := HBoxContainer.new()
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(top)
-	var title := Label.new()
-	title.text = "The Center"
-	title.add_theme_font_size_override("font_size", 32)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title)
-	var leave := Button.new()
-	leave.text = "Leave"
-	leave.focus_mode = Control.FOCUS_NONE  # so Space jumps instead of pressing it
-	leave.pressed.connect(_leave)
-	top.add_child(leave)
-
-	_session_label = Label.new()
-	_session_label.text = Net.describe_session()
-	_session_label.add_theme_color_override("font_color", Palette.INK_FADED)
-	column.add_child(_session_label)
-
-	_player_list = VBoxContainer.new()
-	_player_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_player_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(_player_list)
-
-	var hint := Label.new()
-	hint.text = "← → or A D to roll  ·  Space to jump (%d energy)" % PlayerShape.JUMP_COST
-	if OS.is_debug_build():
-		hint.text += "  ·  L to level up (debug)"
-	hint.add_theme_color_override("font_color", Palette.INK_FADED)
-	column.add_child(hint)
-
-	root.add_child(_build_status_panel())
+## A root node for server-spawned things, plus the spawner that copies them.
+func _add_spawned_root(root_name: String, create: Callable) -> Node2D:
+	var root := Node2D.new()
+	root.name = root_name
+	add_child(root)
+	var spawner := MultiplayerSpawner.new()
+	spawner.name = root_name + "Spawner"
+	spawner.spawn_path = NodePath("../" + root_name)
+	spawner.spawn_function = create
+	add_child(spawner)
+	return root
 
 
-## Bottom right, a quarter of the screen wide: your bars on top of the
-## bag / equipment / stats tabs (design log 0025).
-func _build_status_panel() -> Control:
-	var panel := VBoxContainer.new()
-	panel.anchor_left = 1.0 - HUD_PANEL_WIDTH
-	panel.anchor_right = 1.0
-	panel.anchor_top = 1.0
-	panel.anchor_bottom = 1.0
-	panel.offset_right = -HUD_MARGIN
-	panel.offset_top = -HUD_MARGIN
-	panel.offset_bottom = -HUD_MARGIN
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_constant_override("separation", 6)
-
-	_health_bar = StatBar.new("Health", Palette.HEALTH)
-	panel.add_child(_health_bar)
-	_energy_bar = StatBar.new("Energy", Palette.ENERGY)
-	panel.add_child(_energy_bar)
-
-	var tabs := TabContainer.new()
-	# Every tab the same height, so the bars don't jump when you switch.
-	tabs.use_hidden_tabs_for_min_size = true
-	tabs.get_tab_bar().focus_mode = Control.FOCUS_NONE  # keep Space for jumping
-	tabs.get_tab_bar().tab_alignment = TabBar.ALIGNMENT_CENTER
-	panel.add_child(tabs)
-
-	var bag := _tab_page("Bag")
-	bag.add_child(_slot_grid(BAG_SLOTS, 4))
-	bag.add_child(_faded_label("Your bag is empty."))
-	tabs.add_child(bag)
-
-	var equipment := _tab_page("Equipment")
-	for slot_name: String in ["Armor", "Trinkets"]:
-		var row := HBoxContainer.new()
-		var slot_label := Label.new()
-		slot_label.text = slot_name
-		slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(slot_label)
-		row.add_child(_faded_label("none"))
-		equipment.add_child(row)
-	tabs.add_child(equipment)
-
-	var stats := _tab_page("Stats")
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	for stat: String in STAT_ROWS:
-		var stat_label := Label.new()
-		stat_label.text = stat.capitalize()
-		stat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(stat_label)
-		var value := Label.new()
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		grid.add_child(value)
-		_stat_values[stat] = value
-	stats.add_child(grid)
-	tabs.add_child(stats)
-	tabs.current_tab = 2
-	return panel
+func _priest_prompt(me: PlayerShape) -> String:
+	if me.position.distance_to(Priest.POSITION) > Priest.REACH:
+		return ""
+	var certificate := me.marriage_certificate()
+	if certificate == "":
+		return "Bring me a marriage certificate."
+	if certificate == Gear.BLESSED_CERTIFICATE and me.sides == 3 and me.kind != "equilateral":
+		return "%s: marry (uses your blessed certificate)" % Controls.describe("interact")
+	return "%s: marry (uses a certificate)" % Controls.describe("interact")
 
 
-func _tab_page(page_name: String) -> VBoxContainer:
-	var page := VBoxContainer.new()
-	page.name = page_name  # the tab's title
-	page.add_theme_constant_override("separation", 6)
-	return page
+func _on_heir_born(heir: Dictionary) -> void:
+	var shape := Family.with_article(Family.describe_shape(heir.sides, heir.kind, heir.apex))
+	if heir.blessed:
+		_hud.show_message("Blessed! Your heir is born %s." % shape)
+	elif heir.gained_side:
+		_hud.show_message("Married! Your heir is %s." % shape)
+	elif heir.kind == "isosceles":
+		_hud.show_message("Married! Your heir is %s, 5° nearer equilateral." % shape)
+	else:
+		_hud.show_message("Married! Your heir is %s. Only equilateral triangles have square heirs." % shape)
 
 
-func _slot_grid(count: int, columns: int) -> GridContainer:
-	var grid := GridContainer.new()
-	grid.columns = columns
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	for i in count:
-		var slot := Panel.new()
-		slot.custom_minimum_size = Vector2(0, 44)
-		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(slot)
-	return grid
+# --- Enemies (server only) ------------------------------------------------
+
+func _spawn_all_enemies() -> void:
+	var points := Cave.spawn_points()
+	for i in points.size():
+		_spawn_enemy(i, points[i])
 
 
-func _faded_label(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_color_override("font_color", Palette.INK_FADED)
-	return label
+func _spawn_enemy(index: int, point: Dictionary) -> void:
+	if not is_inside_tree() or not multiplayer.is_server():
+		return
+	var data := point.duplicate()
+	data.name = "E%d" % index
+	if _enemies_root.has_node(String(data.name)):
+		return
+	var enemy: Enemy = _enemy_spawner.spawn(data)
+	enemy.died.connect(_on_enemy_died.bind(index, point), CONNECT_ONE_SHOT)
 
 
-func _update_stat_hud(me: PlayerShape) -> void:
-	_health_bar.set_values(me.hp, me.max_hp)
-	_energy_bar.set_values(me.energy, Stats.MAX_ENERGY)
-	for stat: String in STAT_ROWS:
-		var text := str(me.get(stat))
-		if _stat_values[stat].text != text:
-			_stat_values[stat].text = text
+func _on_enemy_died(enemy: Enemy, index: int, point: Dictionary) -> void:
+	var info := enemy.info()
+	for id: int in enemy.contributors:
+		var player := _players_root.get_node_or_null(str(id)) as PlayerShape
+		if player == null:
+			continue
+		player.add_xp(info.xp)
+		var luck_chance := Stats.lucky_chance(GEAR_DROP_CHANCE, player.luck)
+		if enemy.is_boss() or _rng.randf() < luck_chance:
+			drop_item.call_deferred(Gear.random_item(info.tier, _rng), id, enemy.position)
+		if enemy.is_boss() or _rng.randf() < Stats.lucky_chance(POTION_DROP_CHANCE, player.luck):
+			drop_item.call_deferred(Gear.POTION, id, enemy.position + Vector2(-40, 0))
+		if enemy.is_boss():
+			drop_item.call_deferred(Gear.CERTIFICATE, id, enemy.position + Vector2(40, 0))
+			if _rng.randf() < Stats.lucky_chance(BLESSED_DROP_CHANCE, player.luck):
+				drop_item.call_deferred(Gear.BLESSED_CERTIFICATE, id, enemy.position + Vector2(80, 0))
+	# Deferred: this runs inside a physics callback.
+	enemy.queue_free()
+	var wait := BOSS_RESPAWN if enemy.is_boss() else ENEMY_RESPAWN
+	get_tree().create_timer(wait).timeout.connect(_spawn_enemy.bind(index, point))
 
 
-## Dev hot reload (HotReload autoload): rebuild the HUD from the new code.
-func _hot_reload() -> void:
-	if _hud != null:
-		_hud.queue_free()
-	_stat_values.clear()
-	_build_hud()
-	_refresh_player_list()
+## Server only. Puts an item on the ground that only `owner_id` can take.
+func drop_item(item: String, owner_id: int, pos: Vector2) -> void:
+	_pickup_count += 1
+	_pickup_spawner.spawn({"name": "P%d" % _pickup_count, "item": item, "owner": owner_id, "pos": pos})
 
 
-func _refresh_player_list() -> void:
-	for child in _player_list.get_children():
-		child.queue_free()
-	for id: int in Net.players:
-		var info: Dictionary = Net.players[id]
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		row.add_child(ShapeIcon.new(info.sides, info.kind, 28))
-		var label := Label.new()
-		label.text = "The %s family: %s" % [info.family, Family.describe_shape(info.sides, info.kind)]
-		if id == multiplayer.get_unique_id():
-			label.text += "  (you)"
-		row.add_child(label)
-		_player_list.add_child(row)
+## Server only. Every player sees a hit's damage float up from `pos`
+## (design log 0046). `kind` is "enemy", "crit" (logs 0047) or "player"
+## (damage a player took).
+func show_damage(pos: Vector2, amount: int, kind: String) -> void:
+	if multiplayer.is_server() and amount > 0:
+		_show_damage.rpc(pos, amount, kind)
+
+
+@rpc("authority", "call_local", "unreliable")
+func _show_damage(pos: Vector2, amount: int, kind: String) -> void:
+	if DisplayServer.get_name() == "headless":  # a dedicated server has no one to show
+		return
+	var number := DamageNumber.new()
+	number.position = pos
+	number.amount = amount
+	number.kind = kind
+	add_child(number)
 
 
 func _leave() -> void:
+	_save_progress(_local_player())
 	Net.leave()
 	get_tree().change_scene_to_file(MENU_SCENE)
 

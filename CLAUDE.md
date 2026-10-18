@@ -33,14 +33,19 @@ Mark your own suggestions `Proposed` until the user agrees.
 
 - `scenes/`: `main_menu.tscn` (main scene), `world.tscn` (the Center hub).
 - `scripts/world/`: `PlayerShape` (server-simulated rolling polygon, synced to
-  clients) and `CenterTerrain` (hub ground, ledges, signs).
+  clients), `CenterTerrain` (hub ground, ledges, signs), `Cave` (training
+  cave west of the Center: rooms, spawns), `Enemy`, `Pickup` (per-player
+  loot) and `Priest` (marriage).
+- `scripts/combat.gd`: corner-strike hit detection, shared by players and
+  enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
-  `user://families/`), `Net` (offline / host / join, server-owned player list),
+  `user://families/`), `Controls` (input actions, default keys, rebinding saved
+  to `user://controls.cfg`), `Net` (offline / host / join, server-owned player list),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle roll, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
-- `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette,
-  theme, shape icon, stat bar, parchment background, menu.
+- `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette, item slot,
+  theme, HUD, shape icon, stat bar, parchment background, menu.
 - UI is built in code from a bare root node; scenes stay minimal.
 
 ## Running
@@ -50,9 +55,10 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Dedicated server: `Godot --headless --path . -- --server --port=24680`
 - **Hot reload:** a server or game run from source reloads any `.gd` file
   you save, keeping node state. `_ready` doesn't rerun; give a node a
-  `_hot_reload()` method to rebuild (World rebuilds the HUD, CenterTerrain
+  `_hot_reload()` method to rebuild (Hud rebuilds itself, CenterTerrain
   its collision). Scripts with errors are skipped. `.tscn` edits and
-  `@rpc` changes need a restart. Disable with `-- --no-hot-reload`.
+  `@rpc` changes need a restart. A new `class_name` needs an import scan
+  first (open the editor, or `Godot --headless --path . --import`). Disable with `-- --no-hot-reload`.
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

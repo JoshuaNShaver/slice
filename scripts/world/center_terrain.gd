@@ -5,15 +5,15 @@ extends StaticBody2D
 ## Ground level at the plaza is y = 0 and screen-down is south. The land rises
 ## to the east (upper class) and sinks to the west (the war front). Ledges
 ## climb north toward the priests, and a sealed hatch marks the way south.
-## Region exits are walls until those regions exist.
+## Region exits are walls until those regions exist. The west wall has the
+## training cave's mouth in it (Cave), so the ground runs straight into it.
 
 const SPAWN_POINT := Vector2(0, -80)
 const LEFT_EDGE := -2400.0
 const RIGHT_EDGE := 2400.0
 
-## The walkable surface, west wall to east wall. The solid ground is below it.
+## The walkable surface, the cave mouth to the east wall. The solid ground is below it.
 const SURFACE: Array[Vector2] = [
-	Vector2(LEFT_EDGE, -900),
 	Vector2(LEFT_EDGE, 120),
 	Vector2(-1850, 120),
 	Vector2(-1750, 80),  # shell craters near the war front
@@ -49,6 +49,11 @@ const SIGNS: Array[Dictionary] = [
 	{"pos": Vector2(0, -20), "text": "The Center"},
 ]
 const HATCH := Rect2(-1100, 112, 120, 8)
+
+
+## True inside the Center (between its walls; the cave lies west of them).
+static func contains(pos: Vector2) -> bool:
+	return pos.x > LEFT_EDGE and pos.x < RIGHT_EDGE
 
 
 func _ready() -> void:

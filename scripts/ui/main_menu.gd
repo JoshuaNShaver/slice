@@ -16,6 +16,8 @@ var _slots_box: HBoxContainer
 var _status: Label
 var _cancel_button: Button
 var _busy := false
+## Each empty slot's chosen starting triangle (design log 0050).
+var _start_kinds := {}
 
 
 func _ready() -> void:
@@ -151,6 +153,7 @@ func _build_slot_card(slot: int) -> Control:
 		name_edit.editable = not _busy
 		name_edit.text_submitted.connect(func(_text: String) -> void: _found_family(slot, name_edit))
 		box.add_child(name_edit)
+		box.add_child(_build_start_picker(slot))
 		var found := Button.new()
 		found.text = "Found family"
 		found.disabled = _busy
@@ -158,7 +161,7 @@ func _build_slot_card(slot: int) -> Control:
 		box.add_child(found)
 		return panel
 
-	box.add_child(ShapeIcon.new(family.sides, family.kind, 96))
+	box.add_child(ShapeIcon.new(family.sides, family.kind, 96, family.apex, family.worn_gear()))
 	var name_label := Label.new()
 	name_label.text = "The %s family" % family.family_name
 	name_label.add_theme_font_size_override("font_size", 20)
@@ -167,7 +170,8 @@ func _build_slot_card(slot: int) -> Control:
 	var rank := family.shape_name().capitalize()
 	if family.is_priest():
 		rank += " (priest)"
-	box.add_child(_note("%s\nGeneration %d" % [rank, family.generation]))
+	var level := int(family.progress.get("level", 1))
+	box.add_child(_note("%s\nGeneration %d  ·  Level %d" % [rank, family.generation, level]))
 	if family.extinct:
 		box.add_child(_note("Extinct: died without an heir."))
 	elif family.is_confined_to_underworld():
@@ -185,6 +189,38 @@ func _build_slot_card(slot: int) -> Control:
 	delete.pressed.connect(_confirm_delete.bind(slot))
 	box.add_child(delete)
 	return panel
+
+
+## Three toggle buttons, one per starting triangle, with the choice named below.
+func _build_start_picker(slot: int) -> Control:
+	var chosen: String = _start_kinds.get(slot, "isosceles")
+	var box := VBoxContainer.new()
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+	var caption := _note("")
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(caption)
+	var group := ButtonGroup.new()
+	for kind in Family.STARTING_KINDS:
+		var apex := Family.START_APEX if kind == "isosceles" else 0
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.custom_minimum_size = Vector2(60, 60)
+		button.disabled = _busy
+		button.tooltip_text = Family.describe_shape(3, kind, apex).capitalize()
+		var icon := ShapeIcon.new(3, kind, 48, apex)
+		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		button.add_child(icon)
+		button.toggled.connect(func(on: bool) -> void:
+			if on:
+				_start_kinds[slot] = kind
+				caption.text = button.tooltip_text)
+		row.add_child(button)
+		if kind == chosen:
+			button.button_pressed = true
+	return box
 
 
 func _heading(text: String) -> Label:
@@ -221,7 +257,7 @@ func _spacer() -> Control:
 func _found_family(slot: int, name_edit: LineEdit) -> void:
 	if _busy:
 		return
-	var family := FamilyStore.found_family(slot, name_edit.text)
+	var family := FamilyStore.found_family(slot, name_edit.text, _start_kinds.get(slot, "isosceles"))
 	var shape := Family.with_article(family.shape_name())
 	var message := "The %s family begins as %s." % [family.family_name, shape]
 	if family.is_confined_to_underworld():
@@ -253,7 +289,7 @@ func _play(slot: int) -> void:
 	var on_port := int(_port_spin.value)
 	FamilyStore.active_slot = slot
 	_save_settings()
-	var info := family.to_public_info()
+	var info := family.to_session_info()
 	match _mode_select.get_selected_id():
 		Net.Mode.OFFLINE:
 			Net.start_offline(info)

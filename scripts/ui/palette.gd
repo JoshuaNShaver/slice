@@ -11,6 +11,7 @@ const INK_STAIN := Color(0.23, 0.16, 0.12, 0.07)
 # Bars: deeper chalk so they read against parchment.
 const HEALTH := Color("d97b7b")
 const ENERGY := Color("7aaed6")
+const XP := Color("e0c36a")
 
 const CHALK: Array[Color] = [
 	Color("f4b6b6"),  # rose

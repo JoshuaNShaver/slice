@@ -9,6 +9,9 @@ signal session_started
 signal session_failed(reason: String)
 signal session_ended(reason: String)
 signal players_changed
+## On the player's own machine, after their family save is updated.
+## `heir` is what Family.roll_heir made.
+signal heir_born(heir: Dictionary)
 
 enum Mode { OFFLINE, HOST, JOIN }
 
@@ -16,8 +19,11 @@ const DEFAULT_PORT := 24680
 const MAX_CLIENTS := 32
 const MAX_SIDES := 64
 
-## Peer id -> {"family": String, "sides": int, "kind": String, "luck": int}. Set by the server.
+## Peer id -> {"family", "sides", "kind", "apex", "luck", "generation"}. Set by the server.
 var players: Dictionary = {}
+## Server only. Peer id -> the saved progress they joined with (design log
+## 0038), checked by PlayerShape.sanitize_progress. Not sent to other players.
+var progress: Dictionary = {}
 var mode := Mode.OFFLINE
 var port := DEFAULT_PORT
 var in_session := false
@@ -88,6 +94,7 @@ func describe_session() -> String:
 
 func _reset() -> void:
 	players.clear()
+	progress.clear()
 	in_session = false
 	_local_info = {}
 
@@ -95,7 +102,7 @@ func _reset() -> void:
 func _begin_as_server(info: Dictionary) -> void:
 	in_session = true
 	if not info.is_empty():
-		players[multiplayer.get_unique_id()] = _sanitize(info)
+		_admit(multiplayer.get_unique_id(), info)
 	session_started.emit()
 	players_changed.emit()
 
@@ -123,6 +130,7 @@ func _on_server_disconnected() -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	progress.erase(id)
 	if multiplayer.is_server() and players.erase(id):
 		print("Peer %d left" % id)
 		_broadcast_players()
@@ -134,9 +142,16 @@ func _register(info: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
-	players[id] = _sanitize(info)
+	_admit(id, info)
 	print("Peer %d joined as the %s family" % [id, players[id].family])
 	_broadcast_players()
+
+
+## Server only. Never trust what a client sends.
+func _admit(id: int, info: Dictionary) -> void:
+	players[id] = _sanitize(info)
+	var raw: Variant = info.get("progress", {})
+	progress[id] = PlayerShape.sanitize_progress(raw if raw is Dictionary else {})
 
 
 ## Server -> clients: the full player list.
@@ -152,14 +167,78 @@ func _broadcast_players() -> void:
 	players_changed.emit()
 
 
+## Server only. A player's health hit 0. Families live in the player's own
+## save, so the server tells them, then drops them from the session.
+func player_died(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	print("Peer %d died" % id)
+	progress.erase(id)
+	_you_died.rpc_id(id)
+	if players.erase(id):
+		_broadcast_players()
+
+
+## Server only. Marriage (design log 0030): tell the player to update their save.
+func heir_born_on_server(id: int, heir: Dictionary) -> void:
+	if players.has(id):
+		players[id].sides = heir.sides
+		players[id].kind = heir.kind
+		players[id].apex = heir.apex
+		players[id].luck = heir.luck
+		players[id].generation += 1
+		_broadcast_players()
+	_heir_born.rpc_id(id, heir)
+
+
+## Server -> the player who died. Dying without an heir ends the family
+## (design log 0015).
+@rpc("authority", "call_local", "reliable")
+func _you_died() -> void:
+	var family := FamilyStore.active_family()
+	var reason := "You died."
+	if family != null:
+		family.extinct = true
+		FamilyStore.save_slot(FamilyStore.active_slot)
+		reason = "The %s family has ended: died without an heir." % family.family_name
+	leave()
+	session_ended.emit(reason)
+
+
+## Server -> the player who married.
+@rpc("authority", "call_local", "reliable")
+func _heir_born(heir: Dictionary) -> void:
+	var family := FamilyStore.active_family()
+	if family != null:
+		family.generation += 1
+		family.sides = heir.sides
+		family.kind = heir.kind
+		family.apex = heir.apex
+		family.luck = heir.luck
+		family.progress = {}  # the heir starts fresh; the world saves it from here
+		FamilyStore.save_slot(FamilyStore.active_slot)
+	heir_born.emit(heir)
+
+
 ## Never trust what a client sends.
 func _sanitize(info: Dictionary) -> Dictionary:
 	var raw_sides: Variant = info.get("sides", 3)
 	var raw_kind: Variant = info.get("kind", "regular")
 	var raw_luck: Variant = info.get("luck", 0)
-	return {
+	var raw_apex: Variant = info.get("apex", 0)
+	var raw_generation: Variant = info.get("generation", 1)
+	var clean := {
 		"family": Family.clean_name(str(info.get("family", ""))),
 		"sides": clampi(raw_sides if raw_sides is int else 3, 3, MAX_SIDES),
 		"kind": raw_kind if raw_kind is String and raw_kind in Family.KINDS else "regular",
+		"apex": 0,
 		"luck": clampi(raw_luck if raw_luck is int else 0, 0, Stats.MAX_LUCK),
+		"generation": maxi(raw_generation if raw_generation is int else 1, 1),
 	}
+	if clean.kind == "isosceles":
+		if clean.sides != 3:
+			clean.kind = "regular"
+		else:
+			clean.apex = clampi(raw_apex if raw_apex is int else Family.START_APEX,
+					Family.START_APEX, Family.EQUILATERAL_APEX - Family.APEX_STEP)
+	return clean
