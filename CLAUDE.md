@@ -35,7 +35,8 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/world/`: `PlayerShape` (server-simulated rolling polygon, synced to
   clients) and `CenterTerrain` (hub ground, ledges, signs).
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
-  `user://families/`), `Net` (offline / host / join, server-owned player list).
+  `user://families/`), `Net` (offline / host / join, server-owned player list),
+  `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle roll, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette,
@@ -47,6 +48,11 @@ Mark your own suggestions `Proposed` until the user agrees.
 Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Check scripts: `Godot --headless --path . --quit-after 60`
 - Dedicated server: `Godot --headless --path . -- --server --port=24680`
+- **Hot reload:** a server or game run from source reloads any `.gd` file
+  you save, keeping node state. `_ready` doesn't rerun; give a node a
+  `_hot_reload()` method to rebuild (World rebuilds the HUD, CenterTerrain
+  its collision). Scripts with errors are skipped. `.tscn` edits and
+  `@rpc` changes need a restart. Disable with `-- --no-hot-reload`.
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

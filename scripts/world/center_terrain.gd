@@ -56,7 +56,18 @@ func _ready() -> void:
 	collision_mask = 0
 	physics_material_override = PhysicsMaterial.new()
 	physics_material_override.friction = 1.0
+	_build_collision()
 
+
+## Dev hot reload (HotReload autoload): pick up edited ground and ledges.
+func _hot_reload() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_build_collision()
+
+
+func _build_collision() -> void:
 	var ground := CollisionPolygon2D.new()
 	ground.polygon = _ground_polygon()
 	add_child(ground)

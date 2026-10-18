@@ -5,6 +5,10 @@ extends Node2D
 ## physics. The MultiplayerSpawner copies those shapes to every client.
 
 const MENU_SCENE := "res://scenes/main_menu.tscn"
+const HUD_MARGIN := 24
+const HUD_PANEL_WIDTH := 0.25  # share of the screen
+const BAG_SLOTS := 8
+const STAT_ROWS: Array[String] = ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck"]
 
 var _players_root: Node2D
 var _spawner: MultiplayerSpawner
@@ -14,7 +18,8 @@ var _player_list: VBoxContainer
 var _session_label: Label
 var _health_bar: StatBar
 var _energy_bar: StatBar
-var _stats_label: Label
+var _stat_values: Dictionary = {}  # stat name -> its value Label
+var _hud: CanvasLayer
 
 
 func _ready() -> void:
@@ -96,27 +101,23 @@ func _sync_player_shapes() -> void:
 
 
 func _build_hud() -> void:
-	var hud := CanvasLayer.new()
-	add_child(hud)
+	_hud = CanvasLayer.new()
+	add_child(_hud)
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = UiTheme.build()
-	hud.add_child(root)
+	_hud.add_child(root)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 24)
-	root.add_child(margin)
-
+	# Top left: where you are, who's here, controls.
 	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, HUD_MARGIN)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_theme_constant_override("separation", 6)
-	margin.add_child(column)
+	root.add_child(column)
 
 	var top := HBoxContainer.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(top)
 	var title := Label.new()
 	title.text = "The Center"
@@ -139,15 +140,6 @@ func _build_hud() -> void:
 	_player_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_player_list)
 
-	# Your bars and stats, bottom left (design log 0021).
-	_health_bar = StatBar.new("Health", Palette.HEALTH)
-	column.add_child(_health_bar)
-	_energy_bar = StatBar.new("Energy", Palette.ENERGY)
-	column.add_child(_energy_bar)
-	_stats_label = Label.new()
-	_stats_label.add_theme_font_size_override("font_size", 15)
-	column.add_child(_stats_label)
-
 	var hint := Label.new()
 	hint.text = "← → or A D to roll  ·  Space to jump (%d energy)" % PlayerShape.JUMP_COST
 	if OS.is_debug_build():
@@ -155,12 +147,115 @@ func _build_hud() -> void:
 	hint.add_theme_color_override("font_color", Palette.INK_FADED)
 	column.add_child(hint)
 
+	root.add_child(_build_status_panel())
+
+
+## Bottom right, a quarter of the screen wide: your bars on top of the
+## bag / equipment / stats tabs (design log 0025).
+func _build_status_panel() -> Control:
+	var panel := VBoxContainer.new()
+	panel.anchor_left = 1.0 - HUD_PANEL_WIDTH
+	panel.anchor_right = 1.0
+	panel.anchor_top = 1.0
+	panel.anchor_bottom = 1.0
+	panel.offset_right = -HUD_MARGIN
+	panel.offset_top = -HUD_MARGIN
+	panel.offset_bottom = -HUD_MARGIN
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_constant_override("separation", 6)
+
+	_health_bar = StatBar.new("Health", Palette.HEALTH)
+	panel.add_child(_health_bar)
+	_energy_bar = StatBar.new("Energy", Palette.ENERGY)
+	panel.add_child(_energy_bar)
+
+	var tabs := TabContainer.new()
+	# Every tab the same height, so the bars don't jump when you switch.
+	tabs.use_hidden_tabs_for_min_size = true
+	tabs.get_tab_bar().focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	tabs.get_tab_bar().tab_alignment = TabBar.ALIGNMENT_CENTER
+	panel.add_child(tabs)
+
+	var bag := _tab_page("Bag")
+	bag.add_child(_slot_grid(BAG_SLOTS, 4))
+	bag.add_child(_faded_label("Your bag is empty."))
+	tabs.add_child(bag)
+
+	var equipment := _tab_page("Equipment")
+	for slot_name: String in ["Armor", "Trinkets"]:
+		var row := HBoxContainer.new()
+		var slot_label := Label.new()
+		slot_label.text = slot_name
+		slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(slot_label)
+		row.add_child(_faded_label("none"))
+		equipment.add_child(row)
+	tabs.add_child(equipment)
+
+	var stats := _tab_page("Stats")
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	for stat: String in STAT_ROWS:
+		var stat_label := Label.new()
+		stat_label.text = stat.capitalize()
+		stat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(stat_label)
+		var value := Label.new()
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		grid.add_child(value)
+		_stat_values[stat] = value
+	stats.add_child(grid)
+	tabs.add_child(stats)
+	tabs.current_tab = 2
+	return panel
+
+
+func _tab_page(page_name: String) -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.name = page_name  # the tab's title
+	page.add_theme_constant_override("separation", 6)
+	return page
+
+
+func _slot_grid(count: int, columns: int) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = columns
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	for i in count:
+		var slot := Panel.new()
+		slot.custom_minimum_size = Vector2(0, 44)
+		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(slot)
+	return grid
+
+
+func _faded_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_color_override("font_color", Palette.INK_FADED)
+	return label
+
 
 func _update_stat_hud(me: PlayerShape) -> void:
 	_health_bar.set_values(me.hp, me.max_hp)
 	_energy_bar.set_values(me.energy, Stats.MAX_ENERGY)
-	_stats_label.text = "Level %d   Vigor %d   Mettle %d   Force %d   Rigidity %d   Torque %d   Luck %d" % [
-		me.level, me.vigor, me.mettle, me.force, me.rigidity, me.torque, me.luck]
+	for stat: String in STAT_ROWS:
+		var text := str(me.get(stat))
+		if _stat_values[stat].text != text:
+			_stat_values[stat].text = text
+
+
+## Dev hot reload (HotReload autoload): rebuild the HUD from the new code.
+func _hot_reload() -> void:
+	if _hud != null:
+		_hud.queue_free()
+	_stat_values.clear()
+	_build_hud()
+	_refresh_player_list()
 
 
 func _refresh_player_list() -> void:

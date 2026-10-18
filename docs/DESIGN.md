@@ -106,7 +106,9 @@ Values marked * are proposed tuning.
 
 - **Jumps cost 25 energy** (bounces too). With less you still jump, at 55%*
   speed, for free (log 0022).
-- **HUD:** your health and energy bars and stats sit bottom left. Other
+- **HUD (log 0025):** your health and energy bars sit bottom right, a
+  quarter of the screen wide, on top of a 3-tab menu: **Bag**, **Equipment**
+  and **Stats**. Bag and Equipment are empty placeholders for now. Other
   players show a small health bar under their name.
 
 ## 5. Lineage

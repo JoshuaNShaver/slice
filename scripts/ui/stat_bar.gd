@@ -11,7 +11,7 @@ var fill := Palette.HEALTH
 func _init(bar_label: String, fill_color: Color) -> void:
 	label = bar_label
 	fill = fill_color
-	custom_minimum_size = Vector2(280, 24)
+	custom_minimum_size = Vector2(120, 24)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 

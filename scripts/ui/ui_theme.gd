@@ -32,11 +32,38 @@ static func build() -> Theme:
 
 	t.set_stylebox("panel", "PanelContainer", _box(Color(Palette.PARCHMENT_LIGHT, 0.85), Palette.INK, 2, 16))
 
+	# Tabs: the open tab joins the panel below it; closed tabs sit back in shade.
+	t.set_stylebox("panel", "TabContainer", _box(Color(Palette.PARCHMENT_LIGHT, 0.85), Palette.INK, 2, 12))
+	t.set_stylebox("tab_selected", "TabContainer", _tab(Palette.PARCHMENT_LIGHT, Palette.INK))
+	t.set_stylebox("tab_unselected", "TabContainer", _tab(Palette.PARCHMENT_DARK, Palette.INK_FADED))
+	t.set_stylebox("tab_hovered", "TabContainer", _tab(Palette.CHALK[1], Palette.INK))
+	t.set_stylebox("tab_focus", "TabContainer", StyleBoxEmpty.new())
+	t.set_color("font_selected_color", "TabContainer", Palette.INK)
+	t.set_color("font_unselected_color", "TabContainer", Palette.INK_FADED)
+	t.set_color("font_hovered_color", "TabContainer", Palette.INK)
+	t.set_constant("side_margin", "TabContainer", 0)
+	t.set_font_size("font_size", "TabContainer", 16)
+
+	# Empty item slots, like the bag's.
+	t.set_stylebox("panel", "Panel", _box(Palette.PARCHMENT, Palette.INK_FADED, 2))
+
 	t.set_stylebox("panel", "PopupMenu", _box(Palette.PARCHMENT_LIGHT, Palette.INK))
 	t.set_stylebox("hover", "PopupMenu", _box(Palette.CHALK[1], Color.TRANSPARENT, 0))
 	t.set_color("font_color", "PopupMenu", Palette.INK)
 	t.set_color("font_hover_color", "PopupMenu", Palette.INK)
 	return t
+
+
+static func _tab(bg: Color, border: Color) -> StyleBoxFlat:
+	var box := _box(bg, border)
+	box.border_width_bottom = 0
+	box.corner_radius_bottom_left = 0
+	box.corner_radius_bottom_right = 0
+	box.content_margin_left = 12
+	box.content_margin_right = 12
+	box.content_margin_top = 4
+	box.content_margin_bottom = 4
+	return box
 
 
 static func _box(bg: Color, border: Color, border_width := 2, padding := 8) -> StyleBoxFlat:

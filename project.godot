@@ -19,6 +19,7 @@ run/main_scene="res://scenes/main_menu.tscn"
 
 FamilyStore="*res://scripts/autoload/family_store.gd"
 Net="*res://scripts/autoload/net.gd"
+HotReload="*res://scripts/autoload/hot_reload.gd"
 
 [display]
 
