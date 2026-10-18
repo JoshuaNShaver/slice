@@ -2,14 +2,18 @@ class_name ShapeGeometry
 ## Outline points for player shapes, centered on (0, 0) with a flat face down.
 ##
 ## Isosceles triangles have their apex up and their base on the floor; the
-## apex angle widens toward 60° each generation (design log 0031).
+## apex angle widens toward 60° each generation (design log 0031). Irregular
+## triangles climb the same apex, with their top pushed off to one side.
+
+const IRREGULAR_LEAN := 0.4  # an irregular triangle's top, off-centre by this share of half its base
 
 
 static func points(sides: int, kind: String, radius: float, apex := 45.0) -> PackedVector2Array:
 	var pts: PackedVector2Array
-	if sides == 3 and kind == "isosceles":
+	if sides == 3 and (kind == "isosceles" or kind == "irregular"):
 		var half_base := 2.0 * tan(deg_to_rad(apex / 2.0))
-		pts = PackedVector2Array([Vector2(-half_base, 1), Vector2(half_base, 1), Vector2(0, -1)])
+		var lean := half_base * IRREGULAR_LEAN if kind == "irregular" else 0.0
+		pts = PackedVector2Array([Vector2(-half_base, 1), Vector2(half_base, 1), Vector2(lean, -1)])
 	elif kind == "irregular":
 		pts = _irregular(sides)
 	else:

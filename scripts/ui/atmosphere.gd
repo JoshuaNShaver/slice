@@ -4,7 +4,7 @@ extends Control
 ## slanting light and low fog, kept faint. It moves faster than the camera,
 ## so it reads as nearer than the shapes. Each region has its own mood, and
 ## moving between regions blends them. Drawn on each client only, under the
-## HUD.
+## HUD. Hidden on Low graphics (design log 0094).
 
 const SPECKS := 56
 const SHAFTS := 3
@@ -51,6 +51,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	visible = not Graphics.low
+	if not visible:
+		return
 	_time += delta
 	var target: Dictionary = MOODS.get(Regions.at(view).get("id", ""), MOODS[""])
 	var k := clampf(delta * BLEND_RATE, 0.0, 1.0)

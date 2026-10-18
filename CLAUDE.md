@@ -40,12 +40,14 @@ Mark your own suggestions `Proposed` until the user agrees.
   `Mission` (one squad's instanced battlefield) and `Missions` (server-side
   musters, pay, discharge). `Npc` (talkers, priests, healers; built from each
   terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
-  (house drawing), `Enemy`, `Pickup` (per-player loot).
+  (house drawing), `Enemy`, `Pickup` (per-player loot), `NetSmoother`
+  (client-side smoothing of server-simulated bodies).
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
   `user://families/`, house chests in `user://chests.json`), `Controls` (input actions, default keys, rebinding saved
-  to `user://controls.cfg`), `Net` (offline / host / join, server-owned player list),
+  to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
+  `user://graphics.cfg`), `Net` (offline / host / join, server-owned player list),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
@@ -65,6 +67,7 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   its collision). Scripts with errors are skipped. `.tscn` edits and
   `@rpc` changes need a restart. A new `class_name` needs an import scan
   first (open the editor, or `Godot --headless --path . --import`). Disable with `-- --no-hot-reload`.
+- Exporting builds and LAN play: see `docs/EXPORT-AND-LAN.md`.
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

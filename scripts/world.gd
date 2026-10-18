@@ -278,6 +278,11 @@ func request_mission(who: PlayerShape, mission_type: String) -> void:
 	_missions.request(who, mission_type)
 
 
+## Server only (PlayerShape._submit_ready): Ready in a countdown popup.
+func mission_ready(who: PlayerShape) -> void:
+	_missions.mark_ready(who)
+
+
 ## Local player: name each place on arriving there.
 func _announce_place(me: PlayerShape) -> void:
 	var place := Regions.at(me.position)
@@ -291,15 +296,15 @@ func _announce_place(me: PlayerShape) -> void:
 func _on_heir_born(heir: Dictionary) -> void:
 	var shape := Family.with_article(Family.describe_shape(heir.sides, heir.kind, heir.apex))
 	if heir.blessed:
-		_hud.show_message("Blessed! Your heir is born %s." % shape)
+		_hud.think("Blessed! Your heir is born %s." % shape)
 	elif heir.gained_side:
-		_hud.show_message("Married! Your heir is %s." % shape)
+		_hud.think("Married! Your heir is %s." % shape)
 	elif heir.kind == "isosceles":
-		_hud.show_message("Married! Your heir is %s, 5° nearer equilateral." % shape)
+		_hud.think("Married! Your heir is %s, 5° nearer equilateral." % shape)
 	else:
-		_hud.show_message("Married! Your heir is %s. Only equilateral triangles have square heirs." % shape)
+		_hud.think("Married! Your heir is %s. Only equilateral triangles have square heirs." % shape)
 	if heir.kind == "irregular":
-		_hud.show_message("Married! Your heir is %s, and irregulars live below. Welcome to the Undercroft." % shape)
+		_hud.think("Married! Your heir is %s, and irregulars live below. Welcome to the Undercroft." % shape)
 
 
 # --- Enemies (server only) ------------------------------------------------

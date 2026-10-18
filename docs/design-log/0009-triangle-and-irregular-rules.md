@@ -1,7 +1,7 @@
 # 0009: Triangle guarantee and irregular heirs
 
 - **Date:** 2026-10-17
-- **Status:** Accepted
+- **Status:** Accepted; the irregular roll for equilaterals and irregular triangles changed by 0096
 - **Decision:** Among triangles, only an equilateral triangle is guaranteed a
   square heir (the book's rule). Each heir has a 1-in-10 chance to be
   irregular; irregulars are confined to the underworld and cannot enter the

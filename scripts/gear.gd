@@ -20,17 +20,29 @@ class_name Gear
 ## the next tier (rose 1, mint 2, lilac 3, the Pretender's gilded 4).
 ##
 ## Wearing all five slots in one tier completes its set, which adds that
-## tier's own bonus (design log 0040).
+## tier's own bonus (design log 0040). A military set is its four slots;
+## pigment doesn't count (log 0085).
 ##
 ## Military gear (design logs 0071, 0072) is tiers 5-8: leather from the
 ## drill yard, then bronze, iron and steel, bought from the Quartermaster
 ## with combatant pay. It is plain, told apart by crosshatching (log 0069),
 ## and has no pigment: colour is contraband, and the army doesn't sell it.
+##
+## Provisions (design log 0084) are food the Quartermaster sells for pay.
+## Unlike a potion, a meal heals over a few seconds (Stats.MEAL_TIME).
 
 const CERTIFICATE := "certificate"
 const BLESSED_CERTIFICATE := "blessed_certificate"
 const POTION := "potion"
-const CONSUMABLES: Array[String] = [CERTIFICATE, BLESSED_CERTIFICATE, POTION]
+## Food, cheapest first. `heal`: share of max health, over Stats.MEAL_TIME.
+## `price`: combatant pay at the Quartermaster. *Proposed* numbers.
+const PROVISIONS := {
+	"hardtack": {"name": "Hardtack", "heal": 0.2, "price": 3},
+	"cheese": {"name": "Cheese", "heal": 0.35, "price": 6},
+	"salt_pork": {"name": "Salt pork", "heal": 0.5, "price": 10},
+}
+const CONSUMABLES: Array[String] = [CERTIFICATE, BLESSED_CERTIFICATE, POTION,
+		"hardtack", "cheese", "salt_pork"]
 
 ## In order: the HUD lists them this way, and `equipped` is indexed by it.
 const SLOTS: Array[String] = ["points", "plating", "pigment", "eye", "voice"]
@@ -61,10 +73,11 @@ const TIERS: Array[Dictionary] = [
 	{"name": "Mint", "color": Color("8cc78a"), "set": {"torque": 15}},
 	{"name": "Lilac", "color": Color("a58fd6"), "set": {"rigidity": 15}},
 	{"name": "Gilded", "color": Color("d9b44a"), "set": {"vigor": 15, "luck": 15}},
-	{"name": "Leather", "color": Color("d8c7a4"), "set": {}, "hatch": [[45.0], 9.0], "price": 0},
-	{"name": "Bronze", "color": Color("cdb78e"), "set": {}, "hatch": [[45.0, -45.0], 9.0], "price": 30},
-	{"name": "Iron", "color": Color("b9b3a6"), "set": {}, "hatch": [[0.0, 90.0], 6.0], "price": 90},
-	{"name": "Steel", "color": Color("a3a6a8"), "set": {}, "hatch": [[0.0, 60.0, -60.0], 6.0], "price": 240},
+	# Military sets are modest, +10 (log 0085, *proposed* past leather).
+	{"name": "Leather", "color": Color("d8c7a4"), "set": {"force": 10}, "hatch": [[45.0], 9.0], "price": 0},
+	{"name": "Bronze", "color": Color("cdb78e"), "set": {"vigor": 10}, "hatch": [[45.0, -45.0], 9.0], "price": 30},
+	{"name": "Iron", "color": Color("b9b3a6"), "set": {"rigidity": 10}, "hatch": [[0.0, 90.0], 6.0], "price": 90},
+	{"name": "Steel", "color": Color("a3a6a8"), "set": {"torque": 10}, "hatch": [[0.0, 60.0, -60.0], 6.0], "price": 240},
 ]
 
 
@@ -91,8 +104,14 @@ static func shop_stock() -> Array[String]:
 	return out
 
 
+static func is_provision(it: String) -> bool:
+	return PROVISIONS.has(it)
+
+
 ## Combatant pay the Quartermaster asks for an item, or 0 if he doesn't sell it.
 static func price(it: String) -> int:
+	if is_provision(it):
+		return PROVISIONS[it].price
 	if not is_gear(it) or slot_of(it) not in MILITARY_SLOTS:
 		return 0
 	return TIERS[tier_of(it)].get("price", 0)
@@ -132,11 +151,15 @@ static func bonuses(it: String) -> Dictionary:
 
 
 ## The tier whose full set is worn, or 0. `worn` is indexed like SLOTS.
-## Tiers with no set bonus (military) never count as a set.
+## A military set needs only MILITARY_SLOTS; pigment is ignored (log 0085).
 static func set_tier(worn: PackedStringArray) -> int:
-	var tier := tier_of(worn[0]) if worn.size() == SLOTS.size() else 0
-	for it in worn:
-		if not is_gear(it) or tier_of(it) != tier:
+	if worn.size() != SLOTS.size():
+		return 0
+	var tier := tier_of(worn[0])
+	for i in SLOTS.size():
+		if is_military_tier(tier) and SLOTS[i] not in MILITARY_SLOTS:
+			continue
+		if not is_gear(worn[i]) or tier_of(worn[i]) != tier:
 			return 0
 	return tier if not TIERS[tier].set.is_empty() else 0
 
@@ -176,6 +199,8 @@ static func item_name(it: String) -> String:
 		return "Blessed certificate"
 	if it == POTION:
 		return "Healing potion"
+	if is_provision(it):
+		return PROVISIONS[it].name
 	if not is_gear(it):
 		return it
 	return "%s %s" % [TIERS[tier_of(it)].name, SLOT_INFO[slot_of(it)].noun]
@@ -189,6 +214,9 @@ static func describe(it: String) -> String:
 		return "Blessed certificate: a triangle who marries with it has an equilateral heir."
 	if it == POTION:
 		return "Healing potion: restores %d%% of your health." % roundi(Stats.POTION_HEAL * 100)
+	if is_provision(it):
+		return "%s: restores %d%% of your health over %d s." % [
+				item_name(it), roundi(PROVISIONS[it].heal * 100), roundi(Stats.MEAL_TIME)]
 	if not is_gear(it):
 		return it
 	var slot := slot_of(it)
@@ -350,6 +378,9 @@ static func draw_icon(canvas: CanvasItem, it: String, at: Vector2, alpha := 1.0)
 		canvas.draw_rect(neck, Color(Palette.PARCHMENT_LIGHT, alpha))
 		canvas.draw_rect(neck, ink, false, 2.0)
 		return
+	if is_provision(it):
+		_draw_provision(canvas, it, at, alpha)
+		return
 	var fill := Color(color(it), alpha)
 	var pts: PackedVector2Array
 	match slot_of(it):
@@ -381,3 +412,31 @@ static func draw_icon(canvas: CanvasItem, it: String, at: Vector2, alpha := 1.0)
 	canvas.draw_polyline(outline, ink, 2.0, true)
 	if slot_of(it) == "eye":
 		canvas.draw_circle(at, 3.5, ink)
+
+
+## Food icons: a docked biscuit, a wedge of cheese, a slab of pork.
+static func _draw_provision(canvas: CanvasItem, it: String, at: Vector2, alpha: float) -> void:
+	var ink := Color(Palette.INK, alpha)
+	match it:
+		"hardtack":
+			var rect := Rect2(at + Vector2(-12, -12), Vector2(24, 24))
+			canvas.draw_rect(rect, Color("dcc08a", alpha))
+			canvas.draw_rect(rect, ink, false, 2.0)
+			for x in [-6, 0, 6]:
+				for y in [-6, 0, 6]:
+					canvas.draw_circle(at + Vector2(x, y), 1.4, ink)
+		"cheese":
+			var pts := PackedVector2Array([Vector2(-14, 9), Vector2(14, 9), Vector2(14, -2), Vector2(-14, -10)])
+			for i in pts.size():
+				pts[i] += at
+			canvas.draw_colored_polygon(pts, Color("ead27a", alpha))
+			canvas.draw_circle(at + Vector2(4, 3), 2.5, Color("c9ad55", alpha))
+			canvas.draw_circle(at + Vector2(-5, 4), 1.8, Color("c9ad55", alpha))
+			pts.append(pts[0])
+			canvas.draw_polyline(pts, ink, 2.0, true)
+		_:  # salt pork: lean with a band of fat along the top
+			var rect := Rect2(at + Vector2(-14, -8), Vector2(28, 17))
+			canvas.draw_rect(rect, Color("d99a8f", alpha))
+			canvas.draw_rect(Rect2(rect.position, Vector2(28, 5)), Color(Palette.PARCHMENT_LIGHT, alpha))
+			canvas.draw_rect(rect, ink, false, 2.0)
+			canvas.draw_line(at + Vector2(-14, -3), at + Vector2(14, -3), ink, 1.0)

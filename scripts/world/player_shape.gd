@@ -14,8 +14,9 @@ extends RigidBody2D
 ## corner it goes higher still and flips you.
 ##
 ## Stats (design logs 0021-0022) live here too. The server owns them and they
-## sync to every client for the bars. A jump costs energy; with too little
-## energy you still jump, just weakly.
+## sync to every client for the bars. Jumps are free (log 0087); energy pays
+## for abilities (log 0086, Abilities): rush, nose dive and spike up, bought
+## from the Quartermaster and kept until an heir takes over.
 ##
 ## Combat (design log 0027): your corners hurt enemies they strike, and
 ## theirs hurt you (Combat). Kills give XP (log 0028) and loot (log 0029).
@@ -72,8 +73,6 @@ const JUMP_BUFFER := 0.15  # a jump pressed this long before landing still count
 ## (sine of the tilt between the bottom edge and the ground).
 const FACE_TILT := 0.14
 
-const JUMP_COST := 25.0
-const WEAK_JUMP := 0.55  # jump speed multiplier when you can't pay the cost
 
 const TELEPORT_GHOST_STEPS := 3
 const FALL_LIMIT := 4500.0  # fall below this and you go back to the spawn point
@@ -100,13 +99,21 @@ var kind := "regular":
 	set(value):
 		kind = value
 		_outline_dirty = true
-var apex := 0:  # isosceles triangles only (design log 0031)
+var apex := 0:  # isosceles and irregular triangles (design logs 0031, 0096)
 	set(value):
 		apex = value
 		_outline_dirty = true
 var generation := 1  # which heir of the family this is
 var spawn_point := Vector2.ZERO
 var sync: MultiplayerSynchronizer
+## Server -> clients each frame: x, y, rotation, vx, vy, spin, time (design
+## logs 0093, 0095). Clients smooth it rather than snapping to each update.
+var net_state := PackedFloat32Array():
+	set(value):
+		net_state = value
+		if _smoother != null:
+			_smoother.push(value)
+var _smoother: NetSmoother  # clients only
 
 # Stats: set by the server, synced to clients.
 var level := 1
@@ -121,6 +128,7 @@ var max_hp := Stats.BASE_HP
 var energy := Stats.MAX_ENERGY
 var xp := 0  # toward the next level
 var pay := 0  # combatant pay (design log 0071)
+var abilities := PackedStringArray()  # learned ability ids (design log 0086)
 # Items (design log 0036): set by the server, synced to clients. "" is empty.
 var bag := _blank(BAG_SIZE)
 var equipped := _blank(Gear.SLOTS.size())  # indexed like Gear.SLOTS
@@ -138,6 +146,8 @@ var _hit_cooldowns: Dictionary = {}
 var _invulnerable := 0.0
 var _since_combat := INF  # s since you last hit or were hit
 var _regen_carry := 0.0  # health regen builds up in fractions
+var _meal_left := 0.0  # health a provision still has to give (design log 0084)
+var _meal_rate := 0.0  # health per second while it lasts
 var _teleport_to: Variant = null  # Vector2 to move to on the next physics step
 var _ghost_steps := 0  # physics steps left with collisions off after a teleport
 var _dead := false
@@ -152,6 +162,13 @@ var _landed_on_corner := false
 var _ground_normal := Vector2.UP
 var _hold_time := 0.0
 var _hold_dir := 0.0
+# Server-side abilities (design log 0086).
+var _ability_queued := ""  # pressed, waiting for the ground (like a buffered jump)
+var _ability_timer := 0.0
+var _moves := Abilities.Moves.new()
+var _launch: Variant = null  # Vector2 velocity to take next step (a boss's spike up)
+var _thrown := 0.0  # s left helpless in the air after a launch
+var _thrown_onto: Node2D = null
 # Owner-side: last move value sent, so we only send changes.
 var _sent_move := 0.0
 
@@ -192,12 +209,19 @@ static func create(data: Dictionary) -> PlayerShape:
 	p.sync = MultiplayerSynchronizer.new()
 	p.sync.name = "Sync"
 	var config := SceneReplicationConfig.new()
-	for prop: String in [".:position", ".:rotation", ".:energy"]:
+	# Position and rotation arrive once at spawn, then as net_state.
+	for prop: String in [".:position", ".:rotation"]:
 		config.add_property(prop)
 		config.property_set_spawn(prop, true)
-		config.property_set_replication_mode(prop, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
+		config.property_set_replication_mode(prop, SceneReplicationConfig.REPLICATION_MODE_NEVER)
+	config.add_property(".:net_state")
+	config.property_set_spawn(".:net_state", false)  # the first update is a live one
+	config.property_set_replication_mode(".:net_state", SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
+	config.add_property(".:energy")
+	config.property_set_spawn(".:energy", true)
+	config.property_set_replication_mode(".:energy", SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	for stat: String in ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck", "hp", "max_hp",
-			"xp", "pay", "bag", "equipped", "chest", "sides", "kind", "apex", "generation"]:
+			"xp", "pay", "abilities", "bag", "equipped", "chest", "sides", "kind", "apex", "generation"]:
 		var prop := ".:" + stat
 		config.add_property(prop)
 		config.property_set_spawn(prop, true)
@@ -230,6 +254,8 @@ func _ready() -> void:
 	if not multiplayer.is_server():
 		freeze = true
 		freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+		_smoother = NetSmoother.new()
+		_smoother.live = is_local()
 
 
 func is_local() -> bool:
@@ -255,6 +281,9 @@ func _physics_process(_delta: float) -> void:
 		_submit_drink.rpc_id(1, -1)
 	if Input.is_action_just_pressed("home"):
 		_submit_home.rpc_id(1)
+	for id: String in Abilities.ALL:
+		if Input.is_action_just_pressed(Abilities.ALL[id].action) and id in abilities:
+			_submit_ability.rpc_id(1, id)
 	for n in QUICK_SLOTS:
 		if Input.is_action_just_pressed("quick_%d" % (n + 1)):
 			request_use(BAG_SLOTS + n)
@@ -263,7 +292,13 @@ func _physics_process(_delta: float) -> void:
 		_submit_debug_level_up.rpc_id(1)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if multiplayer.is_server():
+		net_state = NetSmoother.state_of(self)
+	elif not _smoother.is_empty():
+		var s := _smoother.current(delta)
+		position = Vector2(s.x, s.y)
+		rotation = s.z
 	if _outline_dirty:
 		_rebuild_outline()
 	queue_redraw()  # keeps the name tag upright as the shape turns
@@ -281,6 +316,17 @@ func _submit_move(move: float) -> void:
 func _submit_jump() -> void:
 	if multiplayer.is_server() and multiplayer.get_remote_sender_id() in [peer_id, 0]:
 		_jump_timer = JUMP_BUFFER
+
+
+## Owner -> server: use an ability you know (design log 0086). Held briefly,
+## like a jump, so pressing it just before landing still works.
+@rpc("any_peer", "call_local", "reliable")
+func _submit_ability(id: String) -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0]:
+		return
+	if id in abilities and not _dead and _ride.is_empty():
+		_ability_queued = id
+		_ability_timer = JUMP_BUFFER
 
 
 ## Owner -> server: use whatever is nearest (an NPC, elevator or door).
@@ -332,6 +378,8 @@ func _submit_home() -> void:
 ## the Center) as one fast move and drives the shape into the ground.
 func teleport(pos: Vector2) -> void:
 	_ride = {}
+	_moves.cancel()
+	_thrown = 0.0
 	_teleport_to = pos
 	_ghost_steps = TELEPORT_GHOST_STEPS
 	collision_mask = 0
@@ -368,8 +416,7 @@ func tell(speaker: String, line: String) -> void:
 ## Server -> this player.
 @rpc("authority", "call_local", "reliable")
 func _told(speaker: String, line: String) -> void:
-	var text := line if speaker == "" else "%s: “%s”" % [speaker, line]
-	get_tree().call_group(Hud.GROUP, "show_message", text)
+	get_tree().call_group(Hud.GROUP, "say", speaker, line)
 
 
 ## Server only. Opens a HUD panel on your screen: "orders" (the General's
@@ -397,6 +444,34 @@ func _submit_mission(mission_type: String) -> void:
 		get_tree().call_group(World.GROUP, "request_mission", self, mission_type)
 
 
+## Server only. Shows this player a countdown popup with a Ready button
+## (design log 0081): a muster or the trip home. An empty title hides it.
+## `ready_count` of `total` are ready (total 0: no squad count to show).
+## `button` relabels Ready, e.g. "Report back" (design log 0089).
+func show_countdown(title: String, seconds: float, ready_count: int, total: int, you_ready: bool,
+		button := "") -> void:
+	_countdown_shown.rpc_id(peer_id, title, seconds, ready_count, total, you_ready, button)
+
+
+## Server -> this player.
+@rpc("authority", "call_local", "reliable")
+func _countdown_shown(title: String, seconds: float, ready_count: int, total: int, you_ready: bool,
+		button: String) -> void:
+	get_tree().call_group(Hud.GROUP, "show_countdown", title, seconds, ready_count, total, you_ready, button)
+
+
+## Owner side: Ready in the countdown popup.
+func request_mission_ready() -> void:
+	_submit_ready.rpc_id(1)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _submit_ready() -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
+		return
+	get_tree().call_group(World.GROUP, "mission_ready", self)
+
+
 ## Owner side: buy an item from the Quartermaster (design log 0071).
 func request_buy(item: String) -> void:
 	_submit_buy.rpc_id(1, item)
@@ -416,6 +491,29 @@ func _submit_buy(item: String) -> void:
 		tell("The Quartermaster", "Your bag's full, soldier.")
 		return
 	pay -= cost
+
+
+## Owner side: learn an ability from the Quartermaster (design log 0086).
+func request_learn(id: String) -> void:
+	_submit_learn.rpc_id(1, id)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _submit_learn(id: String) -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
+		return
+	if not Abilities.is_ability(id) or id in abilities or not Npc.near_role(self, "quartermaster"):
+		return
+	var cost := Abilities.price(id)
+	if pay < cost:
+		tell("The Quartermaster", "That drill's %d pay. You have %d." % [cost, pay])
+		return
+	pay -= cost
+	var learned := abilities
+	learned.append(id)
+	abilities = learned
+	tell("", "Learned %s: %s (%d energy)." % [Abilities.ability_name(id),
+			Abilities.ALL[id].text, roundi(Abilities.COST)])
 
 
 ## Server only. Wages for a mission (design log 0071).
@@ -450,13 +548,34 @@ func _submit_drink(bag_index: int) -> void:
 	hp = mini(hp + Stats.potion_heal(max_hp), max_hp)
 
 
+## Owner -> server: eat a provision (design log 0084). It heals over
+## Stats.MEAL_TIME; eating more adds to what's left. Not at full health.
+@rpc("any_peer", "call_local", "reliable")
+func _submit_eat(bag_index: int) -> void:
+	if not multiplayer.is_server() or multiplayer.get_remote_sender_id() not in [peer_id, 0] or _dead:
+		return
+	if bag_index < 0 or bag_index >= BAG_SIZE or not Gear.is_provision(bag[bag_index]) or hp >= max_hp:
+		return
+	var food := bag[bag_index]
+	var new_bag := bag
+	new_bag[bag_index] = ""
+	bag = new_bag
+	_meal_left += max_hp * float(Gear.PROVISIONS[food].heal)
+	_meal_rate = _meal_left / Stats.MEAL_TIME
+
+
 ## Server only. Health regen (design log 0037), slower in combat.
 func _regenerate(step: float) -> void:
 	_since_combat += step
 	if _dead or hp >= max_hp:
 		_regen_carry = 0.0
+		_meal_left = 0.0  # a meal stops once you're full, or dead
 		return
 	_regen_carry += Stats.hp_regen(max_hp, _since_combat < Stats.OUT_OF_COMBAT_TIME) * step
+	if _meal_left > 0.0:
+		var bite := minf(_meal_rate * step, _meal_left)
+		_meal_left -= bite
+		_regen_carry += bite
 	var whole := floori(_regen_carry)
 	if whole > 0:
 		_regen_carry -= whole
@@ -571,12 +690,14 @@ func request_drink(bag_index: int) -> void:
 	_submit_drink.rpc_id(1, bag_index)
 
 
-## Double-click or a quick-use key: drink a potion, wear gear.
+## Double-click or a quick-use key: drink a potion, eat, wear gear.
 func request_use(bag_index: int) -> void:
 	if bag_index < 0 or bag_index >= BAG_SIZE:
 		return
 	if bag[bag_index] == Gear.POTION:
 		request_drink(bag_index)
+	elif Gear.is_provision(bag[bag_index]):
+		_submit_eat.rpc_id(1, bag_index)
 	elif Gear.is_gear(bag[bag_index]):
 		request_equip(bag_index)
 
@@ -757,6 +878,7 @@ func become_heir(heir: Dictionary) -> void:
 			kept[i] = ""
 	bag = kept
 	equipped = _blank(Gear.SLOTS.size())
+	abilities = PackedStringArray()  # the heir hasn't been drilled (design log 0086)
 	sides = heir.sides
 	kind = heir.kind
 	apex = heir.apex
@@ -794,6 +916,7 @@ func progress() -> Dictionary:
 		"level": level,
 		"xp": xp,
 		"pay": pay,
+		"abilities": Array(abilities),
 		"stats": base,
 		"bag": Array(bag),
 		"equipped": Array(equipped),
@@ -807,6 +930,7 @@ func _apply_progress(saved: Dictionary) -> void:
 	level = saved.level
 	xp = saved.xp
 	pay = saved.get("pay", 0)
+	abilities = PackedStringArray(saved.get("abilities", []))
 	for stat: String in Stats.LEVELED:
 		set(stat, saved.stats[stat])
 	bag = PackedStringArray(saved.bag)
@@ -840,6 +964,7 @@ static func sanitize_progress(raw: Dictionary) -> Dictionary:
 		"level": clean_level,
 		"xp": clampi(_as_int(raw.get("xp"), 0), 0, top_xp),
 		"pay": clampi(_as_int(raw.get("pay"), 0), 0, MAX_PAY),
+		"abilities": _clean_abilities(raw.get("abilities", [])),
 		"stats": stats,
 		"bag": clean_bag,
 		"equipped": clean_equipped,
@@ -848,6 +973,15 @@ static func sanitize_progress(raw: Dictionary) -> Dictionary:
 
 static func _as_int(value: Variant, fallback: int) -> int:
 	return int(value) if value is int or value is float else fallback  # JSON numbers are floats
+
+
+static func _clean_abilities(raw: Variant) -> Array:
+	var out := []
+	if raw is Array:
+		for id: Variant in raw:
+			if id is String and Abilities.is_ability(id) and id not in out:
+				out.append(id)
+	return out
 
 
 static func _clean_items(raw: Variant, size: int) -> PackedStringArray:
@@ -911,6 +1045,12 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_landed_timer -= step
 	var grounded := _since_ground <= COYOTE_TIME
 
+	if _apply_thrown(state, touching_ground):
+		_jump_timer = 0.0
+		_ability_timer = 0.0
+		_hit_check(state)
+		return
+
 	# Holding the same direction raises your top spin.
 	if _move != 0.0 and _move == _hold_dir:
 		_hold_time += step
@@ -934,8 +1074,20 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if _jump_timer > 0.0:
 		_jump_timer -= step
 		if grounded:
+			_moves.spike_time = 0.0
 			_jump(state)
 
+	if _ability_timer > 0.0:
+		_ability_timer -= step
+		if _try_ability(state, grounded):
+			_ability_timer = 0.0
+	_moves.step(state, _corners, _corner_angles, touching_ground)
+	_hit_check(state)
+
+
+## Your corners' hits on enemies this step (Combat), then remember this
+## step's velocities for the next.
+func _hit_check(state: PhysicsDirectBodyState2D) -> void:
 	if not _dead:
 		for hit in Combat.find_hits(state, _corners, _prev_linear, _prev_angular,
 				func(o: Object) -> bool: return o is Enemy and (o as Enemy).players_can_hit(), _hit_cooldowns):
@@ -954,10 +1106,6 @@ func _jump(state: PhysicsDirectBodyState2D) -> void:
 	var power := 1.0
 	if bounce:
 		power = CORNER_BOUNCE if _landed_on_corner else FACE_BOUNCE
-	if energy >= JUMP_COST:
-		energy -= JUMP_COST
-	else:
-		power *= WEAK_JUMP
 	# Jump away from the ground, leaning with the slope.
 	var dir := (Vector2.UP + _ground_normal).normalized()
 	var v := state.linear_velocity
@@ -974,6 +1122,77 @@ func _jump(state: PhysicsDirectBodyState2D) -> void:
 	_jump_timer = 0.0
 	_landed_timer = 0.0
 	_since_ground = INF
+
+
+# --- Abilities (design log 0086) ---------------------------------------------
+
+## Uses the queued ability if it can go now. True when it's done with (used,
+## or dropped for want of energy); false to keep waiting for the ground.
+func _try_ability(state: PhysicsDirectBodyState2D, grounded: bool) -> bool:
+	if energy < Abilities.COST:
+		return true
+	match _ability_queued:
+		"rush":
+			_moves.rush(state, _rush_dir(state), RADIUS)
+		"nose_dive":
+			if not grounded:
+				return false
+			_moves.nose_dive(state, _ground_normal, JUMP_SPEED * Abilities.NOSE_DIVE_JUMP)
+			_jump_timer = 0.0
+			_landed_timer = 0.0
+			_since_ground = INF
+		"spike_up":
+			if not grounded:
+				return false
+			var foes: Array = get_tree().get_nodes_in_group(Enemy.GROUP).filter(func(e: Node) -> bool:
+				var enemy := e as Enemy
+				# Bosses are too heavy to throw (design log 0089).
+				return enemy != null and enemy.players_can_hit() and not enemy.freeze and enemy.hp > 0 \
+						and not enemy.is_boss())
+			_moves.spike_up(self, state, _corners, _corner_angles, RADIUS, foes)
+		_:
+			return true
+	energy -= Abilities.COST
+	return true
+
+
+## Which way a rush goes: where you're rolling, else where you're moving.
+func _rush_dir(state: PhysicsDirectBodyState2D) -> float:
+	var dir := signf(_move)
+	if dir == 0.0:
+		var v := state.linear_velocity
+		dir = signf(v.x) if absf(v.x) > 20.0 else signf(state.angular_velocity)
+	return dir if dir != 0.0 else 1.0
+
+
+## Server only. Thrown into the air by a boss's spike up (design log 0089):
+## you take this velocity and can't steer, jump or use abilities until you
+## land, drifting to come down on `onto`.
+func launch(velocity: Vector2, onto: Node2D) -> void:
+	if _dead or not _ride.is_empty():
+		return
+	_launch = velocity
+	_thrown = 1.5
+	_thrown_onto = onto
+
+
+## Server only. Applies a launch, then steers the fall. True while you're
+## helpless.
+func _apply_thrown(state: PhysicsDirectBodyState2D, touching: bool) -> bool:
+	if _launch != null:
+		state.linear_velocity = _launch
+		_launch = null
+		_moves.cancel()
+		return true
+	if _thrown <= 0.0:
+		return false
+	_thrown -= state.step
+	if touching and state.linear_velocity.y >= 0.0 and _thrown < 1.2:
+		_thrown = 0.0
+	elif state.get_contact_count() == 0 and is_instance_valid(_thrown_onto):
+		var gap := _thrown_onto.global_position.x - state.transform.origin.x
+		state.linear_velocity.x = clampf(gap * 4.0, -400.0, 400.0)
+	return _thrown > 0.0
 
 
 ## True if a corner, not a flat face, is what's touching the ground.
@@ -1013,17 +1232,17 @@ func _draw() -> void:
 		draw_rect(bar, Palette.INK, false, 1.0)
 
 
-## One pip per full jump's worth of energy (design log 0026). Faded when full,
-## so it only draws the eye while you're spending it.
+## One pip per ability's worth of energy (design logs 0026, 0087). Faded when
+## full, so it only draws the eye while you're spending it.
 func _draw_energy_pips() -> void:
-	var count := ceili(Stats.MAX_ENERGY / JUMP_COST)
+	var count := ceili(Stats.MAX_ENERGY / Abilities.COST)
 	var pip := Vector2(12, 6)
 	var gap := 3.0
 	var left := -(count * pip.x + (count - 1) * gap) / 2.0
 	var alpha := 0.35 if energy >= Stats.MAX_ENERGY else 1.0
 	for i in count:
 		var box := Rect2(left + i * (pip.x + gap), -RADIUS - 10, pip.x, pip.y)
-		var share := clampf((energy - i * JUMP_COST) / JUMP_COST, 0.0, 1.0)
+		var share := clampf((energy - i * Abilities.COST) / Abilities.COST, 0.0, 1.0)
 		draw_rect(box, Color(Palette.PARCHMENT, alpha))
 		draw_rect(Rect2(box.position, Vector2(box.size.x * share, box.size.y)), Color(Palette.ENERGY, alpha))
 		draw_rect(box, Color(Palette.INK, alpha), false, 1.0)

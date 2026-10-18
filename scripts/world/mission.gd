@@ -11,22 +11,33 @@ extends StaticBody2D
 
 ## *Proposed* numbers. levels: a guide only (log 0072). squad: most players.
 ## pay: combatant pay each on success. allies: friendly soldiers.
-## boss: chance (before luck) that a Revolt boss is here.
+## boss: chance (before luck) that a Revolt boss is here; boss_type and
+## boss_strength (share of its full health, damage and armor) say which.
+## Recon's secret rolls (design logs 0088, 0089), never in the orders:
+## "noble", the chance of a Painted Noble (pay x noble_pay); and the boss
+## chance, a half-strength Captain (pay x boss_pay) with twice the rebels, a
+## Painted Gentleman and a Noble, all huddled round him. "report_pay": what
+## reporting him to the General instead pays (times `pay`).
+## Invasion's gentry (design log 0091): `gentry` is how many (min, max) of
+## the Revolt's Gentlemen and Nobles, at gentry_strength, using its moves.
 const TYPES := {
 	"recon": {
 		"name": "Recon", "levels": "5–10", "width": 2800.0, "squad": 4, "pay": 25, "allies": 1,
-		"boss": 0.0, "brief": "Recon: find the Revolt's scouts and rout them.",
+		"boss": 0.1, "boss_type": "captain", "boss_strength": 0.5, "boss_pay": 5,
+		"noble": 0.2, "noble_pay": 2, "report_pay": 2,
+		"brief": "Recon: find the Revolt's scouts and rout them.",
 		"about": "3–5 painted rebels. One soldier goes with you.",
 	},
 	"invasion": {
 		"name": "Invasion", "levels": "10–20", "width": 5600.0, "squad": 8, "pay": 80, "allies": 10,
-		"boss": 0.2, "brief": "Invasion: take the Revolt's camp. Ten soldiers march with you.",
-		"about": "20+ rebels and agitators, ten soldiers on your side. Sometimes a Captain of the Revolt.",
+		"boss": 0.0, "gentry": Vector2i(1, 3), "gentry_strength": 2.0,
+		"brief": "Invasion: take the Revolt's camp. Ten soldiers march with you.",
+		"about": "20+ rebels and agitators, and 1–3 of their painted gentry. Ten soldiers on your side.",
 	},
 	"special_ops": {
-		"name": "Special ops", "levels": "20", "width": 3200.0, "squad": 1, "pay": 200, "allies": 0,
-		"boss": 1.0, "brief": "Special ops: get past the bodyguards. Chromatistes must not leave.",
-		"about": "Alone. Five bodyguards and Chromatistes, the Painter.",
+		"name": "Special ops", "levels": "20", "width": 3200.0, "squad": 2, "pay": 200, "allies": 0,
+		"boss": 1.0, "boss_type": "chromatistes", "brief": "Special ops: get past the bodyguards and his Captain. Chromatistes must not leave.",
+		"about": "One or two of you. Five bodyguards, a Captain of the Revolt and Chromatistes, the Painter.",
 	},
 }
 const ORDER: Array[String] = ["recon", "invasion", "special_ops"]

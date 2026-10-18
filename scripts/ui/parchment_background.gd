@@ -5,6 +5,7 @@ extends Control
 ## In menus the stains drift on their own; in the world they follow the camera.
 ## Underground it turns to slate with chalk dust (design log 0056): set `depth`
 ## (Regions.underworld_blend) from 0, parchment, to 1, slate.
+## Low graphics (design log 0094) draws the plain color, without stains.
 
 const LAYER_SPEEDS: Array[float] = [6.0, 14.0, 26.0]
 const STAINS_PER_LAYER := 7
@@ -47,6 +48,8 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Palette.PARCHMENT.lerp(Palette.SLATE, depth))
+	if Graphics.low:
+		return
 	var wrap := size + Vector2(200.0, 200.0)
 	for s in _stains:
 		var layer: int = s.layer

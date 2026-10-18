@@ -104,10 +104,12 @@ an open gate (`scripts/world/barracks.gd`). East to west:
 - **The drill yard (log 0072):** straw dummies and sparring partners for
   levels 1–5 (spar until about 3–5). Partners can't bring you below 1
   health. It drops **leather** gear.
-- **The Quartermaster** (equilateral) sells bronze, iron and steel for
-  combatant pay. **The Surgeon** heals on request.
+- **The Quartermaster** (equilateral) sells bronze, iron and steel,
+  provisions (§2b) and ability drills (§2c), for combatant pay. **The Surgeon** heals on request.
 - **The General** (a pentagon, proposed) gives missions; squads muster
-  beside him for 10 s.
+  beside him for 10 s. A popup shows the timer, and the squad leaves early
+  once everyone presses **Ready** (log 0081, proposed). After a victory,
+  the squad goes home in 6 s, or at once for anyone who presses Ready.
 
 The army fights the **Colour Revolt** (log 0068): rebels in loud vermilion
 paint. Its bosses are irregular polygons that fight as if wearing a full
@@ -118,13 +120,34 @@ guide; you may go under-leveled. Leaving early forfeits the pay.
 
 | Mission (log 0070, proposed) | Levels | Squad | Revolt | Soldiers | Boss | Pay* |
 |---|---|---|---|---|---|---|
-| Recon | 5–10 | up to 4 | 3–5 rebels | 1 | no | 25 |
-| Invasion | 10–20 | up to 8 | 20–24 rebels and agitators | 10 | 1 in 5 (luck helps): a Captain (lilac-buffed) | 80 |
-| Special ops (assassination) | 20 | alone | 5 bodyguards | none | always: Chromatistes (gilded-buffed) | 200 |
+| Recon | 5–10 | up to 4 | 3–5 rebels; secretly 1 in 5 a Painted Noble (pay ×2) | 1 | secretly 1 in 10 (luck helps): a half-strength Captain (pay ×5) with a huddle (below) | 25 |
+| Invasion | 10–20 | up to 8 | 20–24 rebels and agitators, and 1–3 painted gentry (2× strength, use moves; log 0091) | 10 | none | 80 |
+| Special ops (assassination) | 20 | up to 2 | 5 bodyguards | none | always two: Chromatistes (gilded-buffed) and a Captain guarding him | 200 |
 
-Bringing down a Revolt boss completes the campaign (log 0067): every
-squad member still on the field is discharged with a marriage
-certificate. Soldiers wear bronze; players pass through them.
+Recon's extra foes are never announced (log 0088); the squad's soldier
+hints at them in a speech bubble once you're on the field. **The recon
+Captain (log 0089)** brings 6–10 rebels, a Painted Gentleman (pentagon) and
+a Painted Noble (hexagon), all huddled round him: none of them chase, they
+fight whoever comes within reach. When he falls, they chase. Once he's
+spotted, a popup offers **Report back** for 20 s: home at once for double
+pay.
+
+**Revolt bosses' moves (log 0089):** Captains and Chromatistes use the
+players' abilities (§2c) every 3–5 s: spike up when you're close, a nose
+dive onto you from middle distance, a rush from further out. Their hits do
+double damage mid-move. A player's spike up can't throw a boss. Invasion's
+gentry use them too, and every move is telegraphed: the fighter shouts an
+insult in a speech bubble, then moves 0.8 s later (log 0091).
+
+Bringing down a Revolt boss (recon's Captain, special ops) earns each
+squad member a **1 in 5** chance (luck helps) of a discharge with a
+marriage certificate, which the General gives back at the barracks, like a
+promotion (logs 0067, 0092). Invasion has no boss: it's for levels and pay. Soldiers wear bronze; players pass through them. On recon
+the soldier orbits you when there's nothing to fight: it rolls past you,
+waits for you to move, then rolls past the other way (log 0078). Soldiers
+get around by jumping, like a player, and the further back they are the
+harder they roll and jump (logs 0079, 0080); once engaged they just
+fight. On invasion they hunt the Revolt anywhere on the field (log 0079).
 
 **Priests** (circles) marry you (§5): the priest on the Center plaza and the
 High Priest at the temple for regulars, the Hedge Priest for irregulars.
@@ -132,7 +155,8 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 ## 2. Player and movement
 
 - You are a regular polygon (or an irregular one, see §5).
-- **Left / right:** roll. **Space:** jump. **E:** interact. **G:** pick up.
+- **Left / right:** roll. **Space:** jump. **Up / Down / Shift:** nose
+  dive, spike up, rush (§2c, once learned). **E:** interact. **G:** pick up.
   **F:** drink a potion. **1–5:** quick-use slots (§4). **C:** home
   teleport (§2b). **Tab:** character
   sheet. **Esc:** menu.
@@ -146,6 +170,7 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   are a little bouncy and keep their spin.
 - **Bounce jumps:** jump again as you land. Off a face: higher than a normal
   jump. Off a corner: higher still, and you flip.
+- **Jumps are free (log 0087).** Energy is only for abilities.
 - *Proposed (log 0019):* shapes are physics polygons simulated by the server,
   so the 180°/n grip comes from the geometry. Players pass through each
   other. In mid-air you drift sideways but don't turn (see Open question 5).
@@ -230,13 +255,20 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   | Mint | +15 torque (speed) |
   | Lilac | +15 rigidity (defense) |
   | Gilded | +15 vigor (+150 health) and +15 luck |
+  | Leather (log 0085) | +10 force |
+  | Bronze | *proposed* +10 vigor |
+  | Iron | *proposed* +10 rigidity |
+  | Steel | *proposed* +10 torque |
+
+  A military set is its four slots (points, plating, eye, voice); pigment
+  doesn't count.
 
 - **Bag (logs 0036, 0043, 0044):** 10 slots, plus 5 **quick-use slots**
   (keys 1–5) that are bag slots too. Nothing is taken by touch. The pickup
   key (G) grabs the nearest of your items, filling the bag before the quick
   slots. **Drag and drop** moves items between any slots. **Double-click**
   an item, or press its quick-use key, to use it (wear gear, drink a
-  potion). Right-click drops an item. Drag gear onto a character-sheet slot
+  potion, eat). Right-click drops an item. Drag gear onto a character-sheet slot
   to wear it, or off to remove it (double-click also removes it). Only the owner can take an item off the ground, and it
   vanishes after 90 s.
 - **Stat books (log 0024):** rare consumables permanently raise one stat,
@@ -258,6 +290,27 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
     per second in combat, 2% out of combat (5 s without hitting or being hit).
   - **Healing potions (log 0037)** restore *proposed* 40% of max health.
     Drink with F or by clicking one in the bag; not at full health.
+  - **Provisions (log 0084)** are food the Quartermaster sells for pay.
+    A meal heals over 8 s; eating more adds to what's left. *Proposed:*
+
+    | Food | Heals (of max health) | Price |
+    |---|---|---|
+    | Hardtack | 20% | 3 pay |
+    | Cheese | 35% | 6 pay |
+    | Salt pork | 50% | 10 pay |
+
+    Eat by double-clicking or a quick-use key; not at full health.
+
+## 2c. Abilities (log 0086)
+
+Bought once from the Quartermaster for pay; each use costs 50 energy. An
+heir starts with none. *Proposed:* prices, keys and numbers.
+
+| Ability | Key | Price | What it does |
+|---|---|---|---|
+| Rush | Shift | 40 | Sideways speed and spin ×5, on the ground or in the air |
+| Nose dive | Up / W | 60 | A jump at 3.5× jump speed (rises over 3 triangle heights, clearing enemies); coming down, your sharpest corner turns to point down and gravity pulls 2× |
+| Spike up | Down / S | 80 | A face flat on the ground, sharpest corner up, held 1 s. Hostile enemies within 260 px are thrown up, helpless, and come down on it |
 
 ## 4b. Stats (logs 0021–0023)
 
@@ -274,26 +327,29 @@ Values marked * are proposed tuning.
 | Rigidity | Armor only, never levels. Subtracts flat from each hit; a hit always does at least 15%* | 0 |
 | Luck | Good-outcome chances × (1 + luck/20), so 20 doubles them (log 0049). Rolled at birth (0–10*), irregulars +20, never levels; gear adds on top | 0–10 (irregular 20–30) |
 
-- **Jumps cost 25 energy** (bounces too). With less you still jump, at 55%*
-  speed, for free (log 0022).
+- **Energy** pays for abilities, 50 each (§2c). Jumps are free (log 0087).
 - **HUD (log 0026):** top left, your shape, level, health and XP bars.
   Bottom right, the 1–5 quick-use slots over a 5×2 bag. **Tab** opens the character sheet
   (equipment, stats); **Esc** the menu (players here, Controls, Leave). Top right is
-  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 4 pips over your own shape, one per
-  jump, faded while full. Other players show a small health bar under their
+  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 2 pips over your own shape, one per
+  ability use, faded while full. Other players show a small health bar under their
   name.
+- **Speech and thoughts (log 0082):** NPC lines appear in a bubble above the
+  speaker, with a dashed line to them. Your own news (level up, pickups)
+  and unattributed lines appear in a thought cloud beside you. Tooltips are
+  see-through parchment.
 
 ## 5. Lineage
 
 - **Goal of a life:** produce an heir.
 - **Marriage certificates** have a chance to drop from **special events**: area
   bosses, dungeons, mazes and others. The cave's boss always drops one.
-  Triangles earn theirs by completing an army campaign (log 0067);
+  Triangles may earn theirs by bringing down a Revolt boss (1 in 5, logs 0067, 0092);
   squares will earn them at the college without combat (log 0075).
 - **Redeeming a certificate** at a priest (press E nearby) produces an heir
   with **+1 side** (log 0030). The heir takes over at once and starts fresh:
-  level 1, no gear. Only the family carries on, plus spare certificates
-  and potions.
+  level 1, no gear. Only the family carries on, plus spare certificates,
+  potions and provisions.
   - **House (logs 0041, 0054, 0064):** once a family reaches a square, it
     gets a house with chests for storage, in the Noble Quarter. Press E at
     its east door to open your chests and drag items between them and the
@@ -312,7 +368,12 @@ Values marked * are proposed tuning.
     roll, also cures an irregular triangle, and works as an ordinary
     certificate for anyone else (who uses ordinary ones first).
   - **Irregular roll:** 1 in 10 chance the heir is **irregular**. Irregulars
-    are confined to the underworld and cannot enter the overworld.
+    are confined to the underworld and cannot enter the overworld. Every
+    heir rolls except an equilateral's, which is always a regular square
+    (log 0096).
+  - **Irregular triangles (log 0096)** climb the apex too: 45°, +5° each
+    heir, up to 60°, drawn with the top off to one side. The heir's apex
+    widens either way; a regular roll at 60° makes it equilateral.
 - **Dying without an heir ends the family.** You must create a new one.
   Since the heir takes over at once, any death ends the family.
 - **New families** pick their starting triangle (logs 0050, 0065):
@@ -351,6 +412,14 @@ As in the book, women are straight lines.
   multiplayer (ENet, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
+- **Smoothing (logs 0093, 0095):** clients draw other players and enemies a
+  little behind (60 ms), blended between server updates; your own shape uses
+  the newest update. When updates run late, bodies keep moving at their last
+  velocity (up to 100 ms) and corrections fade in rather than snap. No
+  client-side prediction yet.
+- **Graphics settings (log 0094):** in the in-game menu: max framerate and
+  High / Low. Low drops the atmosphere and background stains and renders at
+  1280x720, scaled up. Saved per machine.
 
 ## 8. Art direction
 
@@ -364,8 +433,8 @@ As in the book, women are straight lines.
   chalk outlines, the same pastel fills, fading in down the hatch shaft.
 - **Foreground atmosphere (log 0057):** a subtle layer of dust, light or
   fog in front of the world in every region (`scripts/ui/atmosphere.gd`).
-  *Proposed:* faster than the camera, client-only, under the HUD, can be
-  turned off (no setting yet). Center: paper
+  *Proposed:* faster than the camera, client-only, under the HUD. Turned
+  off by Low graphics (log 0094). Center: paper
   dust in slanting light. Upper east: nearly clean. Priestly hill: light
   shafts, incense. Underworld: ash or spores, low fog in pits.
 - **Plain shapes (log 0069):** players and overworld NPCs have an
@@ -405,7 +474,5 @@ As in the book, women are straight lines.
 17. Confirm the barracks build details (log 0077): General's shape, squad
     sizes, pay and prices, pay kept by heirs, certificate for every squad
     member, metal stats.
-18. Should military gear get a set bonus (it would need a non-pigment
-    fifth piece)?
-19. The trading booth and gathering for near-equilateral triangles (log
+18. The trading booth and gathering for near-equilateral triangles (log
     0074): confirm, and what do goods sell for?

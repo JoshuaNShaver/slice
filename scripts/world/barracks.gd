@@ -61,6 +61,8 @@ const NPCS: Array[Dictionary] = [
 		"radius": 28.0, "role": "quartermaster", "serves": "regulars",
 		"lines": [
 			"Bronze, iron, steel. Pay first, wear after.",
+			"Hardtack, cheese, salt pork. Eat before the march, not during.",
+			"I teach drills too. Rush, nose dive, spike up. Pay for the lesson.",
 			"No pigment here. Colour is the Revolt's business, not the army's.",
 			"Leather? The drill yard's full of it. I sell metal.",
 		],

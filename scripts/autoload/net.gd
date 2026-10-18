@@ -34,9 +34,13 @@ var in_session := false
 var last_message := ""
 
 var _local_info: Dictionary = {}
+## Server only. Peer id -> "ip:port", for logging which client a network
+## error might be about.
+var _addresses: Dictionary = {}
 
 
 func _ready() -> void:
+	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
@@ -101,6 +105,7 @@ func _reset() -> void:
 	chests.clear()
 	in_session = false
 	_local_info = {}
+	_addresses.clear()
 
 
 func _begin_as_server(info: Dictionary) -> void:
@@ -129,11 +134,61 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
+	if mode == Mode.HOST and in_session:
+		_reopen_server()
+		return
 	leave()
 	session_ended.emit("Lost connection to the server.")
 
 
+## Host only. ENet shuts the whole server down when a send fails (e.g. a
+## client it can't reach), and SceneMultiplayer reports that as
+## server_disconnected. Rather than ending the session (which sent a
+## dedicated server back to the menu, restarting the world), log why, drop
+## the remote players and listen again on the same port. The world, and
+## a host's own player, carry on.
+func _reopen_server() -> void:
+	var known := []
+	for id: int in _addresses:
+		known.append("peer %d at %s" % [id, _addresses[id]])
+	push_warning(("Server network error: ENet couldn't send to a client, so the server "
+			+ "connection closed. Remote clients: %s. On macOS, check System Settings > "
+			+ "Privacy & Security > Local Network allows Godot (and your terminal). "
+			+ "Reopening port %d; remote players were dropped and can rejoin.")
+			% [", ".join(known) if not known.is_empty() else "none fully connected yet", port])
+	_addresses.clear()
+	var dropped := false
+	for id: int in players.keys():
+		if id != 1:
+			players.erase(id)
+			progress.erase(id)
+			chests.erase(id)
+			dropped = true
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_server(port, MAX_CLIENTS)
+	if err != OK:
+		push_error("Couldn't reopen port %d (%s); ending the session." % [port, error_string(err)])
+		leave()
+		session_ended.emit("The server's network failed.")
+		return
+	multiplayer.multiplayer_peer = peer
+	print("Server listening on port %d again" % port)
+	if dropped:
+		players_changed.emit()
+
+
+func _on_peer_connected(id: int) -> void:
+	if mode != Mode.HOST:
+		return
+	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	var packet_peer := peer.get_peer(id) if peer != null else null
+	if packet_peer != null:
+		_addresses[id] = "%s:%d" % [packet_peer.get_remote_address(), packet_peer.get_remote_port()]
+		print("Peer %d connecting from %s" % [id, _addresses[id]])
+
+
 func _on_peer_disconnected(id: int) -> void:
+	_addresses.erase(id)
 	progress.erase(id)
 	chests.erase(id)
 	if multiplayer.is_server() and players.erase(id):
@@ -243,10 +298,8 @@ func _sanitize(info: Dictionary) -> Dictionary:
 		"luck": clampi(raw_luck if raw_luck is int else 0, 0, Stats.MAX_LUCK),
 		"generation": maxi(raw_generation if raw_generation is int else 1, 1),
 	}
-	if clean.kind == "isosceles":
-		if clean.sides != 3:
-			clean.kind = "regular"
-		else:
-			clean.apex = clampi(raw_apex if raw_apex is int else Family.START_APEX,
-					Family.START_APEX, Family.EQUILATERAL_APEX - Family.APEX_STEP)
+	if clean.kind == "isosceles" and clean.sides != 3:
+		clean.kind = "regular"
+	clean.apex = Family.clean_apex(clean.sides, clean.kind,
+			raw_apex if raw_apex is int else Family.START_APEX)
 	return clean

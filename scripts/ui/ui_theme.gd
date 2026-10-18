@@ -47,6 +47,16 @@ static func build() -> Theme:
 	# Empty item slots, like the bag's.
 	t.set_stylebox("panel", "Panel", _box(Palette.PARCHMENT, Palette.INK_FADED, 2))
 
+	# Tooltips: see-through parchment, a little rounder (design log 0082).
+	var tip := _box(Color(Palette.PARCHMENT_LIGHT, 0.88), Color(Palette.INK, 0.8), 2, 10)
+	tip.set_corner_radius_all(8)
+	tip.shadow_color = Color(Palette.INK, 0.15)
+	tip.shadow_size = 4
+	tip.shadow_offset = Vector2(2, 2)
+	t.set_stylebox("panel", "TooltipPanel", tip)
+	t.set_color("font_color", "TooltipLabel", Palette.INK)
+	t.set_font_size("font_size", "TooltipLabel", 16)
+
 	t.set_stylebox("panel", "PopupMenu", _box(Palette.PARCHMENT_LIGHT, Palette.INK))
 	t.set_stylebox("hover", "PopupMenu", _box(Palette.CHALK[1], Color.TRANSPARENT, 0))
 	t.set_color("font_color", "PopupMenu", Palette.INK)

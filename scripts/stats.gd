@@ -32,6 +32,7 @@ const REGEN_IN_COMBAT := 0.005  # per second
 const REGEN_OUT_OF_COMBAT := 0.02  # per second
 const OUT_OF_COMBAT_TIME := 5.0  # s without hitting or being hit
 const POTION_HEAL := 0.4
+const MEAL_TIME := 8.0  # s a provision takes to heal in full (design log 0084)
 
 # Luck -> chance rolls
 const LUCK_FOR_DOUBLE := 20.0  # 20 luck doubles every chance (design log 0049)

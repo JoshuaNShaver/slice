@@ -11,7 +11,8 @@ extends Node2D
 ## - "priest": marries you, using a marriage certificate (design log 0030).
 ## - "healer": heals you in full when you ask.
 ## - "general": gives missions (design log 0070), in a HUD panel.
-## - "quartermaster": sells military gear for pay (design log 0071).
+## - "quartermaster": sells military gear and provisions for pay (design
+##   logs 0071, 0080).
 ## Any NPC with a heal_area also heals everyone it serves inside that area,
 ## for free, as the Center's priest always has (design log 0033).
 ##

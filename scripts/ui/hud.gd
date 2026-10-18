@@ -6,7 +6,9 @@ extends CanvasLayer
 ## - Bottom right: the 1-5 quick-use slots over your bag; both are bag slots
 ##   (design logs 0036, 0043). Drag items to move them, double-click to wear
 ##   or drink, right-click to drop. Hover for what it does.
-## - Top center: short messages (level up, loot, marriage).
+## - Top center: banners (place names, controls notices).
+## - Speech and thoughts (design log 0082): an NPC's line in a bubble over
+##   them (say), your own news in a thought cloud beside you (think).
 ## - Tab: character sheet: your five gear slots (drag gear on or off, or
 ##   double-click to take off) and stats. Esc: menu (players, leave,
 ##   controls). Keys are rebindable (Controls, design log 0035).
@@ -16,6 +18,8 @@ extends CanvasLayer
 ## - Top right: currencies. Combatant pay (design log 0071).
 ## - The General's orders and the Quartermaster's shop (design logs 0070,
 ##   0071): opened by talking to them, closed by Esc or walking away.
+## - Under the pay counter: a countdown popup while a squad musters or heads
+##   home, with a Ready button to skip the wait (design log 0081).
 ## Energy is drawn by PlayerShape, as pips over your own shape.
 
 signal leave_requested
@@ -26,6 +30,7 @@ const MARGIN := 24
 const BAG_COLUMNS := 5
 const STAT_ROWS: Array[String] = ["vigor", "mettle", "force", "torque", "rigidity", "luck"]
 const MESSAGE_TIME := 3.5  # s
+const SPEAKER_RANGE := 1200.0  # px; farther speakers are heard as thoughts
 
 var _root: Control
 var _portrait: ShapeIcon
@@ -51,11 +56,21 @@ var _storage: Control
 var _orders: Control
 var _shop: Control
 var _shop_pay: Label
+var _ability_buttons := {}  # ability id -> its buy button in the shop
+var _abilities_label: Label  # character sheet
 var _pay_label: Label
 var _me: PlayerShape
 var _set_label: Label
 var _message: Label
 var _message_time := 0.0
+var _countdown: Control
+var _bubble_layer: Control
+var _bubbles := {}  # target instance id -> its SpeechBubble
+var _countdown_title: Label
+var _countdown_time: Label
+var _countdown_squad: Label
+var _countdown_ready: Button
+var _countdown_left := 0.0
 var _underground := false  # chalk text, over the underworld's slate
 # Last values seen, to announce changes.
 var _seen := {}
@@ -74,6 +89,8 @@ func _hot_reload() -> void:
 	_stat_values.clear()
 	_bag_slots.clear()
 	_quick_keys.clear()
+	_bubbles.clear()
+	_ability_buttons.clear()
 	_gear_slots.clear()
 	_chest_slots.clear()
 	_control_buttons.clear()
@@ -185,6 +202,7 @@ func update(me: PlayerShape) -> void:
 	_set_text(_level_label, "Level %d" % me.level)
 	_set_text(_pay_label, "Pay: %d" % me.pay)
 	_set_text(_shop_pay, "Your pay: %d" % me.pay)
+	_update_abilities(me)
 	_health_bar.set_values(me.hp, me.max_hp)
 	if me.level >= Stats.MAX_LEVEL:
 		_xp_bar.set_values(1.0, 1.0)
@@ -274,9 +292,108 @@ func show_message(text: String) -> void:
 	_message_time = MESSAGE_TIME
 
 
+## Someone speaks to you (PlayerShape.tell). A nearby speaker gets a bubble
+## over them; a far one (the General, from the front) or no one ("") is
+## heard as a thought.
+func say(speaker: String, text: String) -> void:
+	if speaker == "":
+		think(text)
+		return
+	var found := _find_speaker(speaker)
+	if found.is_empty():
+		think("%s: “%s”" % [speaker, text])
+		return
+	_bubble(found.node, false, found.offset).add_line(text)
+
+
+## A line shouted by something in the world, e.g. a Revolt fighter's taunt
+## before a move (design log 0091): a bubble over it, wherever it is.
+func speak_from(target: Node2D, offset: Vector2, text: String) -> void:
+	if is_instance_valid(target):
+		_bubble(target, false, offset).add_line(text)
+
+
+## Your own news, in a thought cloud beside you.
+func think(text: String) -> void:
+	if _me == null or not is_instance_valid(_me):
+		show_message(text)
+		return
+	_bubble(_me, true, Vector2(0, -PlayerShape.RADIUS - 24)).add_line(text)
+
+
+func _bubble(target: Node2D, thought: bool, offset: Vector2) -> SpeechBubble:
+	var key := target.get_instance_id()
+	# Bubbles free themselves when they fade, so the stored one may be gone.
+	# Check it untyped: assigning a freed instance to a typed variable errors.
+	var stored: Variant = _bubbles.get(key)
+	var bubble: SpeechBubble = null
+	if is_instance_valid(stored) and not (stored as SpeechBubble).is_queued_for_deletion():
+		bubble = stored
+	if bubble == null:
+		bubble = SpeechBubble.new(target, thought, offset)
+		_bubble_layer.add_child(bubble)
+		_bubbles[key] = bubble
+	return bubble
+
+
+## {"node", "offset"} for the named NPC or elevator guard near you, or {}.
+func _find_speaker(speaker: String) -> Dictionary:
+	if _me == null or not is_instance_valid(_me):
+		return {}
+	for node in get_tree().get_nodes_in_group(Npc.GROUP):
+		var npc := node as Npc
+		if npc != null and npc.display_name == speaker:
+			if npc.global_position.distance_to(_me.global_position) <= SPEAKER_RANGE:
+				# Above the name (and the prompt, when it shows).
+				return {"node": npc, "offset": Vector2(0, -npc.radius - 60)}
+			return {}
+		var lift := node as Elevator
+		if lift != null and lift.guard_name == speaker:
+			var stop: Vector2 = lift.stops[0]
+			if _me.global_position.distance_to(lift.stops[1]) < _me.global_position.distance_to(stop):
+				stop = lift.stops[1]
+			if stop.distance_to(_me.global_position) <= SPEAKER_RANGE:
+				return {"node": lift, "offset": stop - lift.global_position + Vector2(0, -110)}
+			return {}
+	# A soldier fighting beside you (mission hints, design log 0088): the nearest.
+	var best: Enemy = null
+	for node in get_tree().get_nodes_in_group(Enemy.GROUP):
+		var soldier := node as Enemy
+		if soldier == null or not soldier.is_army() or soldier.info().name != speaker:
+			continue
+		var d := soldier.global_position.distance_to(_me.global_position)
+		if d <= SPEAKER_RANGE and (best == null or d < best.global_position.distance_to(_me.global_position)):
+			best = soldier
+	if best != null:
+		return {"node": best, "offset": Vector2(0, -best.info().radius - 40)}
+	return {}
+
+
+## The server's countdown (PlayerShape.show_countdown). An empty title hides it.
+func show_countdown(title: String, seconds: float, ready_count: int, total: int, you_ready: bool,
+		button := "") -> void:
+	if _countdown == null:
+		return
+	_countdown.visible = title != ""
+	_countdown_left = seconds
+	_set_text(_countdown_title, title)
+	_countdown_squad.visible = total > 1
+	_set_text(_countdown_squad, "%d of %d ready" % [ready_count, total])
+	_countdown_ready.disabled = you_ready
+	_countdown_ready.text = "Waiting for the squad" if you_ready else (button if button != "" else "Ready")
+	_update_countdown_time()
+
+
+func _update_countdown_time() -> void:
+	_set_text(_countdown_time, "%d s" % ceili(maxf(_countdown_left, 0.0)))
+
+
 func _process(delta: float) -> void:
 	if _message == null:
 		return
+	if _countdown.visible:
+		_countdown_left -= delta
+		_update_countdown_time()
 	_message_time -= delta
 	_message.modulate.a = clampf(_message_time, 0.0, 1.0)
 
@@ -290,13 +407,13 @@ func _announce_changes(me: PlayerShape) -> void:
 	var now := {"level": me.level, "items": items, "sides": me.sides, "set": Gear.set_tier(me.equipped)}
 	if _seen.get("sides") == now.sides:  # not when an heir takes over
 		if now.level > _seen.level:
-			show_message("Level %d!" % now.level)
+			think("Level %d!" % now.level)
 		for item: String in items:
 			if items[item] > _seen.items.get(item, 0):
-				show_message("Picked up: " + Gear.describe(item))
+				think("Picked up: " + Gear.item_name(item))
 		if now["set"] > 0 and now["set"] != _seen.get("set", 0):
 			var tier: Dictionary = Gear.TIERS[now["set"]]
-			show_message("Full %s set! %s" % [tier.name.to_lower(), Gear.describe_bonus(tier.set)])
+			think("Full %s set! %s" % [tier.name.to_lower(), Gear.describe_bonus(tier.set)])
 	_seen = now
 
 
@@ -326,6 +443,11 @@ func _build() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.theme = UiTheme.build()
 	add_child(_root)
+
+	_bubble_layer = Control.new()
+	_bubble_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_bubble_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_bubble_layer)  # first, so panels cover it
 
 	_root.add_child(_build_vitals())
 	_root.add_child(_build_slots())
@@ -364,6 +486,7 @@ func _build() -> void:
 	_message.add_theme_font_size_override("font_size", 22)
 	_message.modulate.a = 0.0
 	_root.add_child(_message)
+	_root.add_child(_build_countdown())
 
 
 ## Top left: portrait, level, health, XP.
@@ -454,6 +577,8 @@ func _bag_slot(i: int) -> ItemSlot:
 func _bag_hint(item: String) -> String:
 	if item == Gear.POTION:
 		return "Double-click or %s: drink  ·  Drag: move  ·  Right-click: drop" % Controls.describe("drink")
+	if Gear.is_provision(item):
+		return "Double-click: eat  ·  Drag: move  ·  Right-click: drop"
 	if Gear.is_gear(item):
 		return "Double-click: wear  ·  Drag: move  ·  Right-click: drop"
 	return "Drag: move  ·  Right-click: drop"
@@ -505,6 +630,8 @@ func _build_character() -> Control:
 		var value := Label.new()
 		_stat_values[stat] = value
 		stats.add_child(_row(stat.capitalize(), value))
+	_abilities_label = _faded("")
+	stats.add_child(_abilities_label)
 	columns.add_child(stats)
 
 	_close_hint = _faded("")
@@ -582,36 +709,150 @@ func _build_orders() -> Control:
 	return panel
 
 
-## The Quartermaster's stock (design log 0071): a row per tier, a slot per item.
+## Top right, under the pay counter: a muster's or the trip home's countdown.
+func _build_countdown() -> Control:
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
+	panel.offset_top += 40  # under the pay counter
+	panel.offset_bottom += 40
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.visible = false
+	var box: StyleBoxFlat = _root.theme.get_stylebox("panel", "PanelContainer").duplicate()
+	box.bg_color.a = 1.0
+	panel.add_theme_stylebox_override("panel", box)
+	_countdown = panel
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = 240
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_theme_constant_override("separation", 6)
+	panel.add_child(column)
+	_countdown_title = Label.new()
+	_countdown_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_countdown_title)
+	_countdown_time = Label.new()
+	_countdown_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_countdown_time.add_theme_font_size_override("font_size", 30)
+	column.add_child(_countdown_time)
+	_countdown_squad = _faded("")
+	_countdown_squad.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_countdown_squad)
+	_countdown_ready = Button.new()
+	_countdown_ready.text = "Ready"
+	_countdown_ready.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	_countdown_ready.pressed.connect(func() -> void:
+		if _me != null:
+			_countdown_ready.disabled = true
+			_me.request_mission_ready())
+	column.add_child(_countdown_ready)
+	return panel
+
+
+## The Quartermaster's stock (design logs 0071, 0084): provisions, then a
+## row per tier. One grid, so every row's boxes line up, right-aligned, each
+## with its price underneath.
 func _build_shop() -> Control:
 	var panel := _centered_panel()
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
 	panel.add_child(column)
-	column.add_child(_heading("The Quartermaster"))
+	var header := HBoxContainer.new()
+	var title := _heading("The Quartermaster")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
 	_shop_pay = Label.new()
-	column.add_child(_shop_pay)
-	var rows := {}  # tier -> its row
+	header.add_child(_shop_pay)
+	column.add_child(header)
+
+	var rows: Array = [["Provisions", Gear.PROVISIONS.keys()]]
+	var by_tier := {}  # tier -> its items
 	for item in Gear.shop_stock():
 		var tier := Gear.tier_of(item)
-		if not rows.has(tier):
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 6)
-			var label := Label.new()
-			label.text = "%s · %d pay each" % [Gear.TIERS[tier].name, Gear.price(item)]
-			label.custom_minimum_size.x = 170
-			row.add_child(label)
-			rows[tier] = row
-			column.add_child(row)
-		var slot := ItemSlot.new("", "Double-click: buy for %d pay" % Gear.price(item))
-		slot.item = item
-		slot.double_clicked.connect(func() -> void:
+		if not by_tier.has(tier):
+			by_tier[tier] = []
+			rows.append([Gear.TIERS[tier].name, by_tier[tier]])
+		by_tier[tier].append(item)
+	var width := 0
+	for row: Array in rows:
+		width = maxi(width, row[1].size())
+	var grid := GridContainer.new()
+	grid.columns = width + 1
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 10)
+	for row: Array in rows:
+		var label := Label.new()
+		label.text = row[0]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		label.custom_minimum_size.x = 120
+		label.custom_minimum_size.y = ItemSlot.SIZE
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		grid.add_child(label)
+		for i in width - row[1].size():  # short rows pad on the left
+			grid.add_child(Control.new())
+		for item: String in row[1]:
+			grid.add_child(_shop_cell(item))
+	column.add_child(grid)
+
+	# Abilities (design log 0086): bought once, used with their keys.
+	var drills := HBoxContainer.new()
+	drills.add_theme_constant_override("separation", 8)
+	var drills_label := Label.new()
+	drills_label.text = "Drills"
+	drills_label.custom_minimum_size.x = 120
+	drills.add_child(drills_label)
+	for id: String in Abilities.ALL:
+		var button := Button.new()
+		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.COST)]
+		button.pressed.connect(func() -> void:
 			if _me != null:
-				_me.request_buy(item))
-		rows[tier].add_child(slot)
-	column.add_child(_faded("Leather comes from the drill yard. No pigment: colour is contraband."))
+				_me.request_learn(id))
+		_ability_buttons[id] = button
+		drills.add_child(button)
+	column.add_child(drills)
+
+	var note := _faded("Food heals over %d s. Leather comes from the drill yard. No pigment: colour is contraband." % roundi(Stats.MEAL_TIME))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 120 + (width + 1) * 8 + width * ItemSlot.SIZE
+	column.add_child(note)
 	column.add_child(_faded("%s to close" % Controls.describe("menu")))
 	return panel
+
+
+## Shop buttons say what's learned; the character sheet lists it with keys.
+func _update_abilities(me: PlayerShape) -> void:
+	var known: Array[String] = []
+	for id: String in Abilities.ALL:
+		var info: Dictionary = Abilities.ALL[id]
+		var learned := id in me.abilities
+		if learned:
+			known.append("%s (%s)" % [info.name, Controls.describe(info.action)])
+		var button: Button = _ability_buttons.get(id)
+		if button != null:
+			var text := "%s · %s" % [info.name, "learned" if learned else "%d pay" % info.price]
+			if button.text != text:
+				button.text = text
+			button.disabled = learned
+	_set_text(_abilities_label, "Abilities: " + (", ".join(known) if not known.is_empty() else "none"))
+
+
+## An item box with its price centred underneath.
+func _shop_cell(item: String) -> Control:
+	var cell := VBoxContainer.new()
+	cell.add_theme_constant_override("separation", 2)
+	cell.add_child(_shop_slot(item))
+	var price := _faded("%d" % Gear.price(item))
+	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cell.add_child(price)
+	return cell
+
+
+func _shop_slot(item: String) -> ItemSlot:
+	var slot := ItemSlot.new("", "Double-click: buy for %d pay" % Gear.price(item))
+	slot.item = item
+	slot.double_clicked.connect(func() -> void:
+		if _me != null:
+			_me.request_buy(item))
+	return slot
 
 
 ## Esc: who's here, and the way out.
@@ -626,6 +867,7 @@ func _build_menu() -> Control:
 	column.add_child(_faded(Net.describe_session()))
 	_player_list = VBoxContainer.new()
 	column.add_child(_player_list)
+	column.add_child(_graphics_settings())
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
@@ -649,6 +891,40 @@ func _build_menu() -> Control:
 	leave.pressed.connect(leave_requested.emit)
 	buttons.add_child(leave)
 	return panel
+
+
+## Menu: framerate cap and graphics quality (design log 0094), saved per machine.
+func _graphics_settings() -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+
+	var fps := OptionButton.new()
+	fps.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	for value in Graphics.FPS_CHOICES:
+		fps.add_item(Graphics.fps_label(value), value)
+	fps.select(fps.get_item_index(Graphics.max_fps))
+	fps.item_selected.connect(func(index: int) -> void: Graphics.set_max_fps(fps.get_item_id(index)))
+	_add_setting_row(grid, "Max framerate", fps)
+
+	var quality := OptionButton.new()
+	quality.focus_mode = Control.FOCUS_NONE
+	quality.add_item("High", 0)
+	quality.add_item("Low (faster)", 1)
+	quality.select(1 if Graphics.low else 0)
+	quality.item_selected.connect(func(index: int) -> void: Graphics.set_low(index == 1))
+	_add_setting_row(grid, "Graphics", quality)
+	return grid
+
+
+func _add_setting_row(grid: GridContainer, text: String, control: Control) -> void:
+	var label := Label.new()
+	label.text = text
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_child(label)
+	control.custom_minimum_size.x = 160
+	grid.add_child(control)
 
 
 ## Menu > Controls: every action and its two keys. Click a key to rebind it.

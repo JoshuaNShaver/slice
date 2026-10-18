@@ -12,13 +12,14 @@ config_version=5
 
 config/name="slice-game"
 config/features=PackedStringArray("4.5", "Forward Plus")
-config/icon="res://icon.svg"
+config/icon="res://icon.png"
 run/main_scene="res://scenes/main_menu.tscn"
 
 [autoload]
 
 FamilyStore="*res://scripts/autoload/family_store.gd"
 Controls="*res://scripts/autoload/controls.gd"
+Graphics="*res://scripts/autoload/graphics.gd"
 Net="*res://scripts/autoload/net.gd"
 HotReload="*res://scripts/autoload/hot_reload.gd"
 
@@ -29,6 +30,7 @@ window/size/viewport_height=720
 window/size/window_width_override=2560
 window/size/window_height_override=1440
 window/stretch/mode="canvas_items"
+mouse_cursor/tooltip_position_offset=Vector2(22, 26)
 
 [rendering]
 

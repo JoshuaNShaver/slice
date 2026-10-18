@@ -203,7 +203,7 @@ func _build_start_picker(slot: int) -> Control:
 	box.add_child(caption)
 	var group := ButtonGroup.new()
 	for kind in Family.STARTING_KINDS:
-		var apex := Family.START_APEX if kind == "isosceles" else 0
+		var apex := Family.START_APEX
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = group

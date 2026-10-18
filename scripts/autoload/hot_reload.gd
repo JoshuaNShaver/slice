@@ -86,7 +86,11 @@ func _reload(script: GDScript, source: String) -> bool:
 	# A second script can't claim the same class_name. Blank that line
 	# instead of removing it, so error line numbers still match the file.
 	var regex := RegEx.create_from_string("(?m)^class_name\\b.*$")
-	probe.source_code = regex.sub(source, "")
+	var copy := regex.sub(source, "")
+	# Without its class_name the copy's `self` isn't its class any more, so
+	# `x: World = self` would fail. Untype `self` in the copy only.
+	copy = RegEx.create_from_string("\\bself\\b").sub(copy, "(self as Variant)", true)
+	probe.source_code = copy
 	if probe.reload() != OK:
 		return false
 	script.source_code = source
