@@ -83,7 +83,11 @@ func _ground_polygon() -> PackedVector2Array:
 func _draw() -> void:
 	draw_colored_polygon(_ground_polygon(), Palette.PARCHMENT_DARK)
 	_draw_hatching()
-	draw_polyline(PackedVector2Array(SURFACE), Palette.INK, 3.0, true)
+	# Sit the ink line just above the true surface so shapes rest on it, not in it.
+	var line := PackedVector2Array()
+	for point in SURFACE:
+		line.append(point + Vector2(0, -1.5))
+	draw_polyline(line, Palette.INK, 3.0, true)
 
 	for ledge in LEDGES:
 		var rect := Rect2(ledge.x, ledge.y, ledge.z, 16)

@@ -1,7 +1,7 @@
 # 0019: The Center hub and rolling physics
 
 - **Date:** 2026-10-17
-- **Status:** Proposed
+- **Status:** Proposed (rolling physics superseded by 0020)
 - **Decision:** The Center is a plaza at ground level. The land sinks west
   toward the war front, rises east (a gentle slope, then a 35° one) toward
   the upper districts, has jump-through ledges climbing north, and has a

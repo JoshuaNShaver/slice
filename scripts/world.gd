@@ -12,6 +12,9 @@ var _camera: Camera2D
 var _background: ParchmentBackground
 var _player_list: VBoxContainer
 var _session_label: Label
+var _health_bar: StatBar
+var _energy_bar: StatBar
+var _stats_label: Label
 
 
 func _ready() -> void:
@@ -58,6 +61,7 @@ func _process(_delta: float) -> void:
 	var me := _players_root.get_node_or_null(str(multiplayer.get_unique_id()))
 	if me != null:
 		_camera.position = me.position
+		_update_stat_hud(me)
 	_background.view_offset = _camera.get_screen_center_position()
 
 
@@ -80,6 +84,7 @@ func _sync_player_shapes() -> void:
 				"family": info.family,
 				"sides": info.sides,
 				"kind": info.kind,
+				"luck": info.luck,
 				"pos": CenterTerrain.SPAWN_POINT + offset,
 			})
 	for shape: PlayerShape in _players_root.get_children():
@@ -134,10 +139,28 @@ func _build_hud() -> void:
 	_player_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_player_list)
 
+	# Your bars and stats, bottom left (design log 0021).
+	_health_bar = StatBar.new("Health", Palette.HEALTH)
+	column.add_child(_health_bar)
+	_energy_bar = StatBar.new("Energy", Palette.ENERGY)
+	column.add_child(_energy_bar)
+	_stats_label = Label.new()
+	_stats_label.add_theme_font_size_override("font_size", 15)
+	column.add_child(_stats_label)
+
 	var hint := Label.new()
-	hint.text = "← → or A D to roll  ·  Space to jump"
+	hint.text = "← → or A D to roll  ·  Space to jump (%d energy)" % PlayerShape.JUMP_COST
+	if OS.is_debug_build():
+		hint.text += "  ·  L to level up (debug)"
 	hint.add_theme_color_override("font_color", Palette.INK_FADED)
 	column.add_child(hint)
+
+
+func _update_stat_hud(me: PlayerShape) -> void:
+	_health_bar.set_values(me.hp, me.max_hp)
+	_energy_bar.set_values(me.energy, Stats.MAX_ENERGY)
+	_stats_label.text = "Level %d   Vigor %d   Mettle %d   Force %d   Rigidity %d   Torque %d   Luck %d" % [
+		me.level, me.vigor, me.mettle, me.force, me.rigidity, me.torque, me.luck]
 
 
 func _refresh_player_list() -> void:

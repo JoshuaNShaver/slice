@@ -37,8 +37,9 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
   `user://families/`), `Net` (offline / host / join, server-owned player list).
 - `scripts/family.gd`: family data, starting-triangle roll, save format.
+- `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette,
-  theme, shape icon, parchment background, menu.
+  theme, shape icon, stat bar, parchment background, menu.
 - UI is built in code from a bare root node; scenes stay minimal.
 
 ## Running

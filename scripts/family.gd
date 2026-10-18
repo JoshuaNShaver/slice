@@ -29,6 +29,8 @@ var sides := 3
 var kind := "regular"
 var renown := 0
 var extinct := false
+## Rolled when the current heir is born; irregulars get double (design log 0023).
+var luck := 0
 
 
 static func found(new_name: String, rng: RandomNumberGenerator) -> Family:
@@ -37,6 +39,7 @@ static func found(new_name: String, rng: RandomNumberGenerator) -> Family:
 	f.founded_unix = int(Time.get_unix_time_from_system())
 	f.sides = 3
 	f.kind = roll_starting_triangle(rng)
+	f.luck = Stats.roll_birth_luck(f.kind, rng)
 	return f
 
 
@@ -89,7 +92,7 @@ func is_confined_to_underworld() -> bool:
 
 ## What other players are allowed to see.
 func to_public_info() -> Dictionary:
-	return {"family": family_name, "sides": sides, "kind": kind}
+	return {"family": family_name, "sides": sides, "kind": kind, "luck": luck}
 
 
 func to_dict() -> Dictionary:
@@ -102,6 +105,7 @@ func to_dict() -> Dictionary:
 		"kind": kind,
 		"renown": renown,
 		"extinct": extinct,
+		"luck": luck,
 	}
 
 
@@ -119,4 +123,10 @@ static func from_dict(d: Dictionary) -> Family:
 		return null
 	f.renown = maxi(0, int(d.get("renown", 0)))
 	f.extinct = bool(d.get("extinct", false))
+	if d.has("luck"):
+		f.luck = clampi(int(d.luck), 0, Stats.MAX_LUCK)
+	else:  # saves from before luck existed
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		f.luck = Stats.roll_birth_luck(f.kind, rng)
 	return f

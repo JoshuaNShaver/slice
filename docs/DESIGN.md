@@ -44,10 +44,14 @@ sealed hatch leading south. Region exits are walls for now.
 - *Proposed:* a regular n-gon holds still on slopes up to about 180°/n, so
   triangles grip steep ground and many-sided shapes slide. Terrain can gate
   shapes without doors.
-- *Proposed (log 0019):* shapes are physics polygons simulated by the server.
-  Rolling tips over the leading corner, so the 180°/n grip comes from the
-  geometry. Players pass through each other. In mid-air you drift sideways
-  but don't turn (see Open question 7).
+- **Feel: tumbly and gymnastic (log 0020).** Holding a roll key builds speed
+  over a few seconds, and downhill momentum can push you past it. Shapes
+  are a little bouncy and keep their spin.
+- **Bounce jumps:** jump again as you land. Off a face: higher than a normal
+  jump. Off a corner: higher still, and you flip.
+- *Proposed (log 0019):* shapes are physics polygons simulated by the server,
+  so the 180°/n grip comes from the geometry. Players pass through each
+  other. In mid-air you drift sideways but don't turn (see Open question 7).
 
 ## 3. Combat
 
@@ -65,6 +69,8 @@ sealed hatch leading south. Region exits are walls for now.
   | Octagon | 135° | 45 |
   | Decagon | 144° | 36 |
 
+- That is the base. Actual damage is scaled by level and force (§4b): a
+  level 1 triangle corner does 60, about 178 at level 20.
 - **Multi-hit (leaning yes):** more sides means more corner hits as you roll
   over an enemy. A full turn always totals 360 damage, whatever the shape.
   Few sides hit in big stomps, many sides in small hits.
@@ -79,6 +85,29 @@ sealed hatch leading south. Region exits are walls for now.
   angles and so your damage). Show it as fills and hatching.
 - **Leveling:** max level 20, reached in about 30 minutes. After that you earn
   **renown**, the meta currency.
+- **Stat books (log 0024):** rare consumables permanently raise one stat,
+  like Realm of the Mad God's potions. *Proposed:* forbidden books such as
+  treatises on color theory (color is banned after the book's Colour Revolt).
+
+## 4b. Stats (logs 0021–0023)
+
+Realm of the Mad God scaling. All stats are 0 at level 1. Each level adds a
+random 1–2 to vigor, mettle, force and torque, about 3x growth by level 20.
+Values marked * are proposed tuning.
+
+| Stat | Gives | Level 1 → 20 |
+|---|---|---|
+| Vigor | Health = 200 + 10 per point | 200 → ~480 |
+| Mettle | Energy regen = 5/s* + 0.35/s* per point (pool is always 100) | 5 → ~15/s |
+| Force | Corner damage = (180° − corner) × 0.5* × (1 + 0.07* per point) | triangle 60 → ~178 |
+| Torque | Top spin and spin build-up × (1 + 0.07* per point) | 1x → ~3x |
+| Rigidity | Armor only, never levels. Subtracts flat from each hit; a hit always does at least 15%* | 0 |
+| Luck | Good-outcome chances × (1 + luck/50), so 50 doubles them. Rolled at birth (0–10*), irregulars ×2, never levels | 0–10 (irregular 0–20) |
+
+- **Jumps cost 25 energy** (bounces too). With less you still jump, at 55%*
+  speed, for free (log 0022).
+- **HUD:** your health and energy bars and stats sit bottom left. Other
+  players show a small health bar under their name.
 
 ## 5. Lineage
 
@@ -164,3 +193,5 @@ As in the book, women are straight lines.
 12. Tone: how much of the book's social satire to keep.
 13. Is the original "hidden dimension / slice view" mechanic part of the game
     (e.g. as the endgame, the Sphere's visit)?
+14. Do stat caps differ by rank (sides), as Realm of the Mad God caps differ
+    by class? Does rank change base stats?

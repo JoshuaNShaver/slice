@@ -16,7 +16,7 @@ const DEFAULT_PORT := 24680
 const MAX_CLIENTS := 32
 const MAX_SIDES := 64
 
-## Peer id -> {"family": String, "sides": int, "kind": String}. Set by the server.
+## Peer id -> {"family": String, "sides": int, "kind": String, "luck": int}. Set by the server.
 var players: Dictionary = {}
 var mode := Mode.OFFLINE
 var port := DEFAULT_PORT
@@ -156,8 +156,10 @@ func _broadcast_players() -> void:
 func _sanitize(info: Dictionary) -> Dictionary:
 	var raw_sides: Variant = info.get("sides", 3)
 	var raw_kind: Variant = info.get("kind", "regular")
+	var raw_luck: Variant = info.get("luck", 0)
 	return {
 		"family": Family.clean_name(str(info.get("family", ""))),
 		"sides": clampi(raw_sides if raw_sides is int else 3, 3, MAX_SIDES),
 		"kind": raw_kind if raw_kind is String and raw_kind in Family.KINDS else "regular",
+		"luck": clampi(raw_luck if raw_luck is int else 0, 0, Stats.MAX_LUCK),
 	}
