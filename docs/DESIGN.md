@@ -33,6 +33,10 @@ school, and so on. Exact gates per region are TBD (see Open questions).
 
 Dungeons and mazes are **procedurally generated**.
 
+*Proposed (log 0019):* the **Center** is a plaza. The land sinks west,
+rises east up a 35° slope, has jump-through ledges climbing north and a
+sealed hatch leading south. Region exits are walls for now.
+
 ## 2. Player and movement
 
 - You are a regular polygon (or an irregular one, see §5).
@@ -40,6 +44,10 @@ Dungeons and mazes are **procedurally generated**.
 - *Proposed:* a regular n-gon holds still on slopes up to about 180°/n, so
   triangles grip steep ground and many-sided shapes slide. Terrain can gate
   shapes without doors.
+- *Proposed (log 0019):* shapes are physics polygons simulated by the server.
+  Rolling tips over the leading corner, so the 180°/n grip comes from the
+  geometry. Players pass through each other. In mid-air you drift sideways
+  but don't turn (see Open question 7).
 
 ## 3. Combat
 

@@ -29,6 +29,26 @@ When a design decision is made (by the user, or proposed by you and accepted):
 
 Mark your own suggestions `Proposed` until the user agrees.
 
+## Layout
+
+- `scenes/`: `main_menu.tscn` (main scene), `world.tscn` (the Center hub).
+- `scripts/world/`: `PlayerShape` (server-simulated rolling polygon, synced to
+  clients) and `CenterTerrain` (hub ground, ledges, signs).
+- `scripts/autoload/`: `FamilyStore` (3 local save slots in
+  `user://families/`), `Net` (offline / host / join, server-owned player list).
+- `scripts/family.gd`: family data, starting-triangle roll, save format.
+- `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette,
+  theme, shape icon, parchment background, menu.
+- UI is built in code from a bare root node; scenes stay minimal.
+
+## Running
+
+Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
+- Check scripts: `Godot --headless --path . --quit-after 60`
+- Dedicated server: `Godot --headless --path . -- --server --port=24680`
+- Test scripts run with `-s`; autoloads are ready only after the first
+  `await process_frame`. Don't leave test families in the real save folder.
+
 ## Code conventions
 
 - Multiplayer is supported from the start: server-authoritative. Gameplay

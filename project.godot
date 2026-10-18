@@ -13,3 +13,21 @@ config_version=5
 config/name="slice-game"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
+run/main_scene="res://scenes/main_menu.tscn"
+
+[autoload]
+
+FamilyStore="*res://scripts/autoload/family_store.gd"
+Net="*res://scripts/autoload/net.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=2560
+window/size/window_height_override=1440
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.937, 0.890, 0.784, 1)
