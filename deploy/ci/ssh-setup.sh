@@ -12,7 +12,7 @@ IP="$(curl -sS --fail-with-body -H "Authorization: Bearer $HCLOUD_TOKEN" \
 	"https://api.hetzner.cloud/v1/servers?name=$NAME" \
 	| jq -r '.servers[0].public_net.ipv4.ip // empty')"
 if [ -z "$IP" ]; then
-	echo "::error::No server named $NAME. Run the Provision server workflow."
+	echo "::error::No server named $NAME. Run the 001-full-deploy workflow."
 	exit 1
 fi
 

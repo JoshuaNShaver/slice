@@ -1,7 +1,7 @@
 # Deploys the committed source to the game server and restarts it.
-# Actions tab -> Deploy server -> Run workflow. Also run at the end of
-# Provision server. See deploy/README.md.
-name: Deploy server
+# Actions tab -> 002-deploy-code -> Run workflow. Also run at the end of
+# 001-full-deploy. See deploy/README.md.
+name: 002-deploy-code
 
 on:
   workflow_dispatch:

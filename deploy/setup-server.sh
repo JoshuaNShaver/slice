@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Configures an Ubuntu 24.04 VPS (Hetzner, x86 or ARM) as the game server.
-# Run as root by the Provision server workflow (see deploy/README.md):
+# Run as root by the 001-full-deploy workflow (see deploy/README.md):
 #   ssh root@server "bash -s -- '<deploy public key>'" < deploy/setup-server.sh
 # The argument is the public half of the key GitHub Actions deploys with.
 # Safe to run again. Secrets are installed separately (deploy/ci/install-secrets.sh).
@@ -60,7 +60,7 @@ Wants=network-online.target
 
 [Service]
 User=slice
-# Supabase URL and key, installed by Provision server (deploy/ci/install-secrets.sh).
+# Supabase URL and key, installed by 001-full-deploy (deploy/ci/install-secrets.sh).
 EnvironmentFile=-/etc/slice/server.env
 WorkingDirectory=/opt/slice/current
 ExecStart=/opt/godot/godot --headless --path /opt/slice/current -- --server --port=${PORT} --no-hot-reload

@@ -22,7 +22,7 @@ if [ "$(api "$API/servers?name=$NAME" | jq '.servers | length')" -gt 0 ]; then
 	exit 0
 fi
 if [ "${CREATE:-false}" != "true" ]; then
-	echo "::error::No server named $NAME. Run Provision server again with 'Create the server' ticked."
+	echo "::error::No server named $NAME. Run 001-full-deploy again with 'Create the server' ticked."
 	exit 1
 fi
 

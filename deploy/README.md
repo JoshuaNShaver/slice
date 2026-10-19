@@ -3,11 +3,11 @@
 GitHub Actions manage the game server end to end. Every key lives as a
 GitHub secret; nothing is copied by hand.
 
-- **Provision server** (manual): creates the Hetzner server if you tick
+- **001-full-deploy** (manual): creates the Hetzner server if you tick
   *Create the server*, configures it (`setup-server.sh`), checks and
   installs its secrets (`ci/install-secrets.sh`), then deploys. Safe to
   run again, e.g. after changing a secret or the setup script.
-- **Deploy server** (manual): first applies Supabase changes
+- **002-deploy-code** (manual): first applies Supabase changes
   (`supabase/migrations/`, then the auth settings in `supabase/config.toml`;
   the log shows what will change before it's applied). Then uploads the
   committed source of the chosen branch, imports it on the server, restarts
@@ -49,7 +49,7 @@ so no export templates are needed.
    (default `nbg1`), `SERVER_NAME` (default `slice-server`). For the US use
    an x86 type such as `cpx11` and `ash` or `hil`. Check current type names
    in the Hetzner console; the workflow shows the API's error if one is wrong.
-5. Push, then run **Provision server** with *Create the server* ticked.
+5. Push, then run **001-full-deploy** with *Create the server* ticked.
 
 ## On the server
 
@@ -59,7 +59,7 @@ so no export templates are needed.
 - `slice.service`: the game server, UDP 24680. Logs: `journalctl -u slice -f`.
 - `slice-traffic-watch.timer`: every 15 min, stops the server at 80% of the
   traffic allowance.
-- `/etc/slice/`: secrets installed by Provision server (root only):
+- `/etc/slice/`: secrets installed by 001-full-deploy (root only):
   `hcloud.env` for the traffic watch, `server.env` (Supabase URL and secret
   key) passed to the game server as environment variables.
 

@@ -1,7 +1,7 @@
 # Creates (if asked) and configures the Hetzner game server, installs its
-# secrets, then deploys. Actions tab -> Provision server -> Run workflow.
+# secrets, then deploys. Actions tab -> 001-full-deploy -> Run workflow.
 # Safe to run again. See deploy/README.md.
-name: Provision server
+name: 001-full-deploy
 
 on:
   workflow_dispatch:
@@ -61,5 +61,5 @@ jobs:
 
   deploy:
     needs: provision
-    uses: ./.github/workflows/deploy-server.yml
+    uses: ./.github/workflows/002-deploy-code.yml
     secrets: inherit
