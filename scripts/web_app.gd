@@ -3,6 +3,29 @@ class_name WebApp
 ## worker keeps the game's files for offline starts and serves those first,
 ## so after a deploy a player can open the old build. When the server turns
 ## it away for its version, update_to() swaps in the new build and reloads.
+## On launch, use_new_build() switches to a build that finished downloading
+## in the background, so a deploy reaches players by their next launch even
+## without a version change (design log 0127).
+
+
+## Web only. If a newer build is downloaded and waiting, switches to it (the
+## page reloads); otherwise asks for one, ready for the next launch.
+static func use_new_build() -> void:
+	if not OS.has_feature("web"):
+		return
+	JavaScriptBridge.eval("""
+		(function () {
+			if (!('serviceWorker' in navigator)) { return; }
+			navigator.serviceWorker.getRegistration().then(function (reg) {
+				if (!reg) { return; }
+				if (reg.waiting && navigator.serviceWorker.controller) {
+					reg.waiting.postMessage('update');  // the worker reloads this page
+				} else {
+					reg.update();
+				}
+			}).catch(function () {});
+		})();
+	""", true)
 
 
 ## The server's version from its "please update" message, or "" if the

@@ -36,6 +36,8 @@ static func take_result() -> Dictionary:
 	var raw := str(JavaScriptBridge.eval("localStorage.getItem(%s) || ''" % JSON.stringify(STORAGE_KEY), true))
 	JavaScriptBridge.eval("localStorage.removeItem(%s)" % JSON.stringify(STORAGE_KEY), true)
 	var saved: Variant = JSON.parse_string(raw) if raw != "" else null
-	if params.has("error") or not saved is Dictionary:
-		return {"error": "Login failed: %s" % params.get("error_description", "nothing to finish")}
+	if params.has("error"):
+		return {"error": "Login failed: %s" % params.get("error_description", "unknown error")}
+	if not saved is Dictionary:
+		return {}  # this page reloaded with an old address; that login was finished
 	return {"code": params.code, "verifier": saved.verifier, "url": saved.url, "key": saved.key}

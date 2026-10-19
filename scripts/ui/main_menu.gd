@@ -82,6 +82,7 @@ func _ready() -> void:
 		_set_status(Net.last_message)
 		Net.last_message = ""
 	if OS.has_feature("web"):
+		WebApp.use_new_build()
 		await _login.finish_web_login()  # back from the login page
 	if _online_mode:
 		_connect()

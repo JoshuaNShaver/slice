@@ -460,7 +460,9 @@ As in the book, women are straight lines.
   client-side prediction yet.
 - **Clients (log 0099):** the web build is the main online client,
   installable on phones as an app (PWA, landscape; log 0122). Turned away
-  for its version, it loads the newest build and reloads.
+  for its version, it loads the newest build and reloads. Otherwise a new
+  build downloads in the background and is used from the next launch
+  (log 0127, proposed).
 - **Transport (log 0110, proposed, built; changes 0099):** WebSocket for
   every client, desktop and web, on TCP 24680; ENet dropped. A browser
   can't host. A server address may be a host, a host:port, or a full
