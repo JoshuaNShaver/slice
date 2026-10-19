@@ -2,8 +2,8 @@ extends Control
 ## Main menu: pick a server and one of 3 family slots (design log 0018).
 ##
 ## Offline and hosting list this machine's own families (FamilyStore).
-## Joining connects first; the server asks for a login and sends the
-## account's families, which live on the server (design log 0116).
+## Joining connects first; the server asks for a login (OnlineLogin) and
+## sends the account's families, which live on the server (design log 0116).
 ##
 ## Run as a dedicated server with:
 ## godot --headless -- --server [--port=24680] [--save-dir=user://server/]
@@ -29,6 +29,10 @@ var _start_kinds := {}
 var _online := Online.OFF
 ## Joining: the account's families from the server (Family or null).
 var _server_families: Array = []
+var _login: OnlineLogin
+var _needs_login_button := false
+var _account_box: Control
+var _account_note: Label
 
 
 func _ready() -> void:
@@ -43,11 +47,19 @@ func _ready() -> void:
 	Net.accounts.login_needed.connect(_on_login_needed)
 	Net.accounts.slots_received.connect(_on_slots_received)
 	Net.accounts.account_error.connect(_set_status)
+	_login = OnlineLogin.new()
+	add_child(_login)
+	_login.message.connect(_set_status)
+	_login.needs_button.connect(func() -> void:
+		_needs_login_button = true
+		_refresh_slots())
 	FamilyStore.slots_changed.connect(_refresh_slots)
 	FamilyStore.reload()  # a local server may have saved since
 	if Net.last_message != "":
 		_set_status(Net.last_message)
 		Net.last_message = ""
+	if OS.has_feature("web") and await _login.finish_web_login() and _joining():
+		_connect()  # back from the login page
 
 
 func _start_dedicated_server_if_requested() -> bool:
@@ -154,6 +166,18 @@ func _build_server_panel() -> Control:
 	_port_spin.value = Net.DEFAULT_PORT
 	_port_row = _labeled("Port", _port_spin)
 	box.add_child(_port_row)
+
+	_account_box = VBoxContainer.new()
+	_account_note = _note("")
+	_account_box.add_child(_account_note)
+	var log_out := Button.new()
+	log_out.text = "Log out"
+	log_out.pressed.connect(func() -> void:
+		_login.log_out()
+		_on_cancel_pressed())
+	_account_box.add_child(log_out)
+	box.add_child(_account_box)
+	_account_box.visible = false
 	return panel
 
 
@@ -198,6 +222,17 @@ func _build_connect_card() -> Control:
 
 func _build_wait_card() -> Control:
 	var box := _card("Your families")
+	if _online == Online.LOGIN and _needs_login_button:
+		box.add_child(_note("Log in to play online. Your families are kept with your account."))
+		box.add_child(_spacer())
+		var google := Button.new()
+		google.text = "Log in with Google"
+		google.pressed.connect(func() -> void:
+			_needs_login_button = false
+			_refresh_slots()
+			_login.log_in_with_google())
+		box.add_child(google)
+		return box.get_parent() as Control
 	var text := "Connecting…"
 	if _online == Online.LOGIN:
 		text = "Logging in…"
@@ -389,6 +424,7 @@ func _connect() -> void:
 	var on_port := int(_port_spin.value)
 	_save_settings()
 	_online = Online.CONNECTING
+	_login.reset()
 	_set_busy(true)
 	_set_status("Connecting to %s…" % Net.server_url(address, on_port))
 	Net.join(address, on_port)
@@ -396,12 +432,9 @@ func _connect() -> void:
 
 func _on_login_needed(info: Dictionary) -> void:
 	_online = Online.LOGIN
-	_set_status("")
-	if info.get("auth") == "guest":
-		Net.accounts.log_in_as_guest()
-	else:
-		_set_status("This server asks for a login this game doesn't know.")
-	_refresh_slots()
+	_needs_login_button = false
+	_set_busy(false)
+	_login.answer(info)
 
 
 func _on_slots_received(families: Array) -> void:
@@ -412,6 +445,7 @@ func _on_slots_received(families: Array) -> void:
 
 func _on_cancel_pressed() -> void:
 	Net.leave()
+	_login.reset()
 	_online = Online.OFF
 	_set_busy(false)
 	_set_status("Disconnected.")
@@ -435,6 +469,8 @@ func _set_busy(busy: bool) -> void:
 	_mode_select.disabled = busy or connected
 	_address_edit.editable = not (busy or connected)
 	_port_spin.editable = not (busy or connected)
+	_account_note.text = "Logged in as %s" % _login.email
+	_account_box.visible = _joining() and _online == Online.SLOTS and _login.email != ""
 	_refresh_slots()
 
 

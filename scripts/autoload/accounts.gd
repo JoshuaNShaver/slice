@@ -12,7 +12,8 @@ extends Node
 ## Offline and a host's own player skip the login: they're the "local"
 ## account, attached directly (attach_local).
 
-## Client: the server wants a login. info: {"auth": "guest"}.
+## Client: the server wants a login. info: {"auth": "guest"}, or
+## {"auth": "supabase", "url", "key"} (the publishable key, log 0115).
 signal login_needed(info: Dictionary)
 ## Client: this account's slots, as Family or null, x SLOT_COUNT.
 signal slots_received(families: Array)
@@ -32,6 +33,7 @@ var keeper := SaveKeeper.new()
 var auth := "guest"
 ## Server only, from the environment (deploy/README.md).
 var supabase_url := ""
+var publishable_key := ""
 var _secret_key := ""
 ## Server only. Finds a peer's shape (set by the world): Callable(id) -> PlayerShape.
 var find_player := Callable()
@@ -56,11 +58,14 @@ func setup_server(dedicated: bool, save_dir := "") -> String:
 	auth = "guest"
 	supabase_url = OS.get_environment("SUPABASE_URL").strip_edges().trim_suffix("/")
 	_secret_key = OS.get_environment("SUPABASE_SECRET_KEY").strip_edges()
+	publishable_key = OS.get_environment("SUPABASE_PUBLISHABLE_KEY").strip_edges()
 	if not dedicated:
 		store = FamilyStore.store
 	elif supabase_url != "" and _secret_key != "":
 		store = SupabaseStore.new(supabase_url, _secret_key)
 		auth = "supabase"
+		if publishable_key == "":
+			push_warning("SUPABASE_PUBLISHABLE_KEY isn't set: players can't log in.")
 	elif supabase_url != "" or _secret_key != "":
 		return "Set both SUPABASE_URL and SUPABASE_SECRET_KEY, or neither (local saves)."
 	else:
@@ -169,16 +174,23 @@ func _shape(id: int) -> PlayerShape:
 
 # --- Logging in (server) ---------------------------------------------------
 
+## What a client needs to log in here.
+func login_info() -> Dictionary:
+	if auth == "supabase":
+		return {"auth": auth, "url": supabase_url, "key": publishable_key}
+	return {"auth": auth}
+
+
 ## Called once a peer's version is accepted.
 func offer_login(id: int) -> void:
-	_login_needed.rpc_id(id, {"auth": auth})
+	_login_needed.rpc_id(id, login_info())
 	await get_tree().create_timer(LOGIN_TIMEOUT).timeout
 	if Net.is_connected_peer(id) and not sessions.has(id):
 		print("Peer %d never logged in; dropping it" % id)
 		Net.kick(id)
 
 
-## Client -> server: {"guest": id}.
+## Client -> server: {"token": a Supabase access token} or {"guest": id}.
 @rpc("any_peer", "call_remote", "reliable")
 func _log_in(credential: Variant) -> void:
 	var id := multiplayer.get_remote_sender_id()
@@ -213,7 +225,24 @@ func _check(credential: Dictionary) -> Dictionary:
 	var guest: Variant = credential.get("guest")
 	if auth == "guest" and guest is String and _valid_guest(guest):
 		return {"account": GUEST_PREFIX + guest}
+	var token: Variant = credential.get("token")
+	if auth == "supabase" and token is String and token.length() < 8192:
+		return await _check_token(token)
 	return {"error": "This server doesn't accept that login."}
+
+
+## Supabase says whose token it is (design log 0115): one small request
+## per join, and a revoked session is refused at once.
+func _check_token(token: String) -> Dictionary:
+	var reply := await HttpJson.request(self, HTTPClient.METHOD_GET, supabase_url + "/auth/v1/user",
+			["apikey: " + _secret_key, "Authorization: Bearer " + token.strip_edges()])
+	var user: Variant = reply.data
+	if reply.ok and user is Dictionary and user.get("id") is String and SupabaseStore.is_uuid(user.id):
+		return {"account": user.id}
+	if reply.code == 401 or reply.code == 403:
+		return {"error": "Your login wasn't accepted. Please log in again."}
+	print("Couldn't check a login token: %s" % reply.error)
+	return {"error": "The server couldn't check your login just now. Please try again."}
 
 
 func _refuse_login(id: int, message: String) -> void:
@@ -223,7 +252,7 @@ func _refuse_login(id: int, message: String) -> void:
 		return
 	_tries[id] = tries
 	_error.rpc_id(id, message)
-	_login_needed.rpc_id(id, {"auth": auth})
+	_login_needed.rpc_id(id, login_info())
 
 
 static func _valid_guest(guest: String) -> bool:

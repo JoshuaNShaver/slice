@@ -28,7 +28,8 @@ static func request(parent: Node, method: HTTPClient.Method, url: String,
 	var status: int = result[0]
 	var code: int = result[1]
 	var raw: String = (result[3] as PackedByteArray).get_string_from_utf8()
-	var data: Variant = JSON.parse_string(raw) if raw.strip_edges() != "" else null
+	var json := JSON.new()  # quietly: a body may be HTML
+	var data: Variant = json.data if raw.strip_edges() != "" and json.parse(raw) == OK else null
 	if status != HTTPRequest.RESULT_SUCCESS:
 		return {"ok": false, "code": 0, "data": null, "error": "no reply (%s)" % _result_name(status)}
 	var ok := code >= 200 and code < 300
