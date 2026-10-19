@@ -97,6 +97,14 @@ func _build() -> void:
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	footer.add_child(_cancel_button)
 
+	# Players compare this with a server's "please update" message (log 0109).
+	var version := Label.new()
+	version.text = "Version %s" % Net.version
+	version.add_theme_font_size_override("font_size", 13)
+	version.add_theme_color_override("font_color", Palette.INK_FADED)
+	add_child(version)
+	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+
 
 func _build_server_panel() -> Control:
 	var panel := PanelContainer.new()

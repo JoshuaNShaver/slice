@@ -18,6 +18,10 @@ enum Mode { OFFLINE, HOST, JOIN }
 const DEFAULT_PORT := 24680
 const MAX_CLIENTS := 32
 const MAX_SIDES := 64
+## Clients and servers must match exactly to play together (design log
+## 0109). Set in project.godot (application/config/version); bump it with
+## any change an older client or server couldn't play with.
+var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
 
 ## Peer id -> {"family", "sides", "kind", "apex", "luck", "generation"}. Set by the server.
 var players: Dictionary = {}
@@ -37,6 +41,9 @@ var _local_info: Dictionary = {}
 ## Server only. Peer id -> "ip:port", for logging which client a network
 ## error might be about.
 var _addresses: Dictionary = {}
+## Server only. Peer ids whose version matched; only they may register.
+var _verified: Dictionary = {}
+var _handshake: Node
 
 
 func _ready() -> void:
@@ -45,6 +52,9 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	_handshake = preload("res://scripts/autoload/handshake.gd").new()
+	_handshake.name = "Handshake"
+	add_child(_handshake)
 
 
 func start_offline(info: Dictionary) -> void:
@@ -65,7 +75,7 @@ func host(on_port: int, info: Dictionary) -> void:
 	mode = Mode.HOST
 	port = on_port
 	multiplayer.multiplayer_peer = peer
-	print("Server listening on port %d" % on_port)
+	print("Server listening on port %d, version %s" % [on_port, version])
 	_begin_as_server(info)
 
 
@@ -106,6 +116,7 @@ func _reset() -> void:
 	in_session = false
 	_local_info = {}
 	_addresses.clear()
+	_verified.clear()
 
 
 func _begin_as_server(info: Dictionary) -> void:
@@ -116,9 +127,48 @@ func _begin_as_server(info: Dictionary) -> void:
 	players_changed.emit()
 
 
+## Connected, but not in yet: the server checks the version first.
 func _on_connected_to_server() -> void:
+	_handshake.say_hello()
+
+
+## Client. The server accepted our version.
+func on_welcomed() -> void:
+	if mode != Mode.JOIN or in_session:
+		return
 	in_session = true
 	session_started.emit()
+
+
+## Client. The server turned us away (e.g. a different version).
+func on_rejected(reason: String) -> void:
+	if mode != Mode.JOIN:
+		return
+	var was_in := in_session
+	leave()
+	if was_in:
+		session_ended.emit(reason)
+	else:
+		session_failed.emit(reason)
+
+
+## Server only.
+func verify(id: int) -> void:
+	_verified[id] = true
+
+
+func is_verified(id: int) -> bool:
+	return _verified.has(id)
+
+
+func is_connected_peer(id: int) -> bool:
+	return id in multiplayer.get_peers()
+
+
+## Server only. Closes a client's connection.
+func kick(id: int) -> void:
+	if multiplayer.multiplayer_peer != null and is_connected_peer(id):
+		multiplayer.multiplayer_peer.disconnect_peer(id)
 
 
 ## The world calls this once it has loaded. A joining client registers only
@@ -137,8 +187,12 @@ func _on_server_disconnected() -> void:
 	if mode == Mode.HOST and in_session:
 		_reopen_server()
 		return
+	var was_in := in_session
 	leave()
-	session_ended.emit("Lost connection to the server.")
+	if was_in:
+		session_ended.emit("Lost connection to the server.")
+	else:
+		session_failed.emit("The server closed the connection.")
 
 
 ## Host only. ENet shuts the whole server down when a send fails (e.g. a
@@ -185,10 +239,12 @@ func _on_peer_connected(id: int) -> void:
 	if packet_peer != null:
 		_addresses[id] = "%s:%d" % [packet_peer.get_remote_address(), packet_peer.get_remote_port()]
 		print("Peer %d connecting from %s" % [id, _addresses[id]])
+	_handshake.expect_hello(id)
 
 
 func _on_peer_disconnected(id: int) -> void:
 	_addresses.erase(id)
+	_verified.erase(id)
 	progress.erase(id)
 	chests.erase(id)
 	if multiplayer.is_server() and players.erase(id):
@@ -202,6 +258,9 @@ func _register(info: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
+	if not is_verified(id):
+		kick(id)
+		return
 	_admit(id, info)
 	print("Peer %d joined as the %s family" % [id, players[id].family])
 	_broadcast_players()

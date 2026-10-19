@@ -424,8 +424,12 @@ As in the book, women are straight lines.
   velocity (up to 100 ms) and corrections fade in rather than snap. No
   client-side prediction yet.
 - **Clients (log 0099, planned):** the web build is the main online
-  client, over WebSocket (ENet kept for desktop). Joining checks the build
-  version and turns away mismatches.
+  client, over WebSocket (ENet kept for desktop).
+- **Version check (log 0109, proposed, built):** the version is
+  `application/config/version` in `project.godot`, shown on the main menu.
+  A joining client says hello with it; a mismatch is turned away with
+  "This server runs version X; you have Y. Please update." Bump it with
+  any change an older client couldn't play with.
 - **Hosting (logs 0103, 0104):** game server on a Hetzner VPS. Manual
   GitHub Actions create, configure and deploy it; all keys are GitHub
   secrets (`deploy/README.md`). Web client on itch.io, restricted.

@@ -47,7 +47,8 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
   `user://families/`, house chests in `user://chests.json`), `Controls` (input actions, default keys, rebinding saved
   to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
-  `user://graphics.cfg`), `Net` (offline / host / join, server-owned player list),
+  `user://graphics.cfg`), `Net` (offline / host / join, server-owned player list, version
+  handshake),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
@@ -78,4 +79,8 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Multiplayer is supported from the start: server-authoritative. Gameplay
   state changes happen on the server; clients send input. Single player runs
   as a local server. Don't optimize networking yet.
+- Bump `application/config/version` in `project.godot` with any change an
+  older client or server couldn't play with (RPCs, synced properties,
+  content sent over the network). Clients and servers must match exactly
+  (design log 0109). Never change the RPCs in `scripts/autoload/handshake.gd`.
 - `docs/` has a `.gdignore` so Godot doesn't import it.
