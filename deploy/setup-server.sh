@@ -72,7 +72,7 @@ WantedBy=multi-user.target
 EOF
 
 # --- Traffic watch: stops the server near the plan's traffic allowance ------
-install -m 755 /dev/stdin /usr/local/bin/slice-traffic-watch <<'EOF'
+cat > /usr/local/bin/slice-traffic-watch <<'EOF'
 #!/usr/bin/env bash
 # Stops the game server when outgoing traffic passes LIMIT_PERCENT of the
 # server's included traffic. Needs a read-only Hetzner API token in
@@ -92,6 +92,7 @@ if [ "$USED" -ge "$LIMIT_PERCENT" ]; then
 	systemctl stop slice
 fi
 EOF
+chmod 755 /usr/local/bin/slice-traffic-watch
 
 cat > /etc/systemd/system/slice-traffic-watch.service <<'EOF'
 [Unit]
