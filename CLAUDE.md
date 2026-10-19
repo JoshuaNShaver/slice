@@ -47,6 +47,10 @@ Mark your own suggestions `Proposed` until the user agrees.
   terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
   (house drawing), `Enemy`, `Pickup` (per-player loot), `NetSmoother`
   (client-side smoothing of server-simulated bodies).
+- `scripts/abilities/`: one script per ability (`RushAbility`,
+  `NoseDiveAbility`, `SpikeUpAbility`) extending `Ability`; `Abilities`
+  (the registry, shop order) and `MoveSet` (one body's abilities, for
+  players and Revolt bosses). Log 0107.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in

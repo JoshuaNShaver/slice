@@ -202,7 +202,7 @@ var _orbit_anchor := NAN  # player x when it settled; NAN while it's on the move
 var _launch: Variant = null  # Vector2 velocity to take on the next step (spike up)
 var _stunned := 0.0  # s left tumbling helplessly after a launch
 var _drop_on: Node2D = null  # the spike it's thrown onto
-var _moves := Abilities.Moves.new()  # bosses' moves (design log 0089)
+var _moves := MoveSet.new()  # bosses' moves (design log 0089)
 var _move_timer := 2.0
 var _windup := 0.0  # s until the taunted move goes off (log 0091)
 var _pending_move := ""  # "spike", "dive" or "rush" while winding up
@@ -476,7 +476,7 @@ func _boss_move(state: PhysicsDirectBodyState2D, target: Node2D, grounded: bool)
 		return
 	var d := target.position - position
 	var move := ""
-	if grounded and d.length() < Abilities.SPIKE_RANGE + info().radius - 40.0:
+	if grounded and d.length() < SpikeUpAbility.RANGE + info().radius - 40.0:
 		move = "spike"
 	elif grounded and d.length() < 520.0:
 		move = "dive"
@@ -498,15 +498,15 @@ func _do_move(state: PhysicsDirectBodyState2D, target: Node2D, move: String) -> 
 		var foes: Array = get_tree().get_nodes_in_group(PlayerShape.GROUP)
 		foes += get_tree().get_nodes_in_group(GROUP).filter(func(e: Node) -> bool:
 			return e != self and _is_foe(e) and not (e as Enemy).freeze)
-		_moves.spike_up(self, state, _corners, _corner_angles, radius, foes)
+		(_moves.get_ability("spike_up") as SpikeUpAbility).start(self, state, _corners, _corner_angles, radius, foes)
 	elif move == "dive":
 		var speed: float = info().hop * BOSS_DIVE_JUMP
 		var g := maxf(state.total_gravity.y, 1.0)
 		# Up at speed, down at double gravity: about this long in the air.
-		var flight := speed / g * (1.0 + 1.0 / sqrt(Abilities.DIVE_GRAVITY))
-		_moves.nose_dive(state, _ground_normal, speed, d.x / flight)
+		var flight := speed / g * (1.0 + 1.0 / sqrt(NoseDiveAbility.GRAVITY))
+		(_moves.get_ability("nose_dive") as NoseDiveAbility).start(state, _ground_normal, speed, d.x / flight)
 	else:
-		_moves.rush(state, signf(d.x) if d.x != 0.0 else 1.0, radius)
+		(_moves.get_ability("rush") as RushAbility).start(state, signf(d.x) if d.x != 0.0 else 1.0, radius)
 
 
 ## Server: shout `line` in a speech bubble over this fighter, to the players

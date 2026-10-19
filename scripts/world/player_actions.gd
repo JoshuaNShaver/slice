@@ -114,4 +114,4 @@ func _submit_learn(id: String) -> void:
 	learned.append(id)
 	stats.abilities = learned
 	player.screen.tell("", "Learned %s: %s (%d energy)." % [Abilities.ability_name(id),
-			Abilities.ALL[id].text, roundi(Abilities.COST)])
+			Abilities.ALL[id].text, roundi(Abilities.ALL[id].cost)])

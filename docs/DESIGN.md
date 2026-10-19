@@ -304,7 +304,8 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 ## 2c. Abilities (log 0086)
 
 Bought once from the Quartermaster for pay; each use costs 50 energy. An
-heir starts with none. *Proposed:* prices, keys and numbers.
+heir starts with none. *Proposed:* prices, keys and numbers. Each ability
+is one script in `scripts/abilities/` (log 0107).
 
 | Ability | Key | Price | What it does |
 |---|---|---|---|

@@ -221,7 +221,7 @@ func teleport(pos: Vector2) -> void:
 	motion.teleport(pos)
 
 
-## Server only. Thrown by a spike up (Abilities.Moves calls this on players
+## Server only. Thrown by a spike up (SpikeUpAbility calls this on players
 ## and enemies alike).
 func launch(velocity: Vector2, onto: Node2D) -> void:
 	motion.launch(velocity, onto)

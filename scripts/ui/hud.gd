@@ -802,7 +802,7 @@ func _build_shop() -> Control:
 	drills.add_child(drills_label)
 	for id: String in Abilities.ALL:
 		var button := Button.new()
-		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.COST)]
+		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.ALL[id].cost)]
 		button.pressed.connect(func() -> void:
 			if _me != null:
 				_me.actions.request_learn(id))
