@@ -3,3 +3,8 @@
 /android/
 build/*
 !build/.gdignore
+
+# Local secrets (copy .env.example)
+.env
+.env.*
+!.env.example
