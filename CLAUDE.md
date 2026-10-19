@@ -96,7 +96,7 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
   (see the file). A dev server can keep saves elsewhere with
   `-- --server --save-dir=user://some-folder/`. `SAVES=local|supabase`
-  picks its store (log 0117); settings are listed in `.env.example`. Quick tests use a
+  picks its store (log 0117); settings are in `.env.example`, steps in README.md "Saves and logins". Quick tests use a
   mock Supabase, `python3 tools/tests/supabase_mock.py` (see its header;
   `test_supabase_store.gd` needs it). Real local Supabase (Docker Desktop
   running, `~/.docker/bin` on PATH): `supabase start` applies the
