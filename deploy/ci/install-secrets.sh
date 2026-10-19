@@ -5,8 +5,10 @@
 #
 # - HCLOUD_READ_TOKEN -> /etc/slice/hcloud.env, for the traffic watch.
 #   Must be a Read token from the same Hetzner project.
-# - SUPABASE_URL, SUPABASE_SECRET_KEY -> /etc/slice/server.env, for the
-#   game server. Must be a secret key for SUPABASE_PROJECT_REF's project.
+# - SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY ->
+#   /etc/slice/server.env, for the game server. Keys must be for
+#   SUPABASE_PROJECT_REF's project. The publishable key is sent to players
+#   for logging in (log 0115), so it must not be a secret key.
 set -euo pipefail
 : "${HCLOUD_READ_TOKEN:?missing secret HCLOUD_READ_TOKEN}"
 NAME="${SERVER_NAME:-slice-server}"
@@ -35,10 +37,11 @@ printf 'HCLOUD_TOKEN=%s\n' "$HCLOUD_READ_TOKEN" \
 ssh root@server 'systemctl start slice-traffic-watch.service'
 echo "HCLOUD_READ_TOKEN checked and installed."
 
-# --- SUPABASE_URL, SUPABASE_SECRET_KEY ----------------------------------------
+# --- SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY --------------
 # -> /etc/slice/server.env, read by slice.service (log 0105).
 : "${SUPABASE_URL:?missing secret SUPABASE_URL}"
 : "${SUPABASE_SECRET_KEY:?missing secret SUPABASE_SECRET_KEY}"
+: "${SUPABASE_PUBLISHABLE_KEY:?missing secret SUPABASE_PUBLISHABLE_KEY}"
 SUPABASE_URL="${SUPABASE_URL%/}"
 if [ -n "${SUPABASE_PROJECT_REF:-}" ] && [ "$SUPABASE_URL" != "https://$SUPABASE_PROJECT_REF.supabase.co" ]; then
 	echo "::error::SUPABASE_URL should be https://<SUPABASE_PROJECT_REF>.supabase.co; it names a different project."
@@ -51,8 +54,21 @@ if ! (export SUPABASE_URL SUPABASE_SECRET_KEY; bash -c "$check_supabase"); then
 	exit 1
 fi
 
-printf 'SUPABASE_URL=%s\nSUPABASE_SECRET_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SECRET_KEY" \
+# The publishable key must work for Auth but must not be an admin key.
+code="$(curl -sS -o /dev/null -w "%{http_code}" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" "$SUPABASE_URL/auth/v1/settings")"
+if [ "$code" != 200 ]; then
+	echo "::error::SUPABASE_PUBLISHABLE_KEY was refused (HTTP $code). Use the project's publishable key (sb_publishable_...)."
+	exit 1
+fi
+code="$(curl -sS -o /dev/null -w "%{http_code}" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" "$SUPABASE_URL/auth/v1/admin/users?per_page=1")"
+if [ "$code" = 200 ] || [ "$SUPABASE_PUBLISHABLE_KEY" = "$SUPABASE_SECRET_KEY" ]; then
+	echo "::error::SUPABASE_PUBLISHABLE_KEY is a secret key. It is sent to every player; use the publishable key."
+	exit 1
+fi
+
+printf 'SUPABASE_URL=%s\nSUPABASE_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n' \
+	"$SUPABASE_URL" "$SUPABASE_SECRET_KEY" "$SUPABASE_PUBLISHABLE_KEY" \
 	| ssh root@server 'install -d -m 700 /etc/slice && umask 077 && cat > /etc/slice/server.env'
 # Same check again, from the server, with the installed file.
 ssh root@server "set -a; . /etc/slice/server.env; set +a; $check_supabase"
-echo "SUPABASE_URL and SUPABASE_SECRET_KEY checked and installed."
+echo "SUPABASE_URL and both keys checked and installed."

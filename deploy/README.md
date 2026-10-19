@@ -40,6 +40,7 @@ so no export templates are needed.
    | `SUPABASE_DB_PASSWORD` | the project's database password (GitHub only) |
    | `SUPABASE_URL` | `https://<project-ref>.supabase.co` (goes on the server) |
    | `SUPABASE_SECRET_KEY` | Project Settings → API Keys → secret key (goes on the server) |
+   | `SUPABASE_PUBLISHABLE_KEY` | same page, publishable key (goes on the server, which hands it to players for logging in) |
    | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Google Cloud OAuth client ID |
    | `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET` | Google Cloud OAuth client secret |
 

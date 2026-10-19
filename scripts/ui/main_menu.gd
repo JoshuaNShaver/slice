@@ -1,11 +1,19 @@
 extends Control
 ## Main menu: pick a server and one of 3 family slots (design log 0018).
 ##
-## Run as a dedicated server with: godot --headless -- --server [--port=24680]
+## Offline and hosting list this machine's own families (FamilyStore).
+## Joining connects first; the server asks for a login (OnlineLogin) and
+## sends the account's families, which live on the server (design log 0116).
+##
+## Run as a dedicated server with:
+## godot --headless -- --server [--port=24680] [--save-dir=user://server/]
 
 const WORLD_SCENE := "res://scenes/world.tscn"
 const SETTINGS_PATH := "user://settings.cfg"
 const ROMAN: Array[String] = ["I", "II", "III"]
+
+## Joining: not connected, connecting, logging in, picking a family, starting.
+enum Online { OFF, CONNECTING, LOGIN, SLOTS, STARTING }
 
 var _mode_select: OptionButton
 var _address_row: Control
@@ -18,6 +26,13 @@ var _cancel_button: Button
 var _busy := false
 ## Each empty slot's chosen starting triangle (design log 0050).
 var _start_kinds := {}
+var _online := Online.OFF
+## Joining: the account's families from the server (Family or null).
+var _server_families: Array = []
+var _login: OnlineLogin
+var _needs_login_button := false
+var _account_box: Control
+var _account_note: Label
 
 
 func _ready() -> void:
@@ -29,11 +44,22 @@ func _ready() -> void:
 	_build()
 	_load_settings()
 	Net.session_failed.connect(_on_session_failed)
+	Net.accounts.login_needed.connect(_on_login_needed)
+	Net.accounts.slots_received.connect(_on_slots_received)
+	Net.accounts.account_error.connect(_set_status)
+	_login = OnlineLogin.new()
+	add_child(_login)
+	_login.message.connect(_set_status)
+	_login.needs_button.connect(func() -> void:
+		_needs_login_button = true
+		_refresh_slots())
 	FamilyStore.slots_changed.connect(_refresh_slots)
-	_refresh_slots()
+	FamilyStore.reload()  # a local server may have saved since
 	if Net.last_message != "":
 		_set_status(Net.last_message)
 		Net.last_message = ""
+	if OS.has_feature("web") and await _login.finish_web_login() and _joining():
+		_connect()  # back from the login page
 
 
 func _start_dedicated_server_if_requested() -> bool:
@@ -41,14 +67,17 @@ func _start_dedicated_server_if_requested() -> bool:
 	if not args.has("--server"):
 		return false
 	var on_port := Net.DEFAULT_PORT
+	var save_dir := ""
 	for arg in args:
 		if arg.begins_with("--port="):
 			on_port = arg.trim_prefix("--port=").to_int()
+		elif arg.begins_with("--save-dir="):
+			save_dir = arg.trim_prefix("--save-dir=")
 	Net.session_failed.connect(func(reason: String) -> void:
 		push_error(reason)
 		get_tree().quit(1))
 	# Deferred: the scene can't be swapped while it's still being added to the tree.
-	Net.host.call_deferred(on_port, {})
+	Net.host.call_deferred(on_port, -1, save_dir)
 	return true
 
 
@@ -120,7 +149,9 @@ func _build_server_panel() -> Control:
 	if not OS.has_feature("web"):  # a browser can't listen for connections
 		_mode_select.add_item("Host a server", Net.Mode.HOST)
 	_mode_select.add_item("Join a server", Net.Mode.JOIN)
-	_mode_select.item_selected.connect(func(_index: int) -> void: _update_server_fields())
+	_mode_select.item_selected.connect(func(_index: int) -> void:
+		_update_server_fields()
+		_refresh_slots())
 	box.add_child(_mode_select)
 
 	_address_edit = LineEdit.new()
@@ -135,24 +166,96 @@ func _build_server_panel() -> Control:
 	_port_spin.value = Net.DEFAULT_PORT
 	_port_row = _labeled("Port", _port_spin)
 	box.add_child(_port_row)
+
+	_account_box = VBoxContainer.new()
+	_account_note = _note("")
+	_account_box.add_child(_account_note)
+	var log_out := Button.new()
+	log_out.text = "Log out"
+	log_out.pressed.connect(func() -> void:
+		_login.log_out()
+		_on_cancel_pressed())
+	_account_box.add_child(log_out)
+	box.add_child(_account_box)
+	_account_box.visible = false
 	return panel
 
 
 func _refresh_slots() -> void:
+	if _slots_box == null:
+		return
 	for child in _slots_box.get_children():
 		child.queue_free()
-	for slot in FamilyStore.SLOT_COUNT:
-		_slots_box.add_child(_build_slot_card(slot))
+	if not _joining():
+		for slot in FamilyStore.SLOT_COUNT:
+			_slots_box.add_child(_build_slot_card(slot, FamilyStore.get_family(slot)))
+		return
+	match _online:
+		Online.OFF:
+			_slots_box.add_child(_build_connect_card())
+		Online.SLOTS:
+			for slot in _server_families.size():
+				_slots_box.add_child(_build_slot_card(slot, _server_families[slot]))
+		_:
+			_slots_box.add_child(_build_wait_card())
 
 
-func _build_slot_card(slot: int) -> Control:
-	var family := FamilyStore.get_family(slot)
+func _joining() -> bool:
+	return _mode_select.get_selected_id() == Net.Mode.JOIN
+
+
+func _family(slot: int) -> Family:
+	return _server_families[slot] if _joining() else FamilyStore.get_family(slot)
+
+
+## Joining, before connecting: the families are on the server.
+func _build_connect_card() -> Control:
+	var box := _card("Your families")
+	box.add_child(_note("Online, your families are kept by the server. Connect to see them."))
+	box.add_child(_spacer())
+	var connect_button := Button.new()
+	connect_button.text = "Connect"
+	connect_button.pressed.connect(_connect)
+	box.add_child(connect_button)
+	return box.get_parent() as Control
+
+
+func _build_wait_card() -> Control:
+	var box := _card("Your families")
+	if _online == Online.LOGIN and _needs_login_button:
+		box.add_child(_note("Log in to play online. Your families are kept with your account."))
+		box.add_child(_spacer())
+		var google := Button.new()
+		google.text = "Log in with Google"
+		google.pressed.connect(func() -> void:
+			_needs_login_button = false
+			_refresh_slots()
+			_login.log_in_with_google())
+		box.add_child(google)
+		return box.get_parent() as Control
+	var text := "Connecting…"
+	if _online == Online.LOGIN:
+		text = "Logging in…"
+	elif _online == Online.STARTING:
+		text = "Entering the world…"
+	box.add_child(_note(text))
+	return box.get_parent() as Control
+
+
+## A slot-sized panel with a heading; returns the column to fill.
+func _card(title: String) -> VBoxContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(210, 320)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
-	box.add_child(_heading("Family %s" % ROMAN[slot]))
+	box.add_child(_heading(title))
+	return box
+
+
+func _build_slot_card(slot: int, family: Family) -> Control:
+	var box := _card("Family %s" % ROMAN[slot])
+	var panel := box.get_parent() as Control
 
 	if family == null:
 		box.add_child(_note("An empty plot of parchment."))
@@ -267,6 +370,10 @@ func _spacer() -> Control:
 func _found_family(slot: int, name_edit: LineEdit) -> void:
 	if _busy:
 		return
+	if _joining():
+		_set_busy(true)
+		Net.accounts.found(slot, name_edit.text, _start_kinds.get(slot, "isosceles"))
+		return
 	var family := FamilyStore.found_family(slot, name_edit.text, _start_kinds.get(slot, "isosceles"))
 	var shape := Family.with_article(family.shape_name())
 	var message := "The %s family begins as %s." % [family.family_name, shape]
@@ -276,12 +383,17 @@ func _found_family(slot: int, name_edit: LineEdit) -> void:
 
 
 func _confirm_delete(slot: int) -> void:
-	var family := FamilyStore.get_family(slot)
+	var family := _family(slot)
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "Delete family"
 	dialog.dialog_text = "Delete the %s family? This can't be undone." % family.family_name
 	dialog.ok_button_text = "Delete"
-	dialog.confirmed.connect(func() -> void: FamilyStore.delete_family(slot))
+	dialog.confirmed.connect(func() -> void:
+		if _joining():
+			_set_busy(true)
+			Net.accounts.delete(slot)
+		else:
+			FamilyStore.delete_family(slot))
 	dialog.visibility_changed.connect(func() -> void:
 		if not dialog.visible:
 			dialog.queue_free())
@@ -290,32 +402,53 @@ func _confirm_delete(slot: int) -> void:
 
 
 func _play(slot: int) -> void:
-	var family := FamilyStore.get_family(slot)
+	var family := _family(slot)
 	if family == null or family.extinct or _busy:
 		return
+	_save_settings()
+	match _mode_select.get_selected_id():
+		Net.Mode.OFFLINE:
+			Net.start_offline(slot)
+		Net.Mode.HOST:
+			Net.host(int(_port_spin.value), slot)
+		Net.Mode.JOIN:
+			_online = Online.STARTING
+			_set_busy(true)
+			Net.accounts.play(slot)
+
+
+func _connect() -> void:
 	var address := _address_edit.text.strip_edges()
 	if address == "":
 		address = _address_edit.placeholder_text
 	var on_port := int(_port_spin.value)
-	FamilyStore.active_slot = slot
 	_save_settings()
-	var info := family.to_session_info()
-	info.chest = FamilyStore.chest
-	match _mode_select.get_selected_id():
-		Net.Mode.OFFLINE:
-			Net.start_offline(info)
-		Net.Mode.HOST:
-			Net.host(on_port, info)
-		Net.Mode.JOIN:
-			_set_busy(true)
-			_set_status("Connecting to %s…" % Net.server_url(address, on_port))
-			Net.join(address, on_port, info)
+	_online = Online.CONNECTING
+	_login.reset()
+	_set_busy(true)
+	_set_status("Connecting to %s…" % Net.server_url(address, on_port))
+	Net.join(address, on_port)
+
+
+func _on_login_needed(info: Dictionary) -> void:
+	_online = Online.LOGIN
+	_needs_login_button = false
+	_set_busy(false)
+	_login.answer(info)
+
+
+func _on_slots_received(families: Array) -> void:
+	_server_families = families
+	_online = Online.SLOTS
+	_set_busy(false)
 
 
 func _on_cancel_pressed() -> void:
 	Net.leave()
+	_login.reset()
+	_online = Online.OFF
 	_set_busy(false)
-	_set_status("Cancelled.")
+	_set_status("Disconnected.")
 
 
 func _on_session_started() -> void:
@@ -323,21 +456,28 @@ func _on_session_started() -> void:
 
 
 func _on_session_failed(reason: String) -> void:
+	_online = Online.OFF
 	_set_busy(false)
 	_set_status(reason)
 
 
 func _set_busy(busy: bool) -> void:
 	_busy = busy
-	_cancel_button.visible = busy
-	_mode_select.disabled = busy
-	_address_edit.editable = not busy
-	_port_spin.editable = not busy
+	var connected := _online != Online.OFF
+	_cancel_button.visible = busy or connected
+	_cancel_button.text = "Disconnect" if _online == Online.SLOTS else "Cancel"
+	_mode_select.disabled = busy or connected
+	_address_edit.editable = not (busy or connected)
+	_port_spin.editable = not (busy or connected)
+	_account_note.text = "Logged in as %s" % _login.email
+	_account_box.visible = _joining() and _online == Online.SLOTS and _login.email != ""
 	_refresh_slots()
 
 
 func _set_status(text: String) -> void:
 	_status.text = text
+	if _busy and _online == Online.SLOTS:
+		_set_busy(false)  # a refused request
 
 
 func _update_server_fields() -> void:

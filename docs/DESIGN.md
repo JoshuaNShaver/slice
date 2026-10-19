@@ -355,7 +355,7 @@ Values marked * are proposed tuning.
     gets a house with chests for storage, in the Noble Quarter. Press E at
     its east door to open your chests and drag items between them and the
     bag. *Proposed:* 20 slots; everyone uses the same door, each sees their
-    own chests; saved on the player's machine (`user://chests.json`). Stored gear carries over to later heirs, so
+    own chests; saved by the server with the account (log 0112). Stored gear carries over to later heirs, so
     only square-or-better runs benefit from past runs' gear; triangle runs
     start with nothing. The chests belong to the player and outlive the
     family (log 0042): a new family gets them back on reaching a square.
@@ -391,17 +391,31 @@ Values marked * are proposed tuning.
   **join** by address.
 - **3 family save slots.** Each slot: create a new family, play, or delete.
 - **Saved progress (log 0038):** a family save keeps the lineage and the
-  current heir's level, XP, stats, bag and worn gear. Your machine saves
-  every 3 s, on leaving and on quitting. On joining, the server caps
-  anything out of range before restoring it.
-- Saves are local JSON in `user://families/` for now. **Planned (log
-  0097):** the server loads and saves all player data through one storage
-  interface: local files offline, Supabase online. Clients never send
-  their own save.
-- **Accounts (logs 0098, 0105, planned):** online play needs a Google
-  login (Supabase Auth). Supabase tables and auth settings live in the repo
-  and deploys apply them. The client sends its token on joining; the server checks
-  it. Offline needs no login.
+  current heir's level, XP, stats, bag and worn gear. The server still
+  caps anything out of range before restoring it.
+- **The server owns saves (logs 0097, 0112, proposed, built):** all player
+  data (3 family slots and the chests, per account) is loaded and saved by
+  the server through one storage interface (`SaveStore`). Clients never
+  send their own save. Offline and a LAN host's own player use this
+  machine's files (`user://families/`, `user://chests.json`), as before.
+  LAN joiners and a dev server's players log in with a device id; their
+  saves live on that server. An online server uses Supabase (log 0114):
+  tables `families` and `chests` keyed by the Supabase user, readable and
+  writable only with the server's secret key.
+- **When it saves (log 0113, proposed, built):** checked every 3 s; level,
+  bag, gear, abilities and chests saved at once (at most every 10 s), XP
+  and pay within 45 s; leaving, dying and marrying at once.
+- **Accounts (logs 0098, 0105, 0115, proposed, built):** online play needs a
+  Google login (Supabase Auth). Supabase tables and auth settings live in the
+  repo and deploys apply them. The server sends the project URL and
+  publishable key; the client logs in by PKCE (desktop: system browser and a
+  `127.0.0.1` callback; web: page redirect, untested) and keeps the session,
+  so it logs in once. The server checks the token with Supabase on each join.
+  One account plays once per server at a time. Offline needs no login.
+- **Online slots (log 0116, proposed, built):** joining logs in first, then
+  shows the account's 3 slots from the server; founding, deleting and
+  playing are requests to the server. The menu shows who is logged in and
+  "Log out".
 
 ## 6. Women (lines)
 

@@ -52,7 +52,9 @@ players joining over the internet.
    WebSocket connections on TCP port **24680** (`Net.DEFAULT_PORT`).
 2. **Join:** on the other machine, choose Join and enter the host's LAN IP
    and port 24680. The address can also be a full `ws://` or `wss://` URL
-   (then the port field is ignored).
+   (then the port field is ignored). Press Connect; the host's server
+   sends your families. They are kept on the host (design log 0112),
+   under its `user://accounts/`, by a device id of yours.
 3. Client and server must run the same version (shown at the bottom right
    of the main menu); a mismatch is turned away with a message.
 

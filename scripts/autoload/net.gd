@@ -13,8 +13,8 @@ signal session_started
 signal session_failed(reason: String)
 signal session_ended(reason: String)
 signal players_changed
-## On the player's own machine, after their family save is updated.
-## `heir` is what Family.roll_heir made.
+## On the player's own machine, after marrying. `heir` is what
+## Family.roll_heir made; the server has already saved it.
 signal heir_born(heir: Dictionary)
 
 enum Mode { OFFLINE, HOST, JOIN }
@@ -26,6 +26,7 @@ const MAX_SIDES := 64
 ## the bigger packets (a joining player's info, the world's first sync).
 const BUFFER_BYTES := 1 << 20
 const MAX_QUEUED_PACKETS := 4096
+const QUIT_FLUSH_WAIT := 10.0  # s a quitting server waits for saves to finish
 ## Clients and servers must match exactly to play together (design log
 ## 0109). Set in project.godot (application/config/version); bump it with
 ## any change an older client or server couldn't play with.
@@ -33,11 +34,11 @@ var version: String = str(ProjectSettings.get_setting("application/config/versio
 
 ## Peer id -> {"family", "sides", "kind", "apex", "luck", "generation"}. Set by the server.
 var players: Dictionary = {}
-## Server only. Peer id -> the saved progress they joined with (design log
-## 0038), checked by PlayerShape.sanitize_progress. Not sent to other players.
+## Server only. Peer id -> their family's saved progress (design log 0038),
+## from the server's store and checked by PlayerSave.sanitize. Not sent to
+## other players.
 var progress: Dictionary = {}
-## Server only. Peer id -> the house chests they joined with (design log
-## 0064), checked like progress.
+## Server only. Peer id -> their house chests (design log 0064), checked too.
 var chests: Dictionary = {}
 var mode := Mode.OFFLINE
 var port := DEFAULT_PORT
@@ -45,10 +46,11 @@ var in_session := false
 ## A message for the main menu to show after returning to it (e.g. lost connection).
 var last_message := ""
 
-var _local_info: Dictionary = {}
-## Server only. Peer ids whose version matched; only they may register.
+## Server only. Peer ids whose version matched; only they may log in.
 var _verified: Dictionary = {}
 var _handshake: Node
+## Logging in, family slots and saving (design logs 0112, 0116).
+var accounts: Accounts
 
 
 func _ready() -> void:
@@ -60,17 +62,37 @@ func _ready() -> void:
 	_handshake = preload("res://scripts/autoload/handshake.gd").new()
 	_handshake.name = "Handshake"
 	add_child(_handshake)
+	accounts = Accounts.new()
+	accounts.name = "Accounts"
+	add_child(accounts)
+	get_tree().auto_accept_quit = false  # a server saves first (_notification)
 
 
-func start_offline(info: Dictionary) -> void:
+## Quitting: a server saves everyone, waits (a little) for an online store
+## to finish writing, then quits.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	if multiplayer.is_server() and in_session:
+		accounts.save_all_now()
+		var waited := 0.0
+		while accounts.store != null and accounts.store.pending_count() > 0 and waited < QUIT_FLUSH_WAIT:
+			await get_tree().create_timer(0.1).timeout
+			waited += 0.1
+	get_tree().quit()
+
+
+## Plays `slot` of this machine's own families (FamilyStore).
+func start_offline(slot: int) -> void:
 	_reset()
 	mode = Mode.OFFLINE
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
-	_begin_as_server(info)
+	_begin_as_server(slot, accounts.setup_server(false))
 
 
-## Pass an empty info for a dedicated server with no local player.
-func host(on_port: int, info: Dictionary) -> void:
+## Hosts and plays `slot` of this machine's families; slot -1 is a
+## dedicated server with no local player, saving in `save_dir`.
+func host(on_port: int, slot: int, save_dir := "") -> void:
 	_reset()
 	if OS.has_feature("web"):
 		session_failed.emit("A browser can't host a server.")
@@ -84,13 +106,14 @@ func host(on_port: int, info: Dictionary) -> void:
 	port = on_port
 	multiplayer.multiplayer_peer = peer
 	print("Server listening on port %d, version %s" % [on_port, version])
-	_begin_as_server(info)
+	_begin_as_server(slot, accounts.setup_server(slot < 0, save_dir))
 
 
-## session_started fires once connected and the version matches,
+## Connects; then Accounts asks for a login and sends the slots, and
+## session_started fires once the server accepts a family to play.
 ## session_failed if it can't connect or is turned away. `address` is a host
 ## name or IP, or a full ws:// or wss:// URL (then `on_port` is ignored).
-func join(address: String, on_port: int, info: Dictionary) -> void:
+func join(address: String, on_port: int) -> void:
 	_reset()
 	var url := server_url(address, on_port)
 	var peer := _new_peer()
@@ -101,11 +124,12 @@ func join(address: String, on_port: int, info: Dictionary) -> void:
 		return
 	mode = Mode.JOIN
 	port = on_port
-	_local_info = info
 	multiplayer.multiplayer_peer = peer
 
 
 func leave() -> void:
+	if multiplayer.is_server():
+		accounts.close_all()  # saves everyone still playing
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
@@ -140,14 +164,22 @@ func _reset() -> void:
 	progress.clear()
 	chests.clear()
 	in_session = false
-	_local_info = {}
 	_verified.clear()
 
 
-func _begin_as_server(info: Dictionary) -> void:
+func _begin_as_server(slot: int, setup_error: String) -> void:
+	if setup_error != "":
+		leave()
+		session_failed.emit(setup_error)
+		return
+	if slot >= 0:
+		var me := multiplayer.get_unique_id()
+		if not await accounts.attach_local(me, slot):
+			leave()
+			session_failed.emit("That family can't play.")
+			return
+		_admit(me)
 	in_session = true
-	if not info.is_empty():
-		_admit(multiplayer.get_unique_id(), info)
 	session_started.emit()
 	players_changed.emit()
 
@@ -157,8 +189,13 @@ func _on_connected_to_server() -> void:
 	_handshake.say_hello()
 
 
-## Client. The server accepted our version.
+## Client. The server accepted our version; Accounts asks for a login next.
 func on_welcomed() -> void:
+	pass
+
+
+## Client. The server accepted the family we picked: into the world.
+func on_play_accepted() -> void:
 	if mode != Mode.JOIN or in_session:
 		return
 	in_session = true
@@ -180,6 +217,12 @@ func on_rejected(reason: String) -> void:
 ## Server only.
 func verify(id: int) -> void:
 	_verified[id] = true
+	accounts.offer_login.call_deferred(id)  # after the welcome
+
+
+## Server only. Tells a client why, then closes its connection.
+func turn_away(id: int, reason: String) -> void:
+	_handshake.turn_away(id, reason)
 
 
 func is_verified(id: int) -> bool:
@@ -200,7 +243,7 @@ func kick(id: int) -> void:
 ## then, so the server never spawns shapes for a client with no world yet.
 func announce_ready() -> void:
 	if mode == Mode.JOIN and in_session:
-		_register.rpc_id(1, _local_info)
+		_register.rpc_id(1, {})
 
 
 func _on_connection_failed() -> void:
@@ -231,6 +274,7 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	accounts.on_left(id)  # while its shape is still there
 	_verified.erase(id)
 	progress.erase(id)
 	chests.erase(id)
@@ -239,27 +283,31 @@ func _on_peer_disconnected(id: int) -> void:
 		_broadcast_players()
 
 
-## Client -> server: "this is who I am".
+## Client -> server: "my world is ready". Anything a client sends here is
+## ignored: the server plays the family it picked (Accounts).
 @rpc("any_peer", "call_remote", "reliable")
-func _register(info: Dictionary) -> void:
+func _register(_info: Variant) -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
-	if not is_verified(id):
+	if not is_verified(id) or not accounts.is_playing(id):
 		kick(id)
 		return
-	_admit(id, info)
+	if players.has(id):
+		return
+	_admit(id)
 	print("Peer %d joined as the %s family" % [id, players[id].family])
 	_broadcast_players()
 
 
-## Server only. Never trust what a client sends.
-func _admit(id: int, info: Dictionary) -> void:
-	players[id] = _sanitize(info)
-	var raw: Variant = info.get("progress", {})
-	progress[id] = PlayerShape.sanitize_progress(raw if raw is Dictionary else {})
-	var raw_chest: Variant = info.get("chest", [])
-	chests[id] = PlayerShape._clean_items(raw_chest if raw_chest is Array else [], PlayerShape.CHEST_SLOTS)
+## Server only. Puts the family a peer picked into the session. The save
+## is the server's own, but is still checked (defence in depth).
+func _admit(id: int) -> void:
+	var family := accounts.family_of(id)
+	players[id] = _sanitize(family.to_public_info())
+	progress[id] = PlayerSave.sanitize(family.progress)
+	family.progress = progress[id]
+	chests[id] = PlayerSave.clean_items(accounts.chest_of(id), PlayerInventory.CHEST_SLOTS)
 
 
 ## Server -> clients: the full player list.
@@ -275,21 +323,23 @@ func _broadcast_players() -> void:
 	players_changed.emit()
 
 
-## Server only. A player's health hit 0. Families live in the player's own
-## save, so the server tells them, then drops them from the session.
+## Server only. A player's health hit 0: the family ends (saved by
+## Accounts), the player is told, then dropped from the session.
 func player_died(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id):
 		return
 	print("Peer %d died" % id)
+	var reason := accounts.on_died(id)
 	progress.erase(id)
 	chests.erase(id)
-	_you_died.rpc_id(id)
+	_you_died.rpc_id(id, reason)
 	if players.erase(id):
 		_broadcast_players()
 
 
-## Server only. Marriage (design log 0030): tell the player to update their save.
+## Server only. Marriage (design log 0030): save the heir, tell the player.
 func heir_born_on_server(id: int, heir: Dictionary) -> void:
+	accounts.on_heir(id, heir)
 	if players.has(id):
 		players[id].sides = heir.sides
 		players[id].kind = heir.kind
@@ -303,13 +353,7 @@ func heir_born_on_server(id: int, heir: Dictionary) -> void:
 ## Server -> the player who died. Dying without an heir ends the family
 ## (design log 0015).
 @rpc("authority", "call_local", "reliable")
-func _you_died() -> void:
-	var family := FamilyStore.active_family()
-	var reason := "You died."
-	if family != null:
-		family.extinct = true
-		FamilyStore.save_slot(FamilyStore.active_slot)
-		reason = "The %s family has ended: died without an heir." % family.family_name
+func _you_died(reason: String) -> void:
 	leave()
 	session_ended.emit(reason)
 
@@ -317,15 +361,6 @@ func _you_died() -> void:
 ## Server -> the player who married.
 @rpc("authority", "call_local", "reliable")
 func _heir_born(heir: Dictionary) -> void:
-	var family := FamilyStore.active_family()
-	if family != null:
-		family.generation += 1
-		family.sides = heir.sides
-		family.kind = heir.kind
-		family.apex = heir.apex
-		family.luck = heir.luck
-		family.progress = {}  # the heir starts fresh; the world saves it from here
-		FamilyStore.save_slot(FamilyStore.active_slot)
 	heir_born.emit(heir)
 
 
