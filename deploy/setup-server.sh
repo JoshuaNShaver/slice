@@ -14,7 +14,7 @@ PORT=24680
 command -v cloud-init >/dev/null && cloud-init status --wait >/dev/null || true
 
 apt-get update -q
-apt-get install -y -q unzip curl jq ufw
+apt-get install -y -q unzip curl jq ufw libfontconfig1  # fontconfig: quiets Godot's font errors
 
 # --- Godot (headless use of the normal Linux build) -------------------------
 case "$(uname -m)" in
@@ -60,6 +60,8 @@ Wants=network-online.target
 
 [Service]
 User=slice
+# Supabase URL and key, installed by Provision server (deploy/ci/install-secrets.sh).
+EnvironmentFile=-/etc/slice/server.env
 WorkingDirectory=/opt/slice/current
 ExecStart=/opt/godot/godot --headless --path /opt/slice/current -- --server --port=${PORT} --no-hot-reload
 Restart=on-failure

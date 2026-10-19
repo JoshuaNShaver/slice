@@ -1,0 +1,10 @@
+# Supabase settings for online play (design log 0105). The deploy workflow
+# applies them with `supabase config push`, which only changes what this file
+# declares; everything else stays as set in the dashboard. Secrets are
+# env(...) references filled from GitHub secrets, never written here.
+project_id = "slice"
+
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"

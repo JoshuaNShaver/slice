@@ -397,8 +397,9 @@ Values marked * are proposed tuning.
   0097):** the server loads and saves all player data through one storage
   interface: local files offline, Supabase online. Clients never send
   their own save.
-- **Accounts (log 0098, planned):** online play needs a social login
-  (Supabase Auth). The client sends its token on joining; the server checks
+- **Accounts (logs 0098, 0105, planned):** online play needs a Google
+  login (Supabase Auth). Supabase tables and auth settings live in the repo
+  and deploys apply them. The client sends its token on joining; the server checks
   it. Offline needs no login.
 
 ## 6. Women (lines)

@@ -11,7 +11,44 @@ permissions:
   contents: read
 
 jobs:
+  # Database migrations and auth settings first, so new server code never
+  # meets old tables (design log 0105).
+  supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: slice-server
+      cancel-in-progress: false
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: ${{ secrets.SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID }}
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET: ${{ secrets.SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Link the project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Migrations to apply
+        run: supabase db push --dry-run
+
+      - name: Apply migrations
+        run: supabase db push --yes
+
+      - name: Auth settings to change
+        run: supabase config diff
+
+      - name: Apply auth settings
+        run: supabase config push --yes
+
   deploy:
+    needs: supabase
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
