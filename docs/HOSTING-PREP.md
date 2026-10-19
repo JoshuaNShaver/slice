@@ -17,25 +17,42 @@ delete it when everything here is done.
 
 Checked together after merging: script check clean, smoke test passes, a
 headless client joined a local server over WebSocket and its player synced.
+5. **Accounts, server-owned saves, Google login** (logs 0112–0116,
+   Proposed; version 0.2.0). The server owns saves (`scripts/saves/`:
+   local files offline/LAN, Supabase online); Google login by PKCE
+   (`scripts/auth/`, `Accounts`, `OnlineLogin`); online family slots in the
+   menu. Server needs `SUPABASE_PUBLISHABLE_KEY` (new GitHub secret,
+   installed by `001-full-deploy`). Loopback redirect URLs are in
+   `supabase/config.toml`. Tests, all passing: `test_saves`,
+   `test_supabase_store` and `test_auth` (against
+   `tools/tests/supabase_mock.py`), `test_online` (guest server and
+   Supabase-mode server on the mock), smoke test.
+   - **Not yet tested for real:** a login with real Google + Supabase
+     (manual steps below). Web login is untested and likely needs a popup
+     on itch.io (iframe); its page URL must be added to `config.toml`.
+
+### Manual test: real Google login (desktop)
+
+1. Google Cloud: an OAuth client (type "Web application") with redirect
+   URI `https://<project-ref>.supabase.co/auth/v1/callback`.
+2. GitHub secrets: `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` / `_SECRET`,
+   and the new `SUPABASE_PUBLISHABLE_KEY`. Push and run **002-deploy-code**
+   (applies the migration and `config.toml`), or `supabase config push` and
+   `supabase db push` locally. Check Auth → URL Configuration in the
+   dashboard lists the three `127.0.0.1:4761x` URLs.
+3. Run a local server with the real keys:
+   `SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SECRET_KEY=sb_secret_… SUPABASE_PUBLISHABLE_KEY=sb_publishable_… Godot --headless --path . -- --server --port=24680 --save-dir=user://test-real/`
+   (expect `Saves: Supabase at …; logins: supabase`).
+4. Run the game from the editor, Join `127.0.0.1:24680`, press "Log in
+   with Google", finish in the browser; the tab should say "Logged in".
+   Found a family, play, level up, leave.
+5. Check the `families` row in the Supabase table editor. Rejoin: no
+   browser this time (saved session), same level. "Log out", rejoin:
+   the Google button is back.
+6. Second machine or second Google account at the same time: both play;
+   the same account twice is refused.
 
 ## In progress (branches, not merged)
-
-### `wip/accounts-saves-login` (logs 0112–0114, Proposed)
-- **Step A, committed:** the server owns saves behind a `SaveStore` interface
-  (`scripts/saves/`); `LocalFileStore` for offline; the server saves on
-  meaningful events and every 45 s (log 0113).
-- **Step B, committed:** Supabase migration
-  `supabase/migrations/20261018120000_account_saves.sql` (RLS on, no client
-  policies) and `SupabaseStore`; mock PostgREST at `tools/tests/supabase_mock.py`.
-- **Step C, WIP commit, unfinished and untested:** Google login (PKCE,
-  loopback catcher for desktop, `web_login.gd` for web), `accounts.gd`,
-  `online_login.gd`, online family slots in the main menu.
-- Before merging: finish step C; run its tests (`tools/tests/test_saves.gd`,
-  `test_supabase_store.gd`, `test_online.gd`, `test_auth.gd`); check whether
-  the server needs `SUPABASE_PUBLISHABLE_KEY` (then add it to
-  `001-full-deploy.yml` → `deploy/ci/install-secrets.sh`); check
-  `supabase/config.toml` redirect URLs (declared keys overwrite the dashboard);
-  bump the version; write manual end-to-end steps (real Google + Supabase).
 
 ### `wip/client-prediction` (WIP commit, unfinished and untested)
 - `scripts/world/player_predictor.gd`, changes to motion/input/smoother/abilities,
@@ -61,8 +78,8 @@ headless client joined a local server over WebSocket and its player synced.
 
 ## Waiting on the user
 
-- Accept or reject Proposed logs 0106, 0107, 0109, 0110, 0111 (and later
-  0112–0114 and the prediction log). If 0110 is accepted, set 0099 to
+- Accept or reject Proposed logs 0106, 0107, 0109, 0110, 0111, 0112–0116
+  (and later the prediction log). If 0110 is accepted, set 0099 to
   "Superseded by 0110".
 - Choose a domain for `wss://`.
 
