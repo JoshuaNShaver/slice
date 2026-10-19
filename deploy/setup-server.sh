@@ -123,7 +123,9 @@ systemctl start slice-traffic-watch.timer
 
 # --- Firewall ---------------------------------------------------------------
 ufw allow OpenSSH
-ufw allow "${PORT}/udp"
+# WebSocket (TCP) since design log 0110; drop the old ENet (UDP) rule.
+ufw allow "${PORT}/tcp"
+ufw delete allow "${PORT}/udp" >/dev/null 2>&1 || true
 ufw --force enable
 
 echo "Server configured. Godot: $(/opt/godot/godot --version)"

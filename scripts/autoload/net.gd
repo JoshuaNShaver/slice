@@ -4,6 +4,10 @@ extends Node
 ## Server-authoritative (design log 0013): the server owns the player list and
 ## sends it to clients. Offline play is a server with no network, so gameplay
 ## code always runs the same way.
+##
+## Online play runs over WebSocket for every client, desktop and web
+## (design log 0110): browsers can't use ENet, and one SceneMultiplayer
+## has one transport.
 
 signal session_started
 signal session_failed(reason: String)
@@ -18,6 +22,10 @@ enum Mode { OFFLINE, HOST, JOIN }
 const DEFAULT_PORT := 24680
 const MAX_CLIENTS := 32
 const MAX_SIDES := 64
+## WebSocket buffers per connection. The defaults (64 KiB) are too small for
+## the bigger packets (a joining player's info, the world's first sync).
+const BUFFER_BYTES := 1 << 20
+const MAX_QUEUED_PACKETS := 4096
 ## Clients and servers must match exactly to play together (design log
 ## 0109). Set in project.godot (application/config/version); bump it with
 ## any change an older client or server couldn't play with.
@@ -38,9 +46,6 @@ var in_session := false
 var last_message := ""
 
 var _local_info: Dictionary = {}
-## Server only. Peer id -> "ip:port", for logging which client a network
-## error might be about.
-var _addresses: Dictionary = {}
 ## Server only. Peer ids whose version matched; only they may register.
 var _verified: Dictionary = {}
 var _handshake: Node
@@ -67,8 +72,11 @@ func start_offline(info: Dictionary) -> void:
 ## Pass an empty info for a dedicated server with no local player.
 func host(on_port: int, info: Dictionary) -> void:
 	_reset()
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(on_port, MAX_CLIENTS)
+	if OS.has_feature("web"):
+		session_failed.emit("A browser can't host a server.")
+		return
+	var peer := _new_peer()
+	var err := peer.create_server(on_port)
 	if err != OK:
 		session_failed.emit("Couldn't host on port %d (%s)." % [on_port, error_string(err)])
 		return
@@ -79,13 +87,17 @@ func host(on_port: int, info: Dictionary) -> void:
 	_begin_as_server(info)
 
 
-## session_started fires once connected, session_failed if it can't connect.
+## session_started fires once connected and the version matches,
+## session_failed if it can't connect or is turned away. `address` is a host
+## name or IP, or a full ws:// or wss:// URL (then `on_port` is ignored).
 func join(address: String, on_port: int, info: Dictionary) -> void:
 	_reset()
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(address, on_port)
+	var url := server_url(address, on_port)
+	var peer := _new_peer()
+	var tls := TLSOptions.client() if url.begins_with("wss://") else null
+	var err := peer.create_client(url, tls)
 	if err != OK:
-		session_failed.emit("Couldn't connect to %s:%d (%s)." % [address, on_port, error_string(err)])
+		session_failed.emit("Couldn't connect to %s (%s)." % [url, error_string(err)])
 		return
 	mode = Mode.JOIN
 	port = on_port
@@ -98,6 +110,20 @@ func leave() -> void:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_reset()
+
+
+static func server_url(address: String, on_port: int) -> String:
+	if address.begins_with("ws://") or address.begins_with("wss://"):
+		return address
+	return "ws://%s:%d" % [address, on_port]
+
+
+func _new_peer() -> WebSocketMultiplayerPeer:
+	var peer := WebSocketMultiplayerPeer.new()
+	peer.inbound_buffer_size = BUFFER_BYTES
+	peer.outbound_buffer_size = BUFFER_BYTES
+	peer.max_queued_packets = MAX_QUEUED_PACKETS
+	return peer
 
 
 func describe_session() -> String:
@@ -115,7 +141,6 @@ func _reset() -> void:
 	chests.clear()
 	in_session = false
 	_local_info = {}
-	_addresses.clear()
 	_verified.clear()
 
 
@@ -184,9 +209,6 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
-	if mode == Mode.HOST and in_session:
-		_reopen_server()
-		return
 	var was_in := in_session
 	leave()
 	if was_in:
@@ -195,55 +217,20 @@ func _on_server_disconnected() -> void:
 		session_failed.emit("The server closed the connection.")
 
 
-## Host only. ENet shuts the whole server down when a send fails (e.g. a
-## client it can't reach), and SceneMultiplayer reports that as
-## server_disconnected. Rather than ending the session (which sent a
-## dedicated server back to the menu, restarting the world), log why, drop
-## the remote players and listen again on the same port. The world, and
-## a host's own player, carry on.
-func _reopen_server() -> void:
-	var known := []
-	for id: int in _addresses:
-		known.append("peer %d at %s" % [id, _addresses[id]])
-	push_warning(("Server network error: ENet couldn't send to a client, so the server "
-			+ "connection closed. Remote clients: %s. On macOS, check System Settings > "
-			+ "Privacy & Security > Local Network allows Godot (and your terminal). "
-			+ "Reopening port %d; remote players were dropped and can rejoin.")
-			% [", ".join(known) if not known.is_empty() else "none fully connected yet", port])
-	_addresses.clear()
-	var dropped := false
-	for id: int in players.keys():
-		if id != 1:
-			players.erase(id)
-			progress.erase(id)
-			chests.erase(id)
-			dropped = true
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(port, MAX_CLIENTS)
-	if err != OK:
-		push_error("Couldn't reopen port %d (%s); ending the session." % [port, error_string(err)])
-		leave()
-		session_ended.emit("The server's network failed.")
-		return
-	multiplayer.multiplayer_peer = peer
-	print("Server listening on port %d again" % port)
-	if dropped:
-		players_changed.emit()
-
-
 func _on_peer_connected(id: int) -> void:
 	if mode != Mode.HOST:
 		return
-	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
-	var packet_peer := peer.get_peer(id) if peer != null else null
-	if packet_peer != null:
-		_addresses[id] = "%s:%d" % [packet_peer.get_remote_address(), packet_peer.get_remote_port()]
-		print("Peer %d connecting from %s" % [id, _addresses[id]])
+	var peer := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
+	if peer != null:
+		print("Peer %d connecting from %s:%d" % [id, peer.get_peer_address(id), peer.get_peer_port(id)])
+	if multiplayer.get_peers().size() > MAX_CLIENTS:
+		print("Server full; turning away peer %d" % id)
+		_handshake.turn_away(id, "The server is full. Try again later.")
+		return
 	_handshake.expect_hello(id)
 
 
 func _on_peer_disconnected(id: int) -> void:
-	_addresses.erase(id)
 	_verified.erase(id)
 	progress.erase(id)
 	chests.erase(id)

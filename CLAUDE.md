@@ -47,8 +47,8 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/autoload/`: `FamilyStore` (3 local save slots in
   `user://families/`, house chests in `user://chests.json`), `Controls` (input actions, default keys, rebinding saved
   to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
-  `user://graphics.cfg`), `Net` (offline / host / join, server-owned player list, version
-  handshake),
+  `user://graphics.cfg`), `Net` (offline / host / join over WebSocket, server-owned player list,
+  version handshake),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
@@ -68,7 +68,10 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   its collision). Scripts with errors are skipped. `.tscn` edits and
   `@rpc` changes need a restart. A new `class_name` needs an import scan
   first (open the editor, or `Godot --headless --path . --import`). Disable with `-- --no-hot-reload`.
-- Exporting builds and LAN play: see `docs/EXPORT-AND-LAN.md`.
+- Exporting builds (macOS, Web) and LAN play: see `docs/EXPORT-AND-LAN.md`.
+  Web export: `Godot --headless --path . --export-release "Web" build/web/index.html`.
+  Guard web-only limits with `OS.has_feature("web")` (no hosting, no threads,
+  Compatibility renderer).
 - The online server (Hetzner VPS, provisioned and deployed by manual GitHub
   Actions, keys as GitHub secrets): see `deploy/README.md`.
 - Test scripts run with `-s`; autoloads are ready only after the first

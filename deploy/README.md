@@ -56,7 +56,7 @@ so no export templates are needed.
 - `/opt/godot/godot`: Godot.
 - `/opt/slice/releases/<commit>/`: the last 5 deploys; `/opt/slice/current`
   points at the running one.
-- `slice.service`: the game server, UDP 24680. Logs: `journalctl -u slice -f`.
+- `slice.service`: the game server, WebSocket on TCP 24680 (log 0110). Logs: `journalctl -u slice -f`.
 - `slice-traffic-watch.timer`: every 15 min, stops the server at 80% of the
   traffic allowance.
 - `/etc/slice/`: secrets installed by Provision server (root only):
@@ -69,8 +69,14 @@ the server, or use `slice_deploy` before deleting it.
 ## Notes
 
 - Changing `DEPLOY_HOST_KEY` only applies to a newly created server.
-- Players join at the server's IP, port 24680. When WebSocket support lands
-  (log 0099), setup gains Caddy and ports 80/443 for `wss://`.
+- Players join at the server's IP, port 24680, over plain `ws://`. A web
+  page served over HTTPS (itch.io) may only open `wss://`, so the web
+  build can't reach the server until it has a domain and TLS (proposed in
+  log 0111: Caddy on 443 in front of the game server). Desktop builds
+  connect fine meanwhile.
+- Deploys need the server and every client on the same version
+  (`application/config/version`, log 0109). After a deploy that bumps it,
+  upload a new web build too.
 - New server secrets get a check and an install step in
   `ci/install-secrets.sh`.
 - Migrations must work with the server version still running (log 0105):

@@ -38,8 +38,13 @@ func _hello(version: Variant) -> void:
 		_welcome.rpc_id(id)
 		return
 	print("Peer %d runs version %s, not %s; turning it away" % [id, theirs, Net.version])
-	_rejected.rpc_id(id, ("This server runs version %s; you have %s. Please update "
+	turn_away(id, ("This server runs version %s; you have %s. Please update "
 			+ "the game (in a browser, reload the page).") % [Net.version, theirs])
+
+
+## Server: tells a client why, then closes its connection.
+func turn_away(id: int, reason: String) -> void:
+	_rejected.rpc_id(id, reason)
 	await get_tree().create_timer(REJECT_GRACE).timeout
 	if Net.is_connected_peer(id):
 		Net.kick(id)

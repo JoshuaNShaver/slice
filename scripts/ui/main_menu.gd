@@ -117,13 +117,15 @@ func _build_server_panel() -> Control:
 
 	_mode_select = OptionButton.new()
 	_mode_select.add_item("Offline", Net.Mode.OFFLINE)
-	_mode_select.add_item("Host a server", Net.Mode.HOST)
+	if not OS.has_feature("web"):  # a browser can't listen for connections
+		_mode_select.add_item("Host a server", Net.Mode.HOST)
 	_mode_select.add_item("Join a server", Net.Mode.JOIN)
 	_mode_select.item_selected.connect(func(_index: int) -> void: _update_server_fields())
 	box.add_child(_mode_select)
 
 	_address_edit = LineEdit.new()
 	_address_edit.placeholder_text = "127.0.0.1"
+	_address_edit.tooltip_text = "An IP or host name, or a full ws:// or wss:// address."
 	_address_row = _labeled("Address", _address_edit)
 	box.add_child(_address_row)
 
@@ -306,7 +308,7 @@ func _play(slot: int) -> void:
 			Net.host(on_port, info)
 		Net.Mode.JOIN:
 			_set_busy(true)
-			_set_status("Connecting to %s:%d…" % [address, on_port])
+			_set_status("Connecting to %s…" % Net.server_url(address, on_port))
 			Net.join(address, on_port, info)
 
 
