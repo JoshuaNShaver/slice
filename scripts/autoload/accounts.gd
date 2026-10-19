@@ -46,10 +46,12 @@ var _tries: Dictionary = {}
 var guest_id_path := "user://account/guest_id.txt"
 
 
-## Server: picks the store (design log 0112). A local server (offline, or
-## hosting with a player) uses this machine's own files. A dedicated server
-## uses Supabase when SUPABASE_URL and SUPABASE_SECRET_KEY are set, else
-## its own folder (for dev). Returns an error message, or "".
+## Server: picks the store (design logs 0112, 0117). A local server
+## (offline, or hosting with a player) uses this machine's own files. A
+## dedicated server follows SAVES: "local" (its own folder, device-id
+## logins), "supabase" (needs all three SUPABASE_ settings), or unset
+## (Supabase if SUPABASE_URL and SUPABASE_SECRET_KEY are set, else local).
+## Returns an error message, or "".
 func setup_server(dedicated: bool, save_dir := "") -> String:
 	close_all()
 	if store != null and store != FamilyStore.store:
@@ -59,19 +61,27 @@ func setup_server(dedicated: bool, save_dir := "") -> String:
 	supabase_url = OS.get_environment("SUPABASE_URL").strip_edges().trim_suffix("/")
 	_secret_key = OS.get_environment("SUPABASE_SECRET_KEY").strip_edges()
 	publishable_key = OS.get_environment("SUPABASE_PUBLISHABLE_KEY").strip_edges()
+	var saves := OS.get_environment("SAVES").strip_edges().to_lower()
+	if dedicated and saves == "":
+		saves = "supabase" if supabase_url != "" or _secret_key != "" else "local"
 	if not dedicated:
 		store = FamilyStore.store
-	elif supabase_url != "" and _secret_key != "":
+	elif saves == "supabase":
+		var missing := []
+		for pair: Array in [["SUPABASE_URL", supabase_url], ["SUPABASE_SECRET_KEY", _secret_key],
+				["SUPABASE_PUBLISHABLE_KEY", publishable_key]]:
+			if pair[1] == "":
+				missing.append(pair[0])
+		if not missing.is_empty():
+			return "Supabase saves need %s (or set SAVES=local)." % ", ".join(missing)
 		if publishable_key == _secret_key or publishable_key.begins_with("sb_secret_"):
 			return "SUPABASE_PUBLISHABLE_KEY is a secret key; it would be sent to players."
 		store = SupabaseStore.new(supabase_url, _secret_key)
 		auth = "supabase"
-		if publishable_key == "":
-			push_warning("SUPABASE_PUBLISHABLE_KEY isn't set: players can't log in.")
-	elif supabase_url != "" or _secret_key != "":
-		return "Set both SUPABASE_URL and SUPABASE_SECRET_KEY, or neither (local saves)."
-	else:
+	elif saves == "local":
 		store = LocalFileStore.new(save_dir if save_dir != "" else "user://server/")
+	else:
+		return "SAVES must be local or supabase, not \"%s\"." % saves
 	if store.get_parent() == null:
 		store.name = "Store"
 		add_child(store)

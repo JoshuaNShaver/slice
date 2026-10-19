@@ -402,6 +402,8 @@ Values marked * are proposed tuning.
   saves live on that server. An online server uses Supabase (log 0114):
   tables `families` and `chests` keyed by the Supabase user, readable and
   writable only with the server's secret key.
+  A dedicated server's `SAVES` setting picks `local` or `supabase` (log
+  0117); unset, it uses Supabase when its settings are there.
 - **When it saves (log 0113, proposed, built):** checked every 3 s; level,
   bag, gear, abilities and chests saved at once (at most every 10 s), XP
   and pay within 45 s; leaving, dying and marrying at once.

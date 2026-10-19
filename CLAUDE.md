@@ -95,7 +95,8 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Save test (offline, temp folder): `-s tools/tests/test_saves.gd`. Online
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
   (see the file). A dev server can keep saves elsewhere with
-  `-- --server --save-dir=user://some-folder/`. No Docker here: Supabase
+  `-- --server --save-dir=user://some-folder/`. `SAVES=local|supabase`
+  picks its store (log 0117); settings are listed in `.env.example`. No Docker here: Supabase
   is mocked by `python3 tools/tests/supabase_mock.py` (see its header;
   `test_supabase_store.gd` runs against it).
 - Test scripts run with `-s`; autoloads are ready only after the first

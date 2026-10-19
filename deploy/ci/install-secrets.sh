@@ -66,7 +66,9 @@ if [ "$code" = 200 ] || [ "$SUPABASE_PUBLISHABLE_KEY" = "$SUPABASE_SECRET_KEY" ]
 	exit 1
 fi
 
-printf 'SUPABASE_URL=%s\nSUPABASE_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n' \
+# SAVES=supabase: a missing key stops the server instead of it quietly
+# saving to its own disk (log 0117).
+printf 'SAVES=supabase\nSUPABASE_URL=%s\nSUPABASE_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n' \
 	"$SUPABASE_URL" "$SUPABASE_SECRET_KEY" "$SUPABASE_PUBLISHABLE_KEY" \
 	| ssh root@server 'install -d -m 700 /etc/slice && umask 077 && cat > /etc/slice/server.env'
 # Same check again, from the server, with the installed file.
