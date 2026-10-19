@@ -18,6 +18,7 @@ extends RigidBody2D
 ## - inventory (PlayerInventory): bag, gear and house chests (logs 0036, 0064).
 ## - actions (PlayerActions): NPCs, shops, missions, marriage.
 ## - screen (PlayerScreen): server -> owner HUD messages and panels.
+## - chat (PlayerChat): chat lines and admin commands (logs 0124, 0125).
 ## - input (PlayerInput): the owner's keys, sent to the server.
 ## Saved progress (log 0038) is PlayerSave: progress() is what the family
 ## save keeps of this heir; create() restores it.
@@ -62,6 +63,7 @@ var stats: PlayerStats
 var inventory: PlayerInventory
 var actions: PlayerActions
 var screen: PlayerScreen
+var chat: PlayerChat
 var input: PlayerInput
 
 var points: PackedVector2Array  # the drawn outline
@@ -93,6 +95,7 @@ static func create(data: Dictionary) -> PlayerShape:
 	p.inventory = p._part(PlayerInventory.new(), "Inventory")
 	p.actions = p._part(PlayerActions.new(), "Actions")
 	p.screen = p._part(PlayerScreen.new(), "Screen")
+	p.chat = p._part(PlayerChat.new(), "Chat")
 	p.input = p._part(PlayerInput.new(), "Input")
 	p.stats.luck = data.get("luck", 0)
 	PlayerSave.apply(p, data.get("progress", {}), data.get("chest", []))

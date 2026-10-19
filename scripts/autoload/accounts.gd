@@ -4,8 +4,9 @@ extends Node
 ## 0116). A child of Net, at /root/Net/Accounts, alike on every peer.
 ##
 ## Joining: handshake (version) -> the server says how to log in ->
-## the client logs in -> the server loads that account from its store and
-## sends its family slots -> the client founds, deletes or picks one ->
+## the client logs in -> the server loads that account from its store ->
+## (an online account without a username picks one, log 0123) -> the
+## server sends its family slots -> the client founds, deletes or picks one ->
 ## play. The server keeps the account's data and saves it (SaveKeeper);
 ## clients never send their own save.
 ##
@@ -19,11 +20,18 @@ signal login_needed(info: Dictionary)
 signal slots_received(families: Array)
 ## Client: the server refused a request but kept the connection.
 signal account_error(message: String)
+## Client: this account has no username yet; problem is why the last try
+## was refused, or "" (log 0123).
+signal username_needed(problem: String)
+## Client: logged in with this username (online servers only).
+signal signed_in(username: String)
 
 const SLOT_COUNT := SaveStore.SLOT_COUNT
 const LOGIN_TIMEOUT := 300.0  # s a welcomed client has to log in
 const MAX_LOGIN_TRIES := 5
 const GUEST_PREFIX := "guest-"
+const USERNAME_MIN := 3
+const USERNAME_MAX := 16
 
 ## Server only.
 var store: SaveStore
@@ -37,9 +45,14 @@ var publishable_key := ""
 var _secret_key := ""
 ## Server only. Finds a peer's shape (set by the world): Callable(id) -> PlayerShape.
 var find_player := Callable()
-## Server only. Peer id -> {"account", "families" (Family or null),
-## "chest", "slot" (-1 until playing), "saved_at"}.
+## Server only. Peer id -> {"account", "username" ("" until chosen;
+## always "" for guests), "role" ("player" or "admin", log 0125),
+## "families" (Family or null), "chest", "slot" (-1 until playing),
+## "saved_at"}.
 var sessions: Dictionary = {}
+## Server only. Every login is an admin (--dev-admins, for tests and dev
+## servers; log 0125).
+var dev_admins := false
 var _tries: Dictionary = {}
 
 ## Client only. Where this device keeps its guest id (tests change it).
@@ -58,6 +71,7 @@ func setup_server(dedicated: bool, save_dir := "") -> String:
 		store.queue_free()
 	store = null
 	auth = "guest"
+	dev_admins = dedicated and OS.get_cmdline_user_args().has("--dev-admins")
 	supabase_url = OS.get_environment("SUPABASE_URL").strip_edges().trim_suffix("/")
 	_secret_key = OS.get_environment("SUPABASE_SECRET_KEY").strip_edges()
 	publishable_key = OS.get_environment("SUPABASE_PUBLISHABLE_KEY").strip_edges()
@@ -87,6 +101,8 @@ func setup_server(dedicated: bool, save_dir := "") -> String:
 		add_child(store)
 	keeper.store = store
 	print("Saves: %s; logins: %s" % [store.describe(), auth])
+	if dev_admins:
+		print("WARNING: --dev-admins: everyone who logs in is an admin.")
 	return ""
 
 
@@ -101,6 +117,7 @@ func attach_local(id: int, slot: int) -> bool:
 	if family == null or family.extinct:
 		return false
 	session.slot = slot
+	session.role = "admin"  # your own machine's game (log 0125)
 	sessions[id] = session
 	return true
 
@@ -112,6 +129,13 @@ func family_of(id: int) -> Family:
 
 func chest_of(id: int) -> Array:
 	return sessions[id].chest if sessions.has(id) else []
+
+
+## "admin" or "player" (log 0125): admins may use \ commands in chat.
+func role_of(id: int) -> String:
+	if not sessions.has(id):
+		return "player"
+	return "admin" if dev_admins else sessions[id].get("role", "player")
 
 
 func is_playing(id: int) -> bool:
@@ -221,15 +245,71 @@ func _log_in(credential: Variant) -> void:
 			_refuse_login(id, "This account is already playing on this server.")
 			return
 	var data: Dictionary = await store.load_account(account)
+	var profile := {"ok": true, "username": "", "role": "player"}
+	if data.ok and auth == "supabase":
+		profile = await store.load_profile(account)
 	if not Net.is_connected_peer(id):
 		return
-	if not data.ok:
+	if not data.ok or not profile.ok:
 		print("Couldn't load account %s for peer %d" % [account, id])
 		Net.turn_away(id, "The server couldn't load your saves. Please try again later.")
 		return
 	sessions[id] = _new_session(account, data)
+	sessions[id].username = profile.username
+	sessions[id].role = "admin" if profile.get("role") == "admin" else "player"
 	print("Peer %d logged in as %s" % [id, account])
+	if auth == "supabase" and profile.username == "":
+		_username_needed.rpc_id(id, "")
+	else:
+		_welcome(id)
+
+
+## Logged in and named: the client gets its name and slots.
+func _welcome(id: int) -> void:
+	if auth == "supabase":
+		_signed_in.rpc_id(id, sessions[id].username)
 	_send_slots(id)
+
+
+## Why a username can't be used, or "" if it can (log 0123): 3 to 16
+## letters, digits or underscores. Taken names are the store's to say.
+static func username_problem(username: String) -> String:
+	if username.length() < USERNAME_MIN or username.length() > USERNAME_MAX:
+		return "Use %d to %d characters." % [USERNAME_MIN, USERNAME_MAX]
+	for c in username:
+		if not (c == "_" or (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9")):
+			return "Use only letters, numbers and _."
+	return ""
+
+
+## Client -> server: the username this account wants (once).
+@rpc("any_peer", "call_remote", "reliable")
+func _choose_username(username: Variant) -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if not multiplayer.is_server() or auth != "supabase" or not sessions.has(id):
+		return
+	var session: Dictionary = sessions[id]
+	if session.username != "" or session.get("naming", false):
+		return
+	var wanted: String = username.strip_edges() if username is String else ""
+	var problem := username_problem(wanted)
+	if problem != "":
+		_username_needed.rpc_id(id, problem)
+		return
+	session.naming = true
+	var result := await store.claim_username(session.account, wanted)
+	session.erase("naming")
+	if not is_same(sessions.get(id), session):  # left meanwhile
+		return
+	if result.ok:
+		session.username = wanted
+		print("Peer %d is %s" % [id, wanted])
+		_welcome(id)
+	elif result.get("taken", false):
+		_username_needed.rpc_id(id, "%s is taken. Try another name." % wanted)
+	else:
+		print("Couldn't save a username for %s: %s" % [session.account, result.get("error", "")])
+		_username_needed.rpc_id(id, "The server couldn't save your name just now. Please try again.")
 
 
 ## {"account": String} or {"error": String}.
@@ -277,8 +357,8 @@ func _new_session(account: String, data: Dictionary) -> Dictionary:
 	for i in mini(data.families.size(), SLOT_COUNT):
 		var raw: Variant = data.families[i]
 		families[i] = Family.from_dict(raw) if raw is Dictionary else null
-	return {"account": account, "families": families, "chest": data.chest, "slot": -1,
-			"saved_at": SaveKeeper._now()}
+	return {"account": account, "username": "", "role": "player", "families": families, "chest": data.chest,
+			"slot": -1, "saved_at": SaveKeeper._now()}
 
 
 # --- Slots (server) --------------------------------------------------------
@@ -293,6 +373,8 @@ func _send_slots(id: int) -> void:
 func _session_for_menu(id: int) -> Dictionary:
 	if not multiplayer.is_server() or not sessions.has(id) or sessions[id].slot >= 0:
 		return {}
+	if auth == "supabase" and sessions[id].username == "":
+		return {}  # still picking a name
 	return sessions[id]
 
 
@@ -348,6 +430,10 @@ func log_in_with_token(access_token: String) -> void:
 	_log_in.rpc_id(1, {"token": access_token})
 
 
+func choose_username(username: String) -> void:
+	_choose_username.rpc_id(1, username.strip_edges())
+
+
 func found(slot: int, family_name: String, start_kind: String) -> void:
 	_found.rpc_id(1, slot, family_name, start_kind)
 
@@ -376,6 +462,16 @@ func guest_id() -> String:
 @rpc("authority", "call_remote", "reliable")
 func _login_needed(info: Dictionary) -> void:
 	login_needed.emit(info)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _username_needed(problem: String) -> void:
+	username_needed.emit(problem)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _signed_in(username: String) -> void:
+	signed_in.emit(username)
 
 
 @rpc("authority", "call_remote", "reliable")

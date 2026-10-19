@@ -11,11 +11,9 @@ signal message(text: String)
 ## The browser login didn't finish (cancelled, timed out, refused).
 signal login_failed(reason: String)
 ## A token is on its way to the server.
-signal signing_in(email: String)
+signal signing_in
 
 var auth := SupabaseAuth.new()
-## Who we're logged in as on a Supabase server, or "".
-var email := ""
 var _answers := 0
 
 
@@ -47,7 +45,6 @@ func answer(info: Dictionary) -> void:
 					return
 			else:
 				auth.forget()  # the server refused that login
-				email = ""
 			needs_button.emit()
 		_:
 			message.emit("This server asks for a login this game doesn't know.")
@@ -69,7 +66,6 @@ func cancel_google() -> void:
 
 func log_out() -> void:
 	auth.forget()
-	email = ""
 
 
 ## Web: after coming back from the login page. True if now logged in.
@@ -81,6 +77,5 @@ func finish_web_login() -> bool:
 
 
 func _send(token: String) -> void:
-	email = auth.saved_email()
-	signing_in.emit(email)
+	signing_in.emit()
 	Net.accounts.log_in_with_token(token)

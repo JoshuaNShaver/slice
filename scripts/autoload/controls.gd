@@ -28,8 +28,8 @@ const ACTIONS: Array[Dictionary] = [
 	{"action": "quick_4", "label": "Quick slot 4", "keys": [KEY_4]},
 	{"action": "quick_5", "label": "Quick slot 5", "keys": [KEY_5]},
 	{"action": "character_sheet", "label": "Character sheet", "keys": [KEY_TAB]},
+	{"action": "chat", "label": "Chat", "keys": [KEY_ENTER]},
 	{"action": "menu", "label": "Menu", "keys": [KEY_ESCAPE]},
-	{"action": "debug_level_up", "label": "Level up (debug)", "keys": [KEY_L], "debug": true},
 ]
 
 ## On a touch screen (Touch, design log 0122), hints name these on-screen
@@ -38,11 +38,17 @@ const TOUCH_NAMES := {
 	"roll_left": "Stick", "roll_right": "Stick", "jump": "Jump",
 	"nose_dive": "Dive", "spike_up": "Spike", "rush": "Rush",
 	"interact": "Use", "pickup": "Take", "drink": "Drink", "home": "Home",
-	"character_sheet": "Bag", "menu": "Menu",
+	"character_sheet": "Bag", "chat": "Chat", "menu": "Menu",
 }
 
 ## True while the controls screen waits for a key, so gameplay ignores it.
 var capturing := false
+
+
+## True while keys go to a text field (chat), so gameplay ignores them.
+func typing() -> bool:
+	var focus := get_viewport().gui_get_focus_owner()
+	return focus is LineEdit or focus is TextEdit
 
 
 func _ready() -> void:

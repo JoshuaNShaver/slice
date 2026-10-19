@@ -402,7 +402,11 @@ Values marked * are proposed tuning.
 - **Sign-in screen (log 0120, proposed, built):** Online connects at once
   and shows one card per step: reaching the server, can't reach it (Try
   again), "Sign in with Google" (Google's white button and G), finish in
-  the browser. Signed in: "Signed in as … · Sign out" above the slots.
+  the browser. Signed in: "Signed in as <username> · Sign out" above the
+  slots.
+- **Usernames (log 0123):** a first online sign-in picks a username (3–16
+  letters, numbers or `_`, unique ignoring case, set once) before the
+  slots. The server keeps it in `profiles`; players never see an email.
 - **3 family save slots.** Each slot: create a new family, play, or delete.
 - **Saved progress (log 0038):** a family save keeps the lineage and the
   current heir's level, XP, stats, bag and worn gear. The server still
@@ -414,7 +418,7 @@ Values marked * are proposed tuning.
   machine's files (`user://families/`, `user://chests.json`), as before.
   LAN joiners and a dev server's players log in with a device id; their
   saves live on that server. An online server uses Supabase (log 0114):
-  tables `families` and `chests` keyed by the Supabase user, readable and
+  tables `families`, `chests` and `profiles` keyed by the Supabase user, readable and
   writable only with the server's secret key.
   A dedicated server's `SAVES` setting picks `local` or `supabase` (log
   0117); unset, it uses Supabase when its settings are there.
@@ -485,6 +489,18 @@ As in the book, women are straight lines.
 - **Before public hosting (log 0100):** split `PlayerShape` into
   components (done, log 0106), version check, accounts and server-owned
   saves, then the web build.
+- **Chat (log 0124):** Enter (or Chat on a touch screen) opens a typing
+  line. Lines reach everyone in the same part of the world (overworld,
+  underworld, or one mission; proposed), in the chat log and a bubble over
+  the speaker. One line, 160 characters, 5 lines per 5 s. With keys the
+  log sits bottom left and fades; on a touch screen it sits top left with
+  the typing line on top, clear of the phone's keyboard.
+- **Admins (log 0125):** `profiles.role` is `player` or `admin`, set only
+  by a database update. Admins type commands into chat:
+  `\<noun> <verb> [words] [--flags]`, e.g. `\player list`,
+  `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
+  `\help` lists them. Offline and a host's own player are admins; a
+  dedicated server with `--dev-admins` makes everyone one (tests, dev).
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.

@@ -37,7 +37,8 @@ Mark your own suggestions `Proposed` until the user agrees.
   jumps, teleports, rides), `PlayerMoves` (using abilities), `PlayerCombat`
   (hits, healing, death), `PlayerStats`, `PlayerInventory` (bag, gear,
   chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
-  (server -> owner HUD messages), `PlayerInput` (owner's keys);
+  (server -> owner HUD messages), `PlayerChat` (chat lines and admin
+  commands, log 0124), `PlayerInput` (owner's keys);
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
@@ -51,6 +52,10 @@ Mark your own suggestions `Proposed` until the user agrees.
   `NoseDiveAbility`, `SpikeUpAbility`) extending `Ability`; `Abilities`
   (the registry, shop order) and `MoveSet` (one body's abilities, for
   players and Revolt bosses). Log 0107.
+- `scripts/admin/`: admin commands typed into chat after `\` (log 0125):
+  `AdminConsole` (parsing, help, who's an admin, short player ids) and one
+  script per noun (`PlayerCommands`). Roles: `profiles.role`, set only in
+  the database.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
 - `scripts/saves/`: the server's account storage (logs 0097, 0112):
@@ -70,7 +75,7 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/web_app.gd`: the
   web build's update-and-reload (log 0122). `scripts/ui/`: palette, item slot,
-  theme, HUD, touch controls, shape icon, stat bar, parchment background, atmosphere
+  theme, HUD, touch controls, chat box, shape icon, stat bar, parchment background, atmosphere
   (foreground dust/light/fog), menu (Offline / Online, log 0119), online
   login, Google sign-in button.
 - UI is built in code from a bare root node; scenes stay minimal.
@@ -97,7 +102,9 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   (prints RESULT lines to compare before and after a refactor).
 - Save test (offline, temp folder): `-s tools/tests/test_saves.gd`. Online
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
-  (see the file). A dev server can keep saves elsewhere with
+  (see the file; start that server with `--dev-admins`, since the test
+  levels up with an admin command). Chat and admin commands:
+  `-s tools/tests/test_chat.gd`. A dev server can keep saves elsewhere with
   `-- --server --save-dir=user://some-folder/`. `SAVES=local|supabase`
   picks its store (log 0117); settings are in `.env.example`, steps in README.md "Saves and logins". Quick tests use a
   mock Supabase, `python3 tools/tests/supabase_mock.py` (see its header;

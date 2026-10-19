@@ -149,6 +149,14 @@ supabase db push --dry-run && supabase db push       # tables
 supabase config diff && supabase config push         # auth settings
 ```
 
+To make someone an admin (design log 0125; they can then type `\help` in
+the game's chat), run this in the dashboard's SQL editor. They get it on
+their next login:
+
+```sql
+update public.profiles set role = 'admin' where username = 'TheirName';
+```
+
 ## Run a game client
 
 ```sh

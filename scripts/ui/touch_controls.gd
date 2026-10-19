@@ -8,10 +8,11 @@ extends Control
 ##   pushing partway rolls slower.
 ## - Right: a big Jump button, the abilities you own in an arc around it,
 ##   and Use / Take beside them only while there's something to use or take.
-## - Top right, under the pay: Drink, Home, Bag (character sheet), Menu.
+## - Top right, under the pay: Drink, Home, Chat, Bag (character sheet), Menu.
 ##
 ## Each finger is tracked on its own, so you can roll and jump at once.
-## While a panel is open only the top row stays, so Menu can close it.
+## While a panel or the chat is open only the top row stays, so Menu or
+## Chat can close it.
 
 const STICK_ZONE := Vector2(0.36, 0.3)  # the stick's area: left 36% (clear of the quick slots), below the top 30%
 const STICK_RADIUS := 90.0
@@ -24,7 +25,7 @@ const CONTEXT_RADIUS := 42.0
 const TOP_RADIUS := 30.0
 const TOP_Y := 92.0
 const TOP_SPACING := 74.0
-const TOP_ACTIONS: Array[String] = ["menu", "character_sheet", "home", "drink"]  # right to left
+const TOP_ACTIONS: Array[String] = ["menu", "character_sheet", "chat", "home", "drink"]  # right to left
 const FILL := Color(0.97, 0.94, 0.86, 0.5)
 const FILL_PRESSED := Color(0.23, 0.16, 0.12, 0.35)
 const LINE := Color(0.23, 0.16, 0.12, 0.7)

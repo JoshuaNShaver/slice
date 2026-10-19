@@ -23,6 +23,8 @@ extends CanvasLayer
 ## - On a touch screen (Touch, design log 0122): TouchControls instead of
 ##   the key hints, the quick slots at the bottom center, and the bag only
 ##   while a panel is open.
+## - Chat (ChatBox, design log 0124): Enter, or Chat on a touch screen.
+##   What players nearby say also shows in a bubble over them.
 ## Energy is drawn by PlayerShape, as pips over your own shape.
 
 signal leave_requested
@@ -56,6 +58,7 @@ var _quick_keys: Array[Label] = []
 var _slots_column: VBoxContainer
 var _bag_grid: GridContainer
 var _touch: TouchControls
+var _chat: ChatBox
 var _touch_layout := false  # the slots are placed for touch
 var _gear_slots: Array[ItemSlot] = []  # indexed like Gear.SLOTS
 var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.chest
@@ -110,7 +113,9 @@ func _hot_reload() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_pressed() or event.is_echo():
 		return
-	if event.is_action_pressed("character_sheet"):
+	if event.is_action_pressed("chat"):
+		_chat.toggle()
+	elif event.is_action_pressed("character_sheet"):
 		_character.visible = not _character.visible
 		_menu.visible = false
 		_controls.visible = false
@@ -192,10 +197,9 @@ func _hint_text() -> String:
 	var menus: Array[String] = [
 		Controls.describe("home") + " home",
 		Controls.describe("character_sheet") + " character",
+		Controls.describe("chat") + " chat",
 		Controls.describe("menu") + " menu",
 	]
-	if OS.is_debug_build():
-		menus.append(Controls.describe("debug_level_up") + " level up (debug)")
 	return "  ·  ".join(actions) + "\n" + "  ·  ".join(menus)
 
 
@@ -292,6 +296,7 @@ func _set_underground(on: bool) -> void:
 	_pay_label.add_theme_color_override("font_color", ink)
 	_message.add_theme_color_override("font_color", ink)
 	_hint.add_theme_color_override("font_color", faded)
+	_chat.set_underground(on)
 
 
 func show_message(text: String) -> void:
@@ -320,6 +325,21 @@ func say(speaker: String, text: String) -> void:
 func speak_from(target: Node2D, offset: Vector2, text: String) -> void:
 	if is_instance_valid(target):
 		_bubble(target, false, offset).add_line(text)
+
+
+## Someone nearby said something in chat (PlayerChat): in the log, and in
+## a bubble over them if they're in this world.
+func hear(speaker_id: int, speaker: String, text: String) -> void:
+	_chat.add_said(speaker, text)
+	for node in get_tree().get_nodes_in_group(PlayerShape.GROUP):
+		var p := node as PlayerShape
+		if p.peer_id == speaker_id:
+			speak_from(p, Vector2(0, -PlayerShape.RADIUS - 10), text)
+
+
+## The server answered you (an admin command, or "too fast").
+func chat_notice(text: String) -> void:
+	_chat.add_notice(text)
 
 
 ## Your own news, in a thought cloud beside you.
@@ -469,6 +489,12 @@ func _build() -> void:
 	hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_root.add_child(hint)
 
+	_chat = ChatBox.new()
+	_chat.line_entered.connect(func(text: String) -> void:
+		if _me != null and is_instance_valid(_me):
+			_me.chat.send_line(text))
+	_root.add_child(_chat)  # under the panels
+
 	_character = _build_character()
 	_root.add_child(_character)
 	_menu = _build_menu()
@@ -566,7 +592,8 @@ func _layout_for_touch() -> void:
 	var panel := _character.visible or _menu.visible or _controls.visible \
 			or _storage.visible or _orders.visible or _shop.visible
 	_touch.visible = touch
-	_touch.playing = not panel
+	_touch.playing = not panel and not _chat.is_open
+	_chat.set_touch(touch)
 	_hint.visible = not touch
 	_bag_grid.visible = not touch or panel
 	var centered := touch and not panel

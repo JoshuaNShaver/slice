@@ -2,7 +2,8 @@ class_name SupabaseStore
 extends SaveStore
 ## Account data in Supabase Postgres, through PostgREST (design logs 0112,
 ## 0114): tables `families` (user_id, slot, data) and `chests` (user_id,
-## items), keyed by the Supabase user id. Only the server's secret key may
+## items) and `profiles` (user_id, username, role; logs 0123, 0125), keyed by the
+## Supabase user id. Only the server's secret key may
 ## touch them.
 ##
 ## Saves are queued, newest data per slot. Each slot sends one write at a
@@ -63,6 +64,37 @@ func load_account(account: String) -> Dictionary:
 		await get_tree().create_timer(1.0 + attempt * 2.0).timeout
 	push_error("Supabase: couldn't load %s" % account)
 	return {"ok": false, "families": [], "chest": []}
+
+
+func load_profile(account: String) -> Dictionary:
+	if not is_uuid(account):
+		return {"ok": false, "username": "", "role": "player"}
+	for attempt in LOAD_TRIES:
+		var reply := await _rest(HTTPClient.METHOD_GET, "profiles?select=username,role&user_id=eq.%s" % account)
+		if reply.ok and reply.data is Array:
+			var rows: Array = reply.data
+			var profile := {"ok": true, "username": "", "role": "player"}
+			if not rows.is_empty() and rows[0] is Dictionary:
+				profile.username = str(rows[0].get("username", ""))
+				profile.role = str(rows[0].get("role", "player"))
+			return profile
+		push_warning("Supabase: loading the name of %s failed (%s), try %d of %d" % [account,
+				reply.error, attempt + 1, LOAD_TRIES])
+		await get_tree().create_timer(1.0 + attempt * 2.0).timeout
+	return {"ok": false, "username": "", "role": "player"}
+
+
+## One insert: the unique index on lower(username) refuses a taken name.
+func claim_username(account: String, username: String) -> Dictionary:
+	if not is_uuid(account):
+		return {"ok": false, "error": "not a user id"}
+	var reply := await _rest(HTTPClient.METHOD_POST, "profiles",
+			{"user_id": account, "username": username})
+	if reply.ok:
+		return {"ok": true}
+	if reply.code == 409:
+		return {"ok": false, "taken": true}
+	return {"ok": false, "error": reply.error}
 
 
 func save_family(account: String, slot: int, data: Dictionary) -> void:

@@ -1,6 +1,7 @@
 extends SceneTree
 ## Online join test against a running dedicated server (online_checks.gd).
-## Exits 1 on any failure.
+## Exits 1 on any failure. Start the server with --dev-admins (the test
+## levels up with an admin command, log 0125).
 ##
 ##   Godot --headless --path . -s tools/tests/test_online.gd -- --port=24690 [--token=T] [--bad-token=T]
 

@@ -30,15 +30,6 @@ func regen_energy(step: float) -> void:
 	energy = minf(energy + Stats.energy_regen(mettle) * step, Stats.MAX_ENERGY)
 
 
-## Owner -> server. Debug builds only.
-@rpc("any_peer", "call_local", "reliable")
-func _submit_debug_level_up() -> void:
-	if OS.is_debug_build() and player.from_owner():
-		var rng := RandomNumberGenerator.new()
-		rng.randomize()
-		level_up(rng)
-
-
 ## Server only.
 func level_up(rng: RandomNumberGenerator) -> void:
 	if level >= Stats.MAX_LEVEL:
@@ -52,6 +43,25 @@ func level_up(rng: RandomNumberGenerator) -> void:
 	var new_max := Stats.max_hp(vigor)
 	hp += new_max - max_hp  # the new health arrives full
 	max_hp = new_max
+
+
+## Server only. Jumps to `target` level (admin command, log 0125). Going
+## up rolls each level's gains, like leveling; going down re-rolls from
+## level 1, so stats always match the level. Gear's bonuses stay.
+func set_level(target: int, rng: RandomNumberGenerator) -> void:
+	target = clampi(target, 1, Stats.MAX_LEVEL)
+	if target < level:
+		var gear := Gear.total_bonus(player.inventory.equipped)
+		apply_gains(gear, -1)
+		level = 1
+		for stat: String in Stats.LEVELED:
+			set(stat, 0)
+		apply_gains(gear, 1)
+		max_hp = Stats.max_hp(vigor)
+		hp = clampi(hp, 1, max_hp)
+	while level < target:
+		level_up(rng)
+	xp = 0
 
 
 ## Server only. Levels up as many times as the XP covers (design log 0028).

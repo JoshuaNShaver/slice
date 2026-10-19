@@ -10,7 +10,11 @@ var _sent_move := 0.0  # last move value sent, so we only send changes
 func _physics_process(_delta: float) -> void:
 	if not player.is_local():
 		return
-	if Controls.capturing:  # the controls screen is waiting for a key
+	# The controls screen is waiting for a key, or you're typing in chat.
+	if Controls.capturing or Controls.typing():
+		if _sent_move != 0.0:
+			_sent_move = 0.0
+			player.motion._submit_move.rpc_id(1, 0.0)
 		return
 	var move := Input.get_axis("roll_left", "roll_right")
 	if move != _sent_move:
@@ -32,6 +36,3 @@ func _physics_process(_delta: float) -> void:
 	for n in PlayerInventory.QUICK_SLOTS:
 		if Input.is_action_just_pressed("quick_%d" % (n + 1)):
 			player.inventory.request_use(PlayerInventory.BAG_SLOTS + n)
-	# There's no XP yet, so debug builds can level up by hand to test scaling.
-	if OS.is_debug_build() and Input.is_action_just_pressed("debug_level_up"):
-		player.stats._submit_debug_level_up.rpc_id(1)

@@ -2,7 +2,8 @@
 """A tiny stand-in for Supabase, for the online tests (no Docker needed).
 
 Implements only what the game uses:
-  PostgREST: GET/POST/DELETE /rest/v1/families, GET/POST /rest/v1/chests
+  PostgREST: GET/POST/DELETE /rest/v1/families, GET/POST /rest/v1/chests,
+        GET/POST /rest/v1/profiles (409 on a taken name, any case)
   Auth: GET /auth/v1/user, GET /auth/v1/authorize (PKCE, redirects at
         once as if Google said yes), POST /auth/v1/token?grant_type=pkce
         and ?grant_type=refresh_token
@@ -29,7 +30,7 @@ USERS = {
 PUBLISHABLE = "sb_publishable_test"
 
 lock = threading.RLock()
-state = {"families": {}, "chests": {}, "fail": 0, "requests": 0, "bytes_out": 0, "writes": 0,
+state = {"families": {}, "chests": {}, "profiles": {}, "fail": 0, "requests": 0, "bytes_out": 0, "writes": 0,
          "codes": {}, "refresh": {}}
 
 
@@ -83,7 +84,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/_mock/dump":
             with lock:
                 dump = {"families": {f"{k[0]}:{k[1]}": v for k, v in state["families"].items()},
-                        "chests": state["chests"], "requests": state["requests"],
+                        "chests": state["chests"], "profiles": state["profiles"], "requests": state["requests"],
                         "bytes_out": state["bytes_out"], "writes": state["writes"]}
             return self.reply(200, dump)
         self.reply(404, {})
@@ -123,6 +124,23 @@ class Handler(BaseHTTPRequestHandler):
                 with lock:
                     state["chests"][row["user_id"]] = row
                     state["writes"] += 1
+                return self.reply(201, None if minimal else [row])
+        if table == "profiles":
+            if self.command == "GET":
+                with lock:
+                    rows = [{"username": state["profiles"][user], "role": "player"}] if user in state["profiles"] else []
+                return self.reply(200, rows)
+            if self.command == "POST":
+                row = self.body()
+                name = row.get("username", "")
+                with lock:
+                    taken = row["user_id"] in state["profiles"] or any(
+                        n.lower() == name.lower() for n in state["profiles"].values())
+                    if not taken:
+                        state["profiles"][row["user_id"]] = name
+                        state["writes"] += 1
+                if taken:
+                    return self.reply(409, {"code": "23505", "message": "duplicate key value"})
                 return self.reply(201, None if minimal else [row])
         self.reply(404, {"message": "no table"})
 

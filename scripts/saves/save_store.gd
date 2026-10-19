@@ -31,6 +31,19 @@ func save_chest(_account: String, _items: Array) -> void:
 	pass
 
 
+## The account's profile: {"ok": bool, "username": "" if none (log
+## 0123), "role": "player" or "admin" (log 0125)}.
+func load_profile(_account: String) -> Dictionary:
+	return {"ok": true, "username": "", "role": "player"}
+
+
+## Gives the account a username, once. {"ok": true}, {"ok": false,
+## "taken": true} if another account has it (any case), or {"ok": false,
+## "error": String}.
+func claim_username(_account: String, _username: String) -> Dictionary:
+	return {"ok": false, "error": "this store keeps no usernames"}
+
+
 ## Writes not yet stored (0 for a store that writes at once).
 func pending_count() -> int:
 	return 0

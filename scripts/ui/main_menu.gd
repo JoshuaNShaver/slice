@@ -15,8 +15,9 @@ const SETTINGS_PATH := "user://settings.cfg"
 const ROMAN: Array[String] = ["I", "II", "III"]
 const CARD_WIDTH := 420
 
-## Online: not connected, connecting, logging in, picking a family, starting.
-enum Online { OFF, CONNECTING, LOGIN, SLOTS, STARTING }
+## Online: not connected, connecting, logging in, choosing a username,
+## picking a family, starting.
+enum Online { OFF, CONNECTING, LOGIN, USERNAME, SLOTS, STARTING }
 
 var _offline_tab: Button
 var _online_tab: Button
@@ -39,6 +40,12 @@ var _online_note := ""
 var _online_error := ""
 ## Online: why the last Google login didn't finish, or "".
 var _sign_in_problem := ""
+## Online: who we're signed in as; players see this, never an email (log 0123).
+var _username := ""
+## Online: why the last username was refused, or "".
+var _username_problem := ""
+## Online: the username being typed, kept across refreshes.
+var _username_draft := ""
 
 
 func _ready() -> void:
@@ -52,6 +59,9 @@ func _ready() -> void:
 	Net.accounts.login_needed.connect(_on_login_needed)
 	Net.accounts.slots_received.connect(_on_slots_received)
 	Net.accounts.account_error.connect(_set_status)
+	Net.accounts.username_needed.connect(_on_username_needed)
+	Net.accounts.signed_in.connect(func(username: String) -> void:
+		_username = username)
 	_login = OnlineLogin.new()
 	add_child(_login)
 	_login.message.connect(_set_status)
@@ -61,9 +71,9 @@ func _ready() -> void:
 		_refresh())
 	_login.login_failed.connect(func(reason: String) -> void:
 		_sign_in_problem = reason)
-	_login.signing_in.connect(func(email: String) -> void:
+	_login.signing_in.connect(func() -> void:
 		_in_browser = false
-		_online_note = "Signing in as %s…" % email if email != "" else "Signing in…"
+		_online_note = "Signing in…"
 		_refresh())
 	FamilyStore.slots_changed.connect(_refresh)
 	FamilyStore.reload()  # a local server may have saved since
@@ -190,6 +200,8 @@ func _refresh() -> void:
 			_body.add_child(_centered(_build_sign_in_card()))
 		Online.LOGIN when _in_browser:
 			_body.add_child(_centered(_build_browser_card()))
+		Online.USERNAME:
+			_body.add_child(_centered(_build_username_card()))
 		Online.STARTING:
 			_body.add_child(_centered(_build_wait_card("Entering the world…", false)))
 		_:
@@ -222,8 +234,8 @@ func _build_account_bar() -> Control:
 	row.add_theme_constant_override("separation", 12)
 	var who := _note("")
 	who.autowrap_mode = TextServer.AUTOWRAP_OFF  # a wrapping label in a row has no width
-	if _login.email != "":
-		who.text = "Signed in as %s" % _login.email
+	if _username != "":
+		who.text = "Signed in as %s" % _username
 		row.add_child(who)
 		var sign_out := _small_button("Sign out")
 		sign_out.disabled = _busy
@@ -280,6 +292,44 @@ func _build_sign_in_card() -> Control:
 		_login.log_in_with_google())
 	box.add_child(_centered(google))
 	box.add_child(_server_line())
+	return box.get_parent() as Control
+
+
+## Online, first sign-in: the name other players will see.
+func _build_username_card() -> Control:
+	var box := _online_card("Choose a username")
+	box.add_child(_note("This is the name others see. Your email stays private.", true))
+	var edit := LineEdit.new()
+	edit.placeholder_text = "Username"
+	edit.max_length = Accounts.USERNAME_MAX
+	edit.text = _username_draft
+	edit.editable = not _busy
+	edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	edit.text_changed.connect(func(text: String) -> void:
+		_username_draft = text)
+	edit.text_submitted.connect(func(_text: String) -> void: _submit_username())
+	box.add_child(edit)
+	var problem := _note(_username_problem if _username_problem != "" else
+			"%d to %d letters, numbers or _." % [Accounts.USERNAME_MIN, Accounts.USERNAME_MAX], true)
+	if _username_problem != "":
+		problem.add_theme_color_override("font_color", Palette.INK)
+	box.add_child(problem)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var go := Button.new()
+	go.text = "Continue"
+	go.custom_minimum_size = Vector2(180, 0)
+	go.disabled = _busy
+	go.pressed.connect(_submit_username)
+	row.add_child(go)
+	var sign_out := _small_button("Sign out")
+	sign_out.disabled = _busy
+	sign_out.pressed.connect(_sign_out)
+	row.add_child(sign_out)
+	box.add_child(row)
+	if not _busy:
+		edit.grab_focus.call_deferred()
 	return box.get_parent() as Control
 
 
@@ -512,8 +562,29 @@ func _connect() -> void:
 	_needs_login_button = false
 	_in_browser = false
 	_sign_in_problem = ""
+	_username = ""
+	_username_problem = ""
 	_set_busy(true)
 	Net.join(Net.online_address(), Net.DEFAULT_PORT)
+
+
+func _submit_username() -> void:
+	if _busy:
+		return
+	var username := _username_draft.strip_edges()
+	_username_problem = Accounts.username_problem(username)
+	if _username_problem != "":
+		_refresh()
+		return
+	_set_busy(true)
+	Net.accounts.choose_username(username)
+
+
+func _on_username_needed(problem: String) -> void:
+	_online = Online.USERNAME
+	_username_problem = problem
+	_in_browser = false
+	_set_busy(false)
 
 
 func _disconnect() -> void:
