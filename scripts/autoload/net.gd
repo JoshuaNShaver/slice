@@ -26,6 +26,7 @@ const MAX_SIDES := 64
 ## the bigger packets (a joining player's info, the world's first sync).
 const BUFFER_BYTES := 1 << 20
 const MAX_QUEUED_PACKETS := 4096
+const QUIT_FLUSH_WAIT := 10.0  # s a quitting server waits for saves to finish
 ## Clients and servers must match exactly to play together (design log
 ## 0109). Set in project.godot (application/config/version); bump it with
 ## any change an older client or server couldn't play with.
@@ -64,6 +65,21 @@ func _ready() -> void:
 	accounts = Accounts.new()
 	accounts.name = "Accounts"
 	add_child(accounts)
+	get_tree().auto_accept_quit = false  # a server saves first (_notification)
+
+
+## Quitting: a server saves everyone, waits (a little) for an online store
+## to finish writing, then quits.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	if multiplayer.is_server() and in_session:
+		accounts.save_all_now()
+		var waited := 0.0
+		while accounts.store != null and accounts.store.pending_count() > 0 and waited < QUIT_FLUSH_WAIT:
+			await get_tree().create_timer(0.1).timeout
+			waited += 0.1
+	get_tree().quit()
 
 
 ## Plays `slot` of this machine's own families (FamilyStore).
@@ -71,8 +87,7 @@ func start_offline(slot: int) -> void:
 	_reset()
 	mode = Mode.OFFLINE
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
-	accounts.setup_server(false)
-	_begin_as_server(slot)
+	_begin_as_server(slot, accounts.setup_server(false))
 
 
 ## Hosts and plays `slot` of this machine's families; slot -1 is a
@@ -91,8 +106,7 @@ func host(on_port: int, slot: int, save_dir := "") -> void:
 	port = on_port
 	multiplayer.multiplayer_peer = peer
 	print("Server listening on port %d, version %s" % [on_port, version])
-	accounts.setup_server(slot < 0, save_dir)
-	_begin_as_server(slot)
+	_begin_as_server(slot, accounts.setup_server(slot < 0, save_dir))
 
 
 ## Connects; then Accounts asks for a login and sends the slots, and
@@ -153,7 +167,11 @@ func _reset() -> void:
 	_verified.clear()
 
 
-func _begin_as_server(slot: int) -> void:
+func _begin_as_server(slot: int, setup_error: String) -> void:
+	if setup_error != "":
+		leave()
+		session_failed.emit(setup_error)
+		return
 	if slot >= 0:
 		var me := multiplayer.get_unique_id()
 		if not await accounts.attach_local(me, slot):

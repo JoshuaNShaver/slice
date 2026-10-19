@@ -399,7 +399,9 @@ Values marked * are proposed tuning.
   send their own save. Offline and a LAN host's own player use this
   machine's files (`user://families/`, `user://chests.json`), as before.
   LAN joiners and a dev server's players log in with a device id; their
-  saves live on that server. An online server uses Supabase.
+  saves live on that server. An online server uses Supabase (log 0114):
+  tables `families` and `chests` keyed by the Supabase user, readable and
+  writable only with the server's secret key.
 - **When it saves (log 0113, proposed, built):** checked every 3 s; level,
   bag, gear, abilities and chests saved at once (at most every 10 s), XP
   and pay within 45 s; leaving, dying and marrying at once.

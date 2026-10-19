@@ -27,8 +27,12 @@ const GUEST_PREFIX := "guest-"
 ## Server only.
 var store: SaveStore
 var keeper := SaveKeeper.new()
-## How remote players log in: "guest" (a device id, LAN and dev servers).
+## How remote players log in: "guest" (a device id: LAN and dev servers)
+## or "supabase" (an online server, log 0115).
 var auth := "guest"
+## Server only, from the environment (deploy/README.md).
+var supabase_url := ""
+var _secret_key := ""
 ## Server only. Finds a peer's shape (set by the world): Callable(id) -> PlayerShape.
 var find_player := Callable()
 ## Server only. Peer id -> {"account", "families" (Family or null),
@@ -40,21 +44,33 @@ var _tries: Dictionary = {}
 var guest_id_path := "user://account/guest_id.txt"
 
 
-## Server: picks the store. A local server (offline, or hosting with a
-## player) uses this machine's own files; a dedicated server its own folder.
-func setup_server(dedicated: bool, save_dir := "") -> void:
+## Server: picks the store (design log 0112). A local server (offline, or
+## hosting with a player) uses this machine's own files. A dedicated server
+## uses Supabase when SUPABASE_URL and SUPABASE_SECRET_KEY are set, else
+## its own folder (for dev). Returns an error message, or "".
+func setup_server(dedicated: bool, save_dir := "") -> String:
 	close_all()
 	if store != null and store != FamilyStore.store:
 		store.queue_free()
+	store = null
 	auth = "guest"
+	supabase_url = OS.get_environment("SUPABASE_URL").strip_edges().trim_suffix("/")
+	_secret_key = OS.get_environment("SUPABASE_SECRET_KEY").strip_edges()
 	if not dedicated:
 		store = FamilyStore.store
+	elif supabase_url != "" and _secret_key != "":
+		store = SupabaseStore.new(supabase_url, _secret_key)
+		auth = "supabase"
+	elif supabase_url != "" or _secret_key != "":
+		return "Set both SUPABASE_URL and SUPABASE_SECRET_KEY, or neither (local saves)."
 	else:
 		store = LocalFileStore.new(save_dir if save_dir != "" else "user://server/")
+	if store.get_parent() == null:
 		store.name = "Store"
 		add_child(store)
 	keeper.store = store
 	print("Saves: %s; logins: %s" % [store.describe(), auth])
+	return ""
 
 
 ## Server: the player at this machine plays `slot` of the local account.

@@ -144,11 +144,6 @@ func _process(delta: float) -> void:
 	_atmosphere.view = view
 
 
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and multiplayer.is_server():
-		Net.accounts.save_all_now()
-
-
 func _local_player() -> PlayerShape:
 	return player(multiplayer.get_unique_id())
 
