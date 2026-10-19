@@ -393,8 +393,13 @@ Values marked * are proposed tuning.
   current heir's level, XP, stats, bag and worn gear. Your machine saves
   every 3 s, on leaving and on quitting. On joining, the server caps
   anything out of range before restoring it.
-- Saves are local JSON in `user://families/` for now (*proposed:* a public
-  server should hold families itself).
+- Saves are local JSON in `user://families/` for now. **Planned (log
+  0097):** the server loads and saves all player data through one storage
+  interface: local files offline, Supabase online. Clients never send
+  their own save.
+- **Accounts (log 0098, planned):** online play needs a social login
+  (Supabase Auth). The client sends its token on joining; the server checks
+  it. Offline needs no login.
 
 ## 6. Women (lines)
 
@@ -417,6 +422,18 @@ As in the book, women are straight lines.
   the newest update. When updates run late, bodies keep moving at their last
   velocity (up to 100 ms) and corrections fade in rather than snap. No
   client-side prediction yet.
+- **Clients (log 0099, planned):** the web build is the main online
+  client, over WebSocket (ENet kept for desktop). Joining checks the build
+  version and turns away mismatches.
+- **Hosting (log 0103):** game server on a Hetzner VPS, deployed by a
+  manual GitHub Action (`deploy/README.md`); web client on itch.io,
+  restricted.
+- **Content as data (log 0101):** the server owns content (items,
+  abilities, prices, shops, NPCs, text) and sends it on joining; the
+  client owns presentation (theme, HUD, rendering).
+- **Before public hosting (log 0100):** split `PlayerShape` into
+  components, version check, accounts and server-owned saves, then the
+  web build.
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.
