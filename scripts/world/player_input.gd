@@ -23,7 +23,10 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("jump"):
 		player.motion._submit_jump.rpc_id(1)
 	if Input.is_action_just_pressed("interact"):
-		player.actions._submit_interact.rpc_id(1)
+		# Pressed again with the chests, orders or shop open: just close it.
+		var hud := get_tree().get_first_node_in_group(Hud.GROUP) as Hud
+		if hud == null or not hud.close_on_interact():
+			player.actions._submit_interact.rpc_id(1)
 	if Input.is_action_just_pressed("pickup"):
 		player.inventory._submit_pickup.rpc_id(1)
 	if Input.is_action_just_pressed("drink"):

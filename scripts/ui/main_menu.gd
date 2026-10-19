@@ -14,6 +14,9 @@ const WORLD_SCENE := "res://scenes/world.tscn"
 const SETTINGS_PATH := "user://settings.cfg"
 const ROMAN: Array[String] = ["I", "II", "III"]
 const CARD_WIDTH := 420
+## Family cards (log 0133): fixed, so the column fits a 720-high view.
+const CARD_WIDTH_SLOT := 210
+const CARD_HEIGHT := 400
 
 ## Online: not connected, connecting, logging in, choosing a username,
 ## picking a family, starting.
@@ -46,6 +49,13 @@ var _username := ""
 var _username_problem := ""
 ## Online: the username being typed, kept across refreshes.
 var _username_draft := ""
+## Online: the username field while it's shown. Its text is read directly:
+## a phone browser's keyboard sets it without text_changed.
+var _username_edit: LineEdit
+## Web: the whole menu, lifted above the phone keyboard while typing
+## (log 0132), and how far it's lifted.
+var _page: Control
+var _lift := 0.0
 
 
 func _ready() -> void:
@@ -93,6 +103,33 @@ func _ready() -> void:
 		_refresh()
 
 
+func _process(delta: float) -> void:
+	if _page == null or not OS.has_feature("web"):
+		return
+	var target := _keyboard_lift()
+	if is_equal_approx(target, _lift):
+		return
+	_lift = move_toward(_lift, target, maxf(absf(target - _lift) * 12.0 * delta, 4.0))
+	_page.position.y = -_lift
+
+
+## Web: how far to lift the menu so the field being typed in sits just
+## above the phone keyboard, which covers the bottom of the game.
+func _keyboard_lift() -> float:
+	var field := get_viewport().gui_get_focus_owner()
+	if not (field is LineEdit or field is TextEdit):
+		return 0.0
+	var cover := float(JavaScriptBridge.eval("window.sliceKeyboardCover ? window.sliceKeyboardCover() : 0", true))
+	if cover <= 0.0:
+		return 0.0
+	var height := get_viewport_rect().size.y
+	var keyboard_top := height * (1.0 - cover)
+	var rect := field.get_global_rect()
+	var top := rect.position.y + _lift  # where it sits unlifted
+	var lift := top + rect.size.y + 16.0 - keyboard_top
+	return clampf(lift, 0.0, maxf(top - 8.0, 0.0))
+
+
 func _start_dedicated_server_if_requested() -> bool:
 	var args := OS.get_cmdline_user_args()
 	if not args.has("--server"):
@@ -120,6 +157,7 @@ func _build() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	_page = center
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 20)
@@ -141,7 +179,7 @@ func _build() -> void:
 
 	_body = VBoxContainer.new()
 	_body.add_theme_constant_override("separation", 14)
-	_body.custom_minimum_size = Vector2(0, 440)  # the tallest slot card; keeps the title still
+	_body.custom_minimum_size = Vector2(0, CARD_HEIGHT)  # keeps the title still
 	column.add_child(_body)
 
 	_status = Label.new()
@@ -186,6 +224,7 @@ func _mode_tab(text: String, group: ButtonGroup) -> Button:
 func _refresh() -> void:
 	if _body == null:
 		return
+	_keep_username_draft()
 	for child in _body.get_children():
 		child.queue_free()
 	_offline_tab.disabled = _busy and _online_mode
@@ -309,8 +348,7 @@ func _build_username_card() -> Control:
 	edit.text = _username_draft
 	edit.editable = not _busy
 	edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	edit.text_changed.connect(func(text: String) -> void:
-		_username_draft = text)
+	_username_edit = edit
 	edit.text_submitted.connect(func(_text: String) -> void: _submit_username())
 	box.add_child(edit)
 	var problem := _note(_username_problem if _username_problem != "" else
@@ -366,24 +404,39 @@ func _online_card(title: String) -> VBoxContainer:
 	return box
 
 
-## A slot-sized panel with a heading; returns the column to fill.
-func _card(title: String) -> VBoxContainer:
+## A family card (log 0133): a fixed height, so long details scroll and the
+## buttons stay in reach on a short screen. Fill `details` and `buttons`.
+class SlotCard:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(210, 320)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	panel.add_child(box)
-	box.add_child(_heading(title))
-	return box
+	var details := VBoxContainer.new()
+	var buttons := VBoxContainer.new()
+
+	func _init(heading: Label) -> void:
+		panel.custom_minimum_size = Vector2(CARD_WIDTH_SLOT, CARD_HEIGHT)
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 8)
+		panel.add_child(column)
+		column.add_child(heading)
+		var scroll := ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		column.add_child(scroll)
+		var gutter := MarginContainer.new()  # clear of the scroll bar
+		gutter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gutter.add_theme_constant_override("margin_right", 6)
+		scroll.add_child(gutter)
+		details.add_theme_constant_override("separation", 8)
+		gutter.add_child(details)
+		buttons.add_theme_constant_override("separation", 8)
+		column.add_child(buttons)
 
 
 func _build_slot_card(slot: int, family: Family) -> Control:
-	var box := _card("Family %s" % ROMAN[slot])
-	var panel := box.get_parent() as Control
+	var card := SlotCard.new(_heading("Family %s" % ROMAN[slot]))
+	var box := card.details
 
 	if family == null:
 		box.add_child(_note("An empty plot of parchment."))
-		box.add_child(_spacer())
 		var name_edit := LineEdit.new()
 		name_edit.placeholder_text = "Family name"
 		name_edit.max_length = Family.MAX_NAME_LENGTH
@@ -395,10 +448,11 @@ func _build_slot_card(slot: int, family: Family) -> Control:
 		found.text = "Found family"
 		found.disabled = _busy
 		found.pressed.connect(_found_family.bind(slot, name_edit))
-		box.add_child(found)
-		return panel
+		card.buttons.add_child(found)
+		return card.panel
 
-	box.add_child(ShapeIcon.new(family.sides, family.kind, 96, family.apex, family.worn_gear()))
+	var icon := ShapeIcon.new(family.sides, family.kind, 96, family.apex, family.worn_gear())
+	box.add_child(icon)
 	var name_label := Label.new()
 	name_label.text = "The %s family" % family.family_name
 	name_label.add_theme_font_size_override("font_size", 20)
@@ -413,19 +467,18 @@ func _build_slot_card(slot: int, family: Family) -> Control:
 		box.add_child(_note("Extinct: died without an heir."))
 	elif family.is_confined_to_underworld():
 		box.add_child(_note("Irregular: confined to the underworld."))
-	box.add_child(_spacer())
 
 	var play := Button.new()
 	play.text = "Play"
 	play.disabled = _busy or family.extinct
 	play.pressed.connect(_play.bind(slot))
-	box.add_child(play)
+	card.buttons.add_child(play)
 	var delete := Button.new()
 	delete.text = "Delete"
 	delete.disabled = _busy
 	delete.pressed.connect(_confirm_delete.bind(slot))
-	box.add_child(delete)
-	return panel
+	card.buttons.add_child(delete)
+	return card.panel
 
 
 ## Three toggle buttons, one per starting triangle, with the choice named below.
@@ -484,12 +537,6 @@ func _small_button(text: String) -> Button:
 	button.add_theme_font_size_override("font_size", 15)
 	button.custom_minimum_size = Vector2(110, 0)
 	return button
-
-
-func _spacer() -> Control:
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	return spacer
 
 
 ## The server's host name, for players to read.
@@ -575,6 +622,7 @@ func _connect() -> void:
 func _submit_username() -> void:
 	if _busy:
 		return
+	_keep_username_draft()
 	var username := _username_draft.strip_edges()
 	_username_problem = Accounts.username_problem(username)
 	if _username_problem != "":
@@ -582,6 +630,13 @@ func _submit_username() -> void:
 		return
 	_set_busy(true)
 	Net.accounts.choose_username(username)
+
+
+## On the web, a phone's keyboard fills the field with set_text, which
+## doesn't emit text_changed, so read the field itself.
+func _keep_username_draft() -> void:
+	if is_instance_valid(_username_edit) and not _username_edit.is_queued_for_deletion():
+		_username_draft = _username_edit.text
 
 
 func _on_username_needed(problem: String) -> void:

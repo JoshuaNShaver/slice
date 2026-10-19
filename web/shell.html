@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<!-- Our own copy of Godot 4.5.1's page (design log 0132). The phone
+		     keyboard draws over the game (interactive-widget) instead of
+		     resizing it. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=overlays-content">
+		<title>$GODOT_PROJECT_NAME</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+/* Pinned: nothing scrolls or bounces, and any gap shows parchment, not black. */
+html, body {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+	background-color: #efe3c8;
+}
+
+body {
+	color: white;
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* Godot's hidden text boxes for the phone keyboard (the only inputs on the
+   page). Godot sizes them to the whole game, so the browser scrolls to keep
+   their caret in view on every keypress. A 1px box at the top never needs
+   scrolling to. 16px text stops iOS zooming in on focus. */
+body > input, body > textarea {
+	top: 0 !important;
+	left: 0 !important;
+	width: 1px !important;
+	height: 1px !important;
+	font-size: 16px !important;
+	opacity: 0 !important;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: $GODOT_SPLASH_COLOR;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		$GODOT_HEAD_INCLUDE
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" src="$GODOT_SPLASH" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<script>
+// Keep the game still while the phone keyboard is open (design log 0132).
+(function () {
+	function typing() {
+		const el = document.activeElement;
+		return el !== null && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+	}
+
+	// Godot sizes the game to window.innerWidth/innerHeight every frame. Some
+	// browsers shrink those while the keyboard is up, which squashes and
+	// re-lays out the whole game on every keypress. While typing, report the
+	// size from before the keyboard opened (unless the width changed: the
+	// phone turned).
+	function hold(name) {
+		const own = Object.getOwnPropertyDescriptor(window, name)
+			|| Object.getOwnPropertyDescriptor(Window.prototype, name);
+		if (!own || !own.get || own.configurable === false) {
+			return null;
+		}
+		return own.get;
+	}
+	const realWidth = hold('innerWidth');
+	const realHeight = hold('innerHeight');
+	if (realWidth && realHeight) {
+		let keptWidth = 0;
+		let keptHeight = 0;
+		const measure = function () {
+			const w = realWidth.call(window);
+			const h = realHeight.call(window);
+			if (!typing() || keptWidth === 0 || w !== keptWidth) {
+				keptWidth = w;
+				keptHeight = h;
+			}
+			return [keptWidth, keptHeight];
+		};
+		try {
+			Object.defineProperty(window, 'innerWidth', { configurable: true, get: function () { return measure()[0]; } });
+			Object.defineProperty(window, 'innerHeight', { configurable: true, get: function () { return measure()[1]; } });
+		} catch (err) {
+			console.warn('Could not hold the window size while typing:', err);
+		}
+	}
+
+	// The page never scrolls; put it back if the browser tries (focusing a
+	// text box, or an installed app opening offset).
+	function toTop() {
+		if (window.scrollX !== 0 || window.scrollY !== 0) {
+			window.scrollTo(0, 0);
+		}
+	}
+	window.addEventListener('scroll', toTop, { passive: true });
+	if (window.visualViewport) {
+		window.visualViewport.addEventListener('scroll', toTop, { passive: true });
+	}
+
+	// An installed app on iOS can report the wrong height for a moment after
+	// launch; measure again once things settle.
+	function settle() {
+		toTop();
+		window.dispatchEvent(new Event('resize'));
+	}
+	window.addEventListener('pageshow', function () {
+		[50, 300, 1000].forEach(function (ms) { setTimeout(settle, ms); });
+	});
+	window.addEventListener('orientationchange', function () {
+		[100, 500].forEach(function (ms) { setTimeout(settle, ms); });
+	});
+
+	// Chrome on Android: the keyboard overlays the page and reports its size.
+	const vk = navigator.virtualKeyboard;
+	if (vk) {
+		vk.overlaysContent = true;
+	}
+
+	// For the game: how much of the window the keyboard covers, as a
+	// fraction of its height (0 when it's closed).
+	window.sliceKeyboardCover = function () {
+		if (!typing()) {
+			return 0;
+		}
+		const h = window.innerHeight;  // held at the pre-keyboard height
+		if (h <= 0) {
+			return 0;
+		}
+		let covered = 0;
+		if (vk && vk.boundingRect) {
+			covered = vk.boundingRect.height;
+		}
+		const vv = window.visualViewport;
+		if (vv) {  // iOS: the visible part shrinks instead
+			covered = Math.max(covered, h - vv.height - vv.offsetTop);
+		}
+		return Math.max(0, Math.min(0.9, covered / h));
+	};
+}());
+		</script>
+		<script src="$GODOT_URL"></script>
+		<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>

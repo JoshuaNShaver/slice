@@ -18,11 +18,14 @@ extends CanvasLayer
 ## - Top right: currencies. Combatant pay (design log 0071).
 ## - The General's orders and the Quartermaster's shop (design logs 0070,
 ##   0071): opened by talking to them, closed by Esc or walking away.
+## - Every panel has an ✕ in its top right corner; the use key that opened
+##   the chests, orders or shop closes them again (design log 0129).
 ## - Under the pay counter: a countdown popup while a squad musters or heads
 ##   home, with a Ready button to skip the wait (design log 0081).
 ## - On a touch screen (Touch, design log 0122): TouchControls instead of
 ##   the key hints, the quick slots at the bottom center, and the bag only
-##   while a panel is open.
+##   while a panel is open. Drag a bag item onto the drop zone beside the
+##   bag to drop it (design log 0131).
 ## - Chat (ChatBox, design log 0124): Enter, or Chat on a touch screen.
 ##   What players nearby say also shows in a bubble over them.
 ## Energy is drawn by PlayerShape, as pips over your own shape.
@@ -36,6 +39,7 @@ const BAG_COLUMNS := 5
 const STAT_ROWS: Array[String] = ["vigor", "mettle", "force", "torque", "rigidity", "luck"]
 const MESSAGE_TIME := 3.5  # s
 const SPEAKER_RANGE := 1200.0  # px; farther speakers are heard as thoughts
+const CLOSE_SIZE := 32  # px; each panel's ✕ button
 
 var _root: Control
 var _portrait: ShapeIcon
@@ -56,7 +60,8 @@ var _stat_values: Dictionary = {}  # stat name -> its value Label
 var _bag_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.bag, quick slots last
 var _quick_keys: Array[Label] = []
 var _slots_column: VBoxContainer
-var _bag_grid: GridContainer
+var _bag_row: HBoxContainer  # the drop zone and the bag
+var _drop_zone: DropZone
 var _touch: TouchControls
 var _chat: ChatBox
 var _touch_layout := false  # the slots are placed for touch
@@ -282,6 +287,16 @@ func open_panel_name() -> String:
 func close_panel() -> void:
 	_orders.visible = false
 	_shop.visible = false
+
+
+## The use key pressed again: closes the chests, orders or shop it opened.
+## True if one was open, so the key isn't also sent as a use.
+func close_on_interact() -> bool:
+	if not storage_open() and open_panel_name() == "":
+		return false
+	close_storage()
+	close_panel()
+	return true
 
 
 ## Text drawn straight over the world turns to chalk underground (design
@@ -576,17 +591,29 @@ func _build_slots() -> Control:
 		slot.add_child(key_label)
 		_quick_keys.append(key_label)
 		hotbar.add_child(slot)
+	hotbar.size_flags_horizontal = Control.SIZE_SHRINK_END  # over the bag, not the drop zone
 	column.add_child(hotbar)
-	column.add_child(bag)
+	var bag_row := HBoxContainer.new()
+	bag_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bag_row.add_theme_constant_override("separation", 10)
+	_drop_zone = DropZone.new()
+	_drop_zone.size_flags_vertical = Control.SIZE_SHRINK_END
+	_drop_zone.dropped.connect(func(i: int) -> void:
+		if _me != null:
+			_me.inventory.request_drop(i))
+	bag_row.add_child(_drop_zone)
+	bag_row.add_child(bag)
+	column.add_child(bag_row)
 	_slots_column = column
-	_bag_grid = bag
+	_bag_row = bag_row
 	_touch_layout = false
 	return column
 
 
 ## Touch (design log 0122): Jump and the abilities take the bottom right,
 ## so the quick slots move to the bottom center and the bag shows only
-## while a panel is open.
+## while a panel is open, with a drop zone beside it (no right-click;
+## design log 0131).
 func _layout_for_touch() -> void:
 	var touch := Touch.active
 	var panel := _character.visible or _menu.visible or _controls.visible \
@@ -595,7 +622,8 @@ func _layout_for_touch() -> void:
 	_touch.playing = not panel and not _chat.is_open
 	_chat.set_touch(touch)
 	_hint.visible = not touch
-	_bag_grid.visible = not touch or panel
+	_bag_row.visible = not touch or panel
+	_drop_zone.visible = touch
 	var centered := touch and not panel
 	if centered == _touch_layout:
 		return
@@ -697,6 +725,7 @@ func _build_character() -> Control:
 
 	_close_hint = _faded("")
 	column.add_child(_close_hint)
+	_add_close_button(panel, func() -> void: _character.visible = false)
 	return panel
 
 
@@ -728,7 +757,8 @@ func _build_storage() -> Control:
 		_chest_slots.append(slot)
 		grid.add_child(slot)
 	column.add_child(grid)
-	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_storage)
 	return panel
 
 
@@ -766,7 +796,8 @@ func _build_orders() -> Control:
 		row.add_child(go)
 		column.add_child(row)
 	column.add_child(_faded("Bring down a Revolt boss to be discharged with a marriage certificate."))
-	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
 	return panel
 
 
@@ -822,6 +853,9 @@ func _build_shop() -> Control:
 	header.add_child(title)
 	_shop_pay = Label.new()
 	header.add_child(_shop_pay)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
 	column.add_child(header)
 
 	var rows: Array = [["Provisions", Gear.PROVISIONS.keys()]]
@@ -875,7 +909,8 @@ func _build_shop() -> Control:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size.x = 120 + (width + 1) * 8 + width * ItemSlot.SIZE
 	column.add_child(note)
-	column.add_child(_faded("%s to close" % Controls.describe("menu")))
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
 	return panel
 
 
@@ -951,6 +986,7 @@ func _build_menu() -> Control:
 	leave.focus_mode = Control.FOCUS_NONE
 	leave.pressed.connect(leave_requested.emit)
 	buttons.add_child(leave)
+	_add_close_button(panel, func() -> void: _menu.visible = false)
 	return panel
 
 
@@ -1043,6 +1079,9 @@ func _build_controls() -> Control:
 		_controls.visible = false
 		_menu.visible = true)
 	buttons_row.add_child(back)
+	_add_close_button(panel, func() -> void:
+		_end_capture()
+		_controls.visible = false)
 	return panel
 
 
@@ -1056,6 +1095,19 @@ func _centered_panel() -> PanelContainer:
 	box.bg_color.a = 1.0  # the HUD's usual see-through panel is too busy over the world
 	panel.add_theme_stylebox_override("panel", box)
 	return panel
+
+
+## An ✕ in the panel's top right corner that runs `on_close`.
+func _add_close_button(panel: PanelContainer, on_close: Callable) -> void:
+	var close := Button.new()
+	close.text = "✕"
+	close.tooltip_text = "Close"
+	close.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	close.custom_minimum_size = Vector2(CLOSE_SIZE, CLOSE_SIZE)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_END
+	close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	close.pressed.connect(on_close)
+	panel.add_child(close)
 
 
 func _slot_grid(columns: int) -> GridContainer:

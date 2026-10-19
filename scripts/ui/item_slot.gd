@@ -2,7 +2,7 @@ class_name ItemSlot
 extends Panel
 ## One inventory square: draws its item's icon and shows its description on
 ## hover (design log 0036). Items drag and drop between slots, and a
-## double-click uses one (design log 0043).
+## double-click (or double tap) uses one (design logs 0043, 0131).
 
 signal double_clicked
 signal right_clicked
@@ -10,6 +10,10 @@ signal right_clicked
 signal dropped(data: Dictionary)
 
 const SIZE := 48.0
+## Two presses this close together are a double-click. Timed here because
+## touch (mouse emulated from taps, the web build) doesn't reliably mark
+## the second tap as a double-click.
+const DOUBLE_TAP_TIME := 400  # ms
 
 ## Shown faded when the slot is empty, e.g. "Eye" in the equipment panel.
 var placeholder := ""
@@ -31,6 +35,7 @@ var item := "":
 var drag_source := {}
 ## Optional check for a drop: takes the drag data, returns whether it fits.
 var accepts := Callable()
+var _last_press := -DOUBLE_TAP_TIME  # ms, Time.get_ticks_msec()
 
 
 func _init(placeholder_text := "", hint_text := "") -> void:
@@ -48,9 +53,14 @@ func _gui_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click == null or not click.pressed or item == "":
 		return
-	if click.button_index == MOUSE_BUTTON_LEFT and click.double_click:
-		double_clicked.emit()
-		accept_event()
+	if click.button_index == MOUSE_BUTTON_LEFT:
+		var now := Time.get_ticks_msec()
+		if click.double_click or now - _last_press <= DOUBLE_TAP_TIME:
+			_last_press = -DOUBLE_TAP_TIME  # a third press starts over
+			double_clicked.emit()
+			accept_event()
+		else:
+			_last_press = now
 	elif click.button_index == MOUSE_BUTTON_RIGHT:
 		right_clicked.emit()
 		accept_event()

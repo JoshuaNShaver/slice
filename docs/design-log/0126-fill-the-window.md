@@ -1,7 +1,7 @@
 # 0126: Fill the window, parchment splash
 
 - **Date:** 2026-10-19
-- **Status:** Accepted
+- **Status:** Accepted; the 1280x720-only minimum superseded by 0134
 - **Decision:** The game fills any window shape (stretch aspect `expand`):
   1280x720 is the minimum view, and wider or taller windows see more world
   instead of black bars. The boot and web loading screens show the game

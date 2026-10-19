@@ -1,7 +1,7 @@
 # 0122: Touch controls, and the web client as an installable app
 
 - **Date:** 2026-10-18
-- **Status:** Accepted
+- **Status:** Accepted; turn-sideways and landscape-only superseded by 0134
 - **Decision:** On a touch screen (from the start on phones and tablets;
   otherwise after the first touch, until a key is pressed) the HUD shows
   Genshin-style controls (`TouchControls`): a stick under the left thumb

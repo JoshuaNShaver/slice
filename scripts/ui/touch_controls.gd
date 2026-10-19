@@ -7,12 +7,15 @@ extends Control
 ## - Left: a stick that appears under your thumb; left/right rolls, and
 ##   pushing partway rolls slower.
 ## - Right: a big Jump button, the abilities you own in an arc around it,
-##   and Use / Take beside them only while there's something to use or take.
-## - Top right, under the pay: Drink, Home, Chat, Bag (character sheet), Menu.
+##   and Use / Take just outside the arc only while there's something to use
+##   or take.
+## - Right edge, a column rising from just above the arc: Drink (nearest the
+##   thumb), Chat, Bag (character sheet), Menu.
+## - Left, above the stick: Home.
 ##
 ## Each finger is tracked on its own, so you can roll and jump at once.
-## While a panel or the chat is open only the top row stays, so Menu or
-## Chat can close it.
+## While a panel or the chat is open only the right column stays, so Menu
+## or Chat can close it.
 
 const STICK_ZONE := Vector2(0.36, 0.3)  # the stick's area: left 36% (clear of the quick slots), below the top 30%
 const STICK_RADIUS := 90.0
@@ -22,15 +25,17 @@ const JUMP_INSET := 140.0  # from the bottom right corner to Jump's center
 const ARC_DISTANCE := 155.0  # Jump's center to an ability's
 const ABILITY_RADIUS := 46.0
 const CONTEXT_RADIUS := 42.0
-const TOP_RADIUS := 30.0
-const TOP_Y := 92.0
-const TOP_SPACING := 74.0
-const TOP_ACTIONS: Array[String] = ["menu", "character_sheet", "chat", "home", "drink"]  # right to left
+const SIDE_RADIUS := 30.0
+const SIDE_SPACING := 74.0
+const SIDE_TOP := 92.0  # the column never rises above this (the pay is over it)
+const SIDE_ACTIONS: Array[String] = ["drink", "chat", "character_sheet", "menu"]  # bottom to top
+## Buttons the HUD hears as events (its panels listen for them).
+const EVENT_ACTIONS: Array[String] = ["drink", "chat", "character_sheet", "menu", "home"]
 const FILL := Color(0.97, 0.94, 0.86, 0.5)
 const FILL_PRESSED := Color(0.23, 0.16, 0.12, 0.35)
 const LINE := Color(0.23, 0.16, 0.12, 0.7)
 
-## False while a panel is open: then only the top row shows.
+## False while a panel is open: then only the right column shows.
 var playing := true
 
 var _abilities: Array[String] = []  # owned ability ids, in shop order
@@ -97,7 +102,7 @@ func _press(index: int, at: Vector2) -> void:
 	for button in _buttons():
 		if at.distance_to(button.center) <= button.radius:
 			_held[index] = button.action
-			if button.action in TOP_ACTIONS:
+			if button.action in EVENT_ACTIONS:
 				_send(button.action, true)  # the HUD's panels listen for events
 			else:
 				Input.action_press(button.action)
@@ -120,7 +125,7 @@ func _release(index: int) -> void:
 		_stick_knob = Vector2.ZERO
 		Input.action_release("roll_left")
 		Input.action_release("roll_right")
-	elif action in TOP_ACTIONS:
+	elif action in EVENT_ACTIONS:
 		_send(action, false)
 	else:
 		Input.action_release(action)
@@ -150,23 +155,28 @@ func _send(action: String, pressed: bool) -> void:
 ## What's on screen now: [{action, center, radius}].
 func _buttons() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
-	for i in TOP_ACTIONS.size():
-		list.append({"action": TOP_ACTIONS[i], "radius": TOP_RADIUS,
-				"center": Vector2(size.x - Hud.MARGIN - TOP_RADIUS - i * TOP_SPACING, TOP_Y)})
+	var jump := size - Vector2(JUMP_INSET, JUMP_INSET)
+	# The column starts just above Jump and squeezes up on short screens.
+	var bottom := jump.y - JUMP_RADIUS - SIDE_RADIUS - 18.0
+	var spacing := minf(SIDE_SPACING, (bottom - SIDE_TOP) / (SIDE_ACTIONS.size() - 1))
+	for i in SIDE_ACTIONS.size():
+		list.append({"action": SIDE_ACTIONS[i], "radius": SIDE_RADIUS,
+				"center": Vector2(size.x - Hud.MARGIN - SIDE_RADIUS, bottom - i * spacing)})
 	if not playing:
 		return list
-	var jump := size - Vector2(JUMP_INSET, JUMP_INSET)
+	list.append({"action": "home", "radius": SIDE_RADIUS,
+			"center": _stick_rest() - Vector2(0, STICK_RADIUS + SIDE_RADIUS + 40.0)})
 	list.append({"action": "jump", "center": jump, "radius": JUMP_RADIUS})
 	# Abilities from left round to straight up: Rush, Nose dive, Spike up.
 	for i in _abilities.size():
 		var angle := PI + i * (PI / 2.0) / maxf(1.0, _abilities.size() - 1)
 		list.append({"action": Abilities.ALL[_abilities[i]].action, "radius": ABILITY_RADIUS,
 				"center": jump + Vector2.from_angle(angle) * ARC_DISTANCE})
-	var context := jump + Vector2(-ARC_DISTANCE - 150.0, -40.0)
+	# Use and Take just outside the arc, left of Rush and Nose dive.
 	if _can_use:
-		list.append({"action": "interact", "center": context + Vector2(0, -100), "radius": CONTEXT_RADIUS})
+		list.append({"action": "interact", "center": jump + Vector2(-210, -180), "radius": CONTEXT_RADIUS})
 	if _can_take:
-		list.append({"action": "pickup", "center": context, "radius": CONTEXT_RADIUS})
+		list.append({"action": "pickup", "center": jump + Vector2(-235, -75), "radius": CONTEXT_RADIUS})
 	return list
 
 
@@ -184,8 +194,13 @@ func _draw() -> void:
 	if not playing:
 		return
 	# The stick: faint where it waits, solid under your thumb.
-	var base := _stick_base if _stick_index >= 0 else Vector2(STICK_RADIUS + 70.0, size.y - STICK_RADIUS - 70.0)
+	var base := _stick_base if _stick_index >= 0 else _stick_rest()
 	var alpha := 1.0 if _stick_index >= 0 else 0.5
 	draw_circle(base, STICK_RADIUS, Color(FILL, FILL.a * alpha))
 	draw_arc(base, STICK_RADIUS, 0.0, TAU, 64, Color(LINE, LINE.a * alpha), 2.0, true)
 	draw_circle(base + _stick_knob, STICK_RADIUS * 0.42, Color(LINE, 0.45 * alpha))
+
+
+## Where the stick waits when no thumb is on it.
+func _stick_rest() -> Vector2:
+	return Vector2(STICK_RADIUS + 70.0, size.y - STICK_RADIUS - 70.0)

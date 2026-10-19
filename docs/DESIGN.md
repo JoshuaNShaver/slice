@@ -165,9 +165,11 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 - **Touch (log 0122):** on a touch screen, a stick under the left thumb
   rolls (analog); bottom right, a big **Jump** with the owned abilities in
   an arc around it, plus **Use** / **Take** only while something is in
-  reach; top right, **Drink**, **Home**, **Bag**, **Menu**. Hints name
-  these buttons. A phone held upright is asked to turn sideways. Open:
-  dropping items by touch, HUD text size on phones.
+  reach, close to the arc; a column up the right edge, **Drink** lowest,
+  then **Chat**, **Bag**, **Menu** (log 0130); **Home** above the stick. Hints name
+  these buttons. Phones play held either way (log 0134). Double
+  tap an item to use it; drag a bag item onto the drop zone beside the bag
+  to drop it (log 0131). Open: HUD text size on phones.
 - *Proposed:* a regular n-gon holds still on slopes up to about 180°/n, so
   triangles grip steep ground and many-sided shapes slide. Terrain can gate
   shapes without doors.
@@ -274,7 +276,8 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   key (G) grabs the nearest of your items, filling the bag before the quick
   slots. **Drag and drop** moves items between any slots. **Double-click**
   an item, or press its quick-use key, to use it (wear gear, drink a
-  potion, eat). Right-click drops an item. Drag gear onto a character-sheet slot
+  potion, eat); on touch, double tap (log 0131). Right-click drops an
+  item; on touch, drag it onto the drop zone beside the bag. Drag gear onto a character-sheet slot
   to wear it, or off to remove it (double-click also removes it). Only the owner can take an item off the ground, and it
   vanishes after 90 s.
 - **Stat books (log 0024):** rare consumables permanently raise one stat,
@@ -338,7 +341,9 @@ Values marked * are proposed tuning.
 - **HUD (log 0026):** top left, your shape, level, health and XP bars.
   Bottom right, the 1–5 quick-use slots over a 5×2 bag (on touch, log 0122:
   the quick slots at the bottom center, the bag only while a panel is open). **Tab** opens the character sheet
-  (equipment, stats); **Esc** the menu (players here, Controls, Leave). Top right is
+  (equipment, stats); **Esc** the menu (players here, Controls, Leave). Every
+  panel has an ✕ top right; the use key closes the chests, orders or shop it
+  opened (log 0129). Top right is
   for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 2 pips over your own shape, one per
   ability use, faded while full. Other players show a small health bar under their
   name.
@@ -408,6 +413,8 @@ Values marked * are proposed tuning.
   letters, numbers or `_`, unique ignoring case, set once) before the
   slots. The server keeps it in `profiles`; players never see an email.
 - **3 family save slots.** Each slot: create a new family, play, or delete.
+  Each card is a fixed height: buttons pinned to the bottom, long details
+  scroll (log 0133).
 - **Saved progress (log 0038):** a family save keeps the lineage and the
   current heir's level, XP, stats, bag and worn gear. The server still
   caps anything out of range before restoring it.
@@ -460,7 +467,11 @@ As in the book, women are straight lines.
   velocity (up to 100 ms) and corrections fade in rather than snap. No
   client-side prediction yet.
 - **Clients (log 0099):** the web build is the main online client,
-  installable on phones as an app (PWA, landscape; log 0122). Turned away
+  installable on phones as an app (PWA, any orientation; logs 0122, 0134).
+  It uses our own page (`web/shell.html`, log 0132): the phone keyboard
+  covers the game instead of resizing or scrolling it, the menu lifts the
+  field being typed in above the keyboard, and the page is parchment, not
+  black, and re-measures after launch. Turned away
   for its version, it loads the newest build and reloads. Otherwise a new
   build downloads in the background and is used from the next launch
   (log 0127, proposed).
@@ -507,9 +518,9 @@ As in the book, women are straight lines.
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.
-- **Window shape (log 0126):** the game fills the window; 1280x720 is the
-  smallest view, and a wider or taller window shows more world, never black
-  bars. Loading screens show the game icon on parchment.
+- **Window shape (logs 0126, 0134):** the game fills the window; 1280x720
+  is the smallest view (720x1280 when the window is taller than wide), and
+  a bigger window shows more world, never black bars. Loading screens show the game icon on parchment.
 
 ## 8. Art direction
 
