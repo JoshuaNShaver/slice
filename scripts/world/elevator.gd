@@ -4,7 +4,7 @@ extends Node2D
 ##
 ## Stand by either stop and press interact. The guards check your shape
 ## (Regions.admits) and either send you up or down or turn you away. The ride
-## itself is PlayerShape.start_ride: the server carries the shape along the
+## itself is PlayerMotion.start_ride: the server carries the shape along the
 ## shaft with collisions off, so the shaft can cut through solid rock.
 ##
 ## Every peer builds the same elevators from data (World). The cage is drawn
@@ -93,9 +93,9 @@ func prompt_for(p: PlayerShape) -> String:
 func interact(p: PlayerShape) -> void:
 	var from := _nearest_stop(p.position)
 	if not _admits(from, p):
-		p.tell(guard_name, (upper_refusals if from == 1 else refusals).pick_random())
+		p.screen.tell(guard_name, (upper_refusals if from == 1 else refusals).pick_random())
 		return
-	p.start_ride(stops[from] + Vector2(0, -STAND), stops[1 - from] + Vector2(0, -STAND))
+	p.motion.start_ride(stops[from] + Vector2(0, -STAND), stops[1 - from] + Vector2(0, -STAND))
 
 
 # --- Drawing ---------------------------------------------------------------

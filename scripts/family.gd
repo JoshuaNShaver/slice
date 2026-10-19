@@ -35,7 +35,7 @@ var extinct := false
 ## Rolled when the current heir is born; irregulars get double (design log 0023).
 var luck := 0
 ## The current heir's level, XP, stats and items (design log 0038), as
-## PlayerShape.progress() makes them. Empty for a fresh heir.
+## PlayerSave.progress() makes them. Empty for a fresh heir.
 var progress: Dictionary = {}
 
 

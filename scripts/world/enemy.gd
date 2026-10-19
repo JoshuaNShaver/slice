@@ -100,7 +100,7 @@ const AGGRO_RANGE := 520.0
 const HOP_RANGE := 180.0  # hops when a target is this close
 const HOP_EVERY := Vector2(1.2, 2.6)  # seconds between hops, random in this range
 const SPIN_ACCEL := 6.0
-const TIP_ASSIST := 0.75  # as PlayerShape.TIP_ASSIST
+const TIP_ASSIST := 0.75  # as PlayerMotion.TIP_ASSIST
 const HOME_SLACK := 40.0  # px from home that counts as home
 const STAKE := 46.0  # px a straw dummy's stake reaches below its center
 const GROUP := "enemies"
@@ -152,11 +152,11 @@ const CATCHUP_RANGE := 350.0
 ## Soldiers on the move jump like a player pressing Space (log 0080): a
 ## jump that throws them forward with a spin, then steering in the air.
 ## Jumps come sooner and go further the more they're hurrying.
-const TRAVEL_JUMP := 150.0  # as PlayerShape.JUMP_SPEED
+const TRAVEL_JUMP := 150.0  # as PlayerMotion.JUMP_SPEED
 const TRAVEL_PUSH := 110.0  # forward speed a jump adds, x2 when hurrying
 const TRAVEL_FLIP := 12.0  # spin a jump gives
 const TRAVEL_EVERY := Vector2(0.5, 1.1)  # seconds between jumps, halved when hurrying
-const AIR_SPEED := 120.0  # as PlayerShape.AIR_SPEED; x2 when hurrying
+const AIR_SPEED := 120.0  # as PlayerMotion.AIR_SPEED; x2 when hurrying
 const AIR_ACCEL := 150.0
 ## Soldiers wear bronze plating, so they read as the army's (design log 0069).
 const SOLDIER_WEAR := ["", "plating_6", "", "", ""]
@@ -202,7 +202,7 @@ var _orbit_anchor := NAN  # player x when it settled; NAN while it's on the move
 var _launch: Variant = null  # Vector2 velocity to take on the next step (spike up)
 var _stunned := 0.0  # s left tumbling helplessly after a launch
 var _drop_on: Node2D = null  # the spike it's thrown onto
-var _moves := Abilities.Moves.new()  # bosses' moves (design log 0089)
+var _moves := MoveSet.new()  # bosses' moves (design log 0089)
 var _move_timer := 2.0
 var _windup := 0.0  # s until the taunted move goes off (log 0091)
 var _pending_move := ""  # "spike", "dive" or "rush" while winding up
@@ -438,7 +438,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		var dealt := damage * (MOVE_DAMAGE if _moves.active() else 1.0)
 		for hit in Combat.find_hits(state, _corners, _prev_linear, _prev_angular, _is_foe, _cooldowns):
 			if hit.target is PlayerShape:
-				(hit.target as PlayerShape).take_hit(dealt, hit.push, info().get("lethal", true))
+				(hit.target as PlayerShape).combat.take_hit(dealt, hit.push, info().get("lethal", true))
 			else:
 				var foe: Enemy = hit.target
 				foe.apply_central_impulse(hit.push * Combat.KNOCKBACK * foe.mass)
@@ -476,7 +476,7 @@ func _boss_move(state: PhysicsDirectBodyState2D, target: Node2D, grounded: bool)
 		return
 	var d := target.position - position
 	var move := ""
-	if grounded and d.length() < Abilities.SPIKE_RANGE + info().radius - 40.0:
+	if grounded and d.length() < SpikeUpAbility.RANGE + info().radius - 40.0:
 		move = "spike"
 	elif grounded and d.length() < 520.0:
 		move = "dive"
@@ -498,15 +498,15 @@ func _do_move(state: PhysicsDirectBodyState2D, target: Node2D, move: String) -> 
 		var foes: Array = get_tree().get_nodes_in_group(PlayerShape.GROUP)
 		foes += get_tree().get_nodes_in_group(GROUP).filter(func(e: Node) -> bool:
 			return e != self and _is_foe(e) and not (e as Enemy).freeze)
-		_moves.spike_up(self, state, _corners, _corner_angles, radius, foes)
+		(_moves.get_ability("spike_up") as SpikeUpAbility).start(self, state, _corners, _corner_angles, radius, foes)
 	elif move == "dive":
 		var speed: float = info().hop * BOSS_DIVE_JUMP
 		var g := maxf(state.total_gravity.y, 1.0)
 		# Up at speed, down at double gravity: about this long in the air.
-		var flight := speed / g * (1.0 + 1.0 / sqrt(Abilities.DIVE_GRAVITY))
-		_moves.nose_dive(state, _ground_normal, speed, d.x / flight)
+		var flight := speed / g * (1.0 + 1.0 / sqrt(NoseDiveAbility.GRAVITY))
+		(_moves.get_ability("nose_dive") as NoseDiveAbility).start(state, _ground_normal, speed, d.x / flight)
 	else:
-		_moves.rush(state, signf(d.x) if d.x != 0.0 else 1.0, radius)
+		(_moves.get_ability("rush") as RushAbility).start(state, signf(d.x) if d.x != 0.0 else 1.0, radius)
 
 
 ## Server: shout `line` in a speech bubble over this fighter, to the players

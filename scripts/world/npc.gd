@@ -120,7 +120,7 @@ func reach_distance(pos: Vector2) -> float:
 func prompt_for(p: PlayerShape) -> String:
 	var key := Controls.describe("interact")
 	if role == "priest" and serves_player(p):
-		var certificate := p.marriage_certificate()
+		var certificate := p.actions.marriage_certificate()
 		if certificate == "":
 			return "Bring me a marriage certificate."
 		if certificate == Gear.BLESSED_CERTIFICATE and p.sides == 3 and p.kind != "equilateral":
@@ -131,7 +131,7 @@ func prompt_for(p: PlayerShape) -> String:
 	if role == "general" and serves_player(p):
 		return "%s: take orders" % key
 	if role == "quartermaster" and serves_player(p):
-		return "%s: trade (%d pay)" % [key, p.pay]
+		return "%s: trade (%d pay)" % [key, p.stats.pay]
 	return "%s: talk" % key
 
 
@@ -142,14 +142,14 @@ func interact(p: PlayerShape) -> void:
 		return
 	match role:
 		"priest":
-			if not p.marry():
-				p.tell(display_name, "Bring me a marriage certificate, and I will marry you.")
+			if not p.actions.marry():
+				p.screen.tell(display_name, "Bring me a marriage certificate, and I will marry you.")
 		"general", "quartermaster":
 			_say(p, lines)
-			p.open_panel("orders" if role == "general" else "shop")
+			p.screen.open_panel("orders" if role == "general" else "shop")
 		"healer":
-			if p.hp < p.max_hp:
-				p.heal_full()
+			if p.stats.hp < p.stats.max_hp:
+				p.combat.heal_full()
 				_say(p, heal_lines)
 			else:
 				_say(p, lines)
@@ -159,7 +159,7 @@ func interact(p: PlayerShape) -> void:
 
 func _say(p: PlayerShape, from: Array) -> void:
 	if not from.is_empty():
-		p.tell(display_name, from.pick_random())
+		p.screen.tell(display_name, from.pick_random())
 
 
 # --- Drawing ---------------------------------------------------------------

@@ -48,10 +48,10 @@ var _capture_slot := 0  # ...in this slot
 var _character_title: Label
 var _player_list: VBoxContainer
 var _stat_values: Dictionary = {}  # stat name -> its value Label
-var _bag_slots: Array[ItemSlot] = []  # indexed like PlayerShape.bag, quick slots last
+var _bag_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.bag, quick slots last
 var _quick_keys: Array[Label] = []
 var _gear_slots: Array[ItemSlot] = []  # indexed like Gear.SLOTS
-var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerShape.chest
+var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.chest
 var _storage: Control
 var _orders: Control
 var _shop: Control
@@ -198,39 +198,39 @@ func update(me: PlayerShape) -> void:
 	_portrait.sides = me.sides
 	_portrait.kind = me.kind
 	_portrait.apex = me.apex
-	_portrait.equipped = me.equipped
-	_set_text(_level_label, "Level %d" % me.level)
-	_set_text(_pay_label, "Pay: %d" % me.pay)
-	_set_text(_shop_pay, "Your pay: %d" % me.pay)
+	_portrait.equipped = me.inventory.equipped
+	_set_text(_level_label, "Level %d" % me.stats.level)
+	_set_text(_pay_label, "Pay: %d" % me.stats.pay)
+	_set_text(_shop_pay, "Your pay: %d" % me.stats.pay)
 	_update_abilities(me)
-	_health_bar.set_values(me.hp, me.max_hp)
-	if me.level >= Stats.MAX_LEVEL:
+	_health_bar.set_values(me.stats.hp, me.stats.max_hp)
+	if me.stats.level >= Stats.MAX_LEVEL:
 		_xp_bar.set_values(1.0, 1.0)
 	else:
-		_xp_bar.set_values(me.xp, Stats.xp_to_next(me.level))
+		_xp_bar.set_values(me.stats.xp, Stats.xp_to_next(me.stats.level))
 	for i in _bag_slots.size():
-		_bag_slots[i].hint = _bag_hint(me.bag[i])
-		_bag_slots[i].item = me.bag[i]
+		_bag_slots[i].hint = _bag_hint(me.inventory.bag[i])
+		_bag_slots[i].item = me.inventory.bag[i]
 	for i in _gear_slots.size():
-		_gear_slots[i].item = me.equipped[i]
+		_gear_slots[i].item = me.inventory.equipped[i]
 	for i in _chest_slots.size():
-		_chest_slots[i].item = me.chest[i]
-	var full_set := Gear.set_tier(me.equipped)
+		_chest_slots[i].item = me.inventory.chest[i]
+	var full_set := Gear.set_tier(me.inventory.equipped)
 	_set_text(_set_label, "Full set: none" if full_set == 0 else "Full %s set: %s" % [
 			Gear.TIERS[full_set].name.to_lower(), Gear.describe_bonus(Gear.TIERS[full_set].set)])
 	_announce_changes(me)
 	_set_text(_character_title, "The %s family: %s" % [me.family_name, Family.describe_shape(me.sides, me.kind, me.apex)])
-	_set_text(_stat_values["level"], str(me.level))
+	_set_text(_stat_values["level"], str(me.stats.level))
 	# Totals, with what gear (and a full set) adds: "36 (+15)".
-	var from_gear := Gear.total_bonus(me.equipped)
+	var from_gear := Gear.total_bonus(me.inventory.equipped)
 	for stat: String in STAT_ROWS:
-		var text := str(me.get(stat))
+		var text := str(me.stats.get(stat))
 		if from_gear.get(stat, 0) > 0:
 			text += "  (+%d)" % from_gear[stat]
 		_set_text(_stat_values[stat], text)
 
 
-## Your house's chests (PlayerShape asks, from the server).
+## Your house's chests (PlayerScreen asks, from the server).
 func open_storage() -> void:
 	_character.visible = false
 	_menu.visible = false
@@ -246,7 +246,7 @@ func storage_open() -> bool:
 	return _storage != null and _storage.visible
 
 
-## The General's or the Quartermaster's panel (PlayerShape asks, from the
+## The General's or the Quartermaster's panel (PlayerScreen asks, from the
 ## server): "orders" or "shop".
 func open_panel(panel: String) -> void:
 	_character.visible = false
@@ -292,7 +292,7 @@ func show_message(text: String) -> void:
 	_message_time = MESSAGE_TIME
 
 
-## Someone speaks to you (PlayerShape.tell). A nearby speaker gets a bubble
+## Someone speaks to you (PlayerScreen.tell). A nearby speaker gets a bubble
 ## over them; a far one (the General, from the front) or no one ("") is
 ## heard as a thought.
 func say(speaker: String, text: String) -> void:
@@ -369,7 +369,7 @@ func _find_speaker(speaker: String) -> Dictionary:
 	return {}
 
 
-## The server's countdown (PlayerShape.show_countdown). An empty title hides it.
+## The server's countdown (PlayerScreen.show_countdown). An empty title hides it.
 func show_countdown(title: String, seconds: float, ready_count: int, total: int, you_ready: bool,
 		button := "") -> void:
 	if _countdown == null:
@@ -401,10 +401,10 @@ func _process(delta: float) -> void:
 func _announce_changes(me: PlayerShape) -> void:
 	# Count items carried or worn, so swapping gear doesn't count as finding it.
 	var items := {}
-	for item in me.bag + me.equipped:
+	for item in me.inventory.bag + me.inventory.equipped:
 		if item != "":
 			items[item] = items.get(item, 0) + 1
-	var now := {"level": me.level, "items": items, "sides": me.sides, "set": Gear.set_tier(me.equipped)}
+	var now := {"level": me.stats.level, "items": items, "sides": me.sides, "set": Gear.set_tier(me.inventory.equipped)}
 	if _seen.get("sides") == now.sides:  # not when an heir takes over
 		if now.level > _seen.level:
 			think("Level %d!" % now.level)
@@ -516,7 +516,7 @@ func _build_vitals() -> Control:
 
 
 ## Bottom right: the quick-use slots (keys 1-5) over the bag. Both are
-## slots of PlayerShape.bag; the quick ones are its last five.
+## slots of PlayerInventory.bag; the quick ones are its last five.
 func _build_slots() -> Control:
 	var column := VBoxContainer.new()
 	column.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
@@ -527,10 +527,10 @@ func _build_slots() -> Control:
 
 	var hotbar := _slot_grid(BAG_COLUMNS)
 	var bag := _slot_grid(BAG_COLUMNS)
-	for i in PlayerShape.BAG_SIZE:
+	for i in PlayerInventory.BAG_SIZE:
 		var slot := _bag_slot(i)
 		_bag_slots.append(slot)
-		if i < PlayerShape.BAG_SLOTS:
+		if i < PlayerInventory.BAG_SLOTS:
 			bag.add_child(slot)
 			continue
 		var key_label := _faded("")
@@ -554,23 +554,23 @@ func _bag_slot(i: int) -> ItemSlot:
 		if not data.has("worn") or _me == null:
 			return true
 		# Taking gear off: into an empty slot, or swapping with gear for the same slot.
-		var here := _me.bag[i]
+		var here := _me.inventory.bag[i]
 		return here == "" or Gear.slot_of(here) == Gear.SLOTS[data.worn]
 	slot.dropped.connect(func(data: Dictionary) -> void:
 		if _me == null:
 			return
 		if data.has("bag"):
-			_me.request_swap(data.bag, i)
+			_me.inventory.request_swap(data.bag, i)
 		elif data.has("chest"):
-			_me.request_swap(PlayerShape.CHEST_BASE + data.chest, i)
+			_me.inventory.request_swap(PlayerInventory.CHEST_BASE + data.chest, i)
 		elif data.has("worn"):
-			_me.request_unequip(data.worn, i))
+			_me.inventory.request_unequip(data.worn, i))
 	slot.double_clicked.connect(func() -> void:
 		if _me != null:
-			_me.request_use(i))
+			_me.inventory.request_use(i))
 	slot.right_clicked.connect(func() -> void:
 		if _me != null:
-			_me.request_drop(i))
+			_me.inventory.request_drop(i))
 	return slot
 
 
@@ -610,10 +610,10 @@ func _build_character() -> Control:
 			return data.has("bag") and Gear.slot_of(data.item) == Gear.SLOTS[i]
 		slot.dropped.connect(func(data: Dictionary) -> void:
 			if _me != null:
-				_me.request_equip(data.bag))
+				_me.inventory.request_equip(data.bag))
 		slot.double_clicked.connect(func() -> void:
 			if _me != null:
-				_me.request_unequip(i))
+				_me.inventory.request_unequip(i))
 		_gear_slots.append(slot)
 		var row := _row("%s (+%s)" % [info.label, info.stat], slot)
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -648,7 +648,7 @@ func _build_storage() -> Control:
 	column.add_child(_heading("Your chests"))
 	column.add_child(_faded("Kept for every heir from square up, whatever the family."))
 	var grid := _slot_grid(BAG_COLUMNS)
-	for i in PlayerShape.CHEST_SLOTS:
+	for i in PlayerInventory.CHEST_SLOTS:
 		var slot := ItemSlot.new("", "Drag to the bag, or double-click: take")
 		slot.drag_source = {"chest": i}
 		slot.accepts = func(data: Dictionary) -> bool:
@@ -656,14 +656,14 @@ func _build_storage() -> Control:
 		slot.dropped.connect(func(data: Dictionary) -> void:
 			if _me == null:
 				return
-			var from: int = data.bag if data.has("bag") else PlayerShape.CHEST_BASE + data.chest
-			_me.request_swap(from, PlayerShape.CHEST_BASE + i))
+			var from: int = data.bag if data.has("bag") else PlayerInventory.CHEST_BASE + data.chest
+			_me.inventory.request_swap(from, PlayerInventory.CHEST_BASE + i))
 		slot.double_clicked.connect(func() -> void:
 			if _me == null:
 				return
-			var free := _me.bag.find("")
+			var free := _me.inventory.bag.find("")
 			if free != -1:
-				_me.request_swap(PlayerShape.CHEST_BASE + i, free))
+				_me.inventory.request_swap(PlayerInventory.CHEST_BASE + i, free))
 		_chest_slots.append(slot)
 		grid.add_child(slot)
 	column.add_child(grid)
@@ -700,7 +700,7 @@ func _build_orders() -> Control:
 		go.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
 		go.pressed.connect(func() -> void:
 			if _me != null:
-				_me.request_mission(mission_type)
+				_me.actions.request_mission(mission_type)
 			close_panel())
 		row.add_child(go)
 		column.add_child(row)
@@ -742,7 +742,7 @@ func _build_countdown() -> Control:
 	_countdown_ready.pressed.connect(func() -> void:
 		if _me != null:
 			_countdown_ready.disabled = true
-			_me.request_mission_ready())
+			_me.actions.request_mission_ready())
 	column.add_child(_countdown_ready)
 	return panel
 
@@ -802,10 +802,10 @@ func _build_shop() -> Control:
 	drills.add_child(drills_label)
 	for id: String in Abilities.ALL:
 		var button := Button.new()
-		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.COST)]
+		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.ALL[id].cost)]
 		button.pressed.connect(func() -> void:
 			if _me != null:
-				_me.request_learn(id))
+				_me.actions.request_learn(id))
 		_ability_buttons[id] = button
 		drills.add_child(button)
 	column.add_child(drills)
@@ -823,7 +823,7 @@ func _update_abilities(me: PlayerShape) -> void:
 	var known: Array[String] = []
 	for id: String in Abilities.ALL:
 		var info: Dictionary = Abilities.ALL[id]
-		var learned := id in me.abilities
+		var learned := id in me.stats.abilities
 		if learned:
 			known.append("%s (%s)" % [info.name, Controls.describe(info.action)])
 		var button: Button = _ability_buttons.get(id)
@@ -851,7 +851,7 @@ func _shop_slot(item: String) -> ItemSlot:
 	slot.item = item
 	slot.double_clicked.connect(func() -> void:
 		if _me != null:
-			_me.request_buy(item))
+			_me.actions.request_buy(item))
 	return slot
 
 
