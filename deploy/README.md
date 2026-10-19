@@ -10,11 +10,13 @@ GitHub secret; nothing is copied by hand.
 - **002-deploy-code** (manual): first applies Supabase changes
   (`supabase/migrations/`, then the auth settings in `supabase/config.toml`;
   the log shows what will change before it's applied). Then uploads the
-  committed source of the chosen branch, imports it on the server, restarts
-  it, and goes back to the previous build if the new one doesn't start.
+  committed source of the chosen branch, imports it on the server, exports
+  the web client from it, restarts the server, and goes back to the
+  previous build (web client included) if the new one doesn't start.
 
-The server runs the project from source with a plain Godot 4.5.1 binary,
-so no export templates are needed.
+The server runs the project from source with a plain Godot 4.5.1 binary.
+The only export template it needs, the web one, `setup-server.sh`
+downloads once (design log 0121).
 
 ## One-time setup
 
@@ -58,10 +60,15 @@ so no export templates are needed.
 
 - `/opt/godot/godot`: Godot.
 - `/opt/slice/releases/<commit>/`: the last 5 deploys; `/opt/slice/current`
-  points at the running one.
+  points at the running one. Each has its web client in `build/web/`
+  (export log: `build/web-export.log`).
+- `/home/slice/.local/share/godot/export_templates/4.5.1.stable/`: the web
+  export template.
 - `slice.service`: the game server, WebSocket on TCP 24680 (log 0110). Logs: `journalctl -u slice -f`.
-- `caddy.service`: `wss://SERVER_DOMAIN` on 443 with a Let's Encrypt
-  certificate, passed to the game on `127.0.0.1:24680` (log 0118). Config:
+- `caddy.service`: 443 with a Let's Encrypt certificate. WebSocket
+  upgrades (`wss://SERVER_DOMAIN`) go to the game on `127.0.0.1:24680`
+  (log 0118); everything else is the web client from
+  `/opt/slice/current/build/web` (log 0121). Config:
   `/etc/caddy/Caddyfile`, written by `setup-server.sh`. Logs:
   `journalctl -u caddy -f`.
 - Firewall (`ufw`): 22, 80 and 443 only; the game port is closed to the
@@ -78,16 +85,19 @@ the server, or use `slice_deploy` before deleting it.
 ## Notes
 
 - Changing `DEPLOY_HOST_KEY` only applies to a newly created server.
-- Players join `wss://flatland-online.duckdns.org` (the game's
+- Players play at `https://flatland-online.duckdns.org/` (the web
+  client) and join `wss://flatland-online.duckdns.org` (the game's
   `online/server_address`). The DuckDNS name is pointed at the server's IP
   by hand at duckdns.org; a new server (new IP) needs it updated there
   before 001-full-deploy, or Caddy can't get a certificate. 002-deploy-code
-  ends by checking that `wss://` answers.
-- Changing the domain: set `SERVER_DOMAIN`, run 001-full-deploy, and
-  change `online/server_address` in `project.godot` for new builds.
+  ends by checking that `wss://` answers and the web client is served.
+- Changing the domain: set `SERVER_DOMAIN`, run 001-full-deploy, change
+  `online/server_address` in `project.godot`, and add the new page
+  addresses to `additional_redirect_urls` in `supabase/config.toml`.
 - Deploys need the server and every client on the same version
-  (`application/config/version`, log 0109). After a deploy that bumps it,
-  upload a new web build too.
+  (`application/config/version`, log 0109). The web client is redeployed
+  with the server; a cached old one reloads itself when turned away.
+  Desktop builds still need updating by hand.
 - New server secrets get a check and an install step in
   `ci/install-secrets.sh`.
 - Migrations must work with the server version still running (log 0105):

@@ -225,6 +225,10 @@ func on_rejected(reason: String) -> void:
 		return
 	var was_in := in_session
 	leave()
+	# The web build fetches the server's version and reloads (log 0122).
+	var theirs := WebApp.version_in_rejection(reason)
+	if theirs != "" and WebApp.update_to(theirs):
+		reason = "This server runs version %s. Loading it…" % theirs
 	if was_in:
 		session_ended.emit(reason)
 	else:

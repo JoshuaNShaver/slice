@@ -88,3 +88,16 @@ jobs:
           done
           echo "::error::wss://$SERVER_DOMAIN didn't answer (last HTTP code: ${code:-none}). Does the domain point at the server? Run 001-full-deploy to set up Caddy."
           exit 1
+
+      # The web client the release exported, served by Caddy (design log 0121).
+      - name: Check https://${{ env.SERVER_DOMAIN }}
+        if: env.SERVER_DOMAIN != 'none'
+        run: |
+          curl -fsS --max-time 10 -o page.html "https://$SERVER_DOMAIN/" || true
+          curl -fsSI --max-time 10 -o wasm.txt "https://$SERVER_DOMAIN/index.wasm" || true
+          if grep -q GODOT_CONFIG page.html && grep -qi '^content-type: application/wasm' wasm.txt; then
+            echo "The web client is at https://$SERVER_DOMAIN/"
+            exit 0
+          fi
+          echo "::error::https://$SERVER_DOMAIN/ isn't serving the web client. Run 001-full-deploy to update Caddy's config."
+          exit 1

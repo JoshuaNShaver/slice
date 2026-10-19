@@ -43,6 +43,22 @@ fi
 
 # --- The slice user: runs the server and receives deploys -------------------
 id slice >/dev/null 2>&1 || useradd --create-home --shell /bin/bash slice
+
+# --- Web export template: deploys export the web client here (log 0121) ----
+# Only the no-threads web release template is kept from the ~1 GB bundle.
+TEMPLATES="/home/slice/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+if [ ! -f "$TEMPLATES/web_nothreads_release.zip" ]; then
+	TMP="$(mktemp -d)"
+	TPZ="Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+	BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+	curl -fsSL -o "$TMP/$TPZ" "$BASE/$TPZ"
+	curl -fsSL -o "$TMP/SHA512-SUMS.txt" "$BASE/SHA512-SUMS.txt"
+	(cd "$TMP" && grep " $TPZ\$" SHA512-SUMS.txt | sha512sum -c -)
+	install -d -o slice -g slice "$TEMPLATES"
+	unzip -o -q -j "$TMP/$TPZ" templates/web_nothreads_release.zip templates/version.txt -d "$TEMPLATES"
+	rm -rf "$TMP"
+fi
+chown -R slice:slice /home/slice/.local
 usermod -aG systemd-journal slice  # deploys show the server log on failure
 install -d -o slice -g slice -m 700 /home/slice/.ssh
 echo "$DEPLOY_PUBKEY" > /home/slice/.ssh/authorized_keys
@@ -147,15 +163,35 @@ ufw --force enable
 # --- Caddy: wss:// on 443 with a Let's Encrypt certificate (log 0118) -------
 if [ -n "$DOMAIN" ]; then
 	cat > /etc/caddy/Caddyfile <<CADDY
-# Written by deploy/setup-server.sh. Passes WebSocket through to the game.
+# Written by deploy/setup-server.sh. WebSocket upgrades go to the game
+# server (log 0118); everything else is the web client that the running
+# release exported (log 0121).
 ${DOMAIN} {
-	reverse_proxy 127.0.0.1:${PORT}
+	@game {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @game 127.0.0.1:${PORT}
+
+	root * /opt/slice/current/build/web
+	# Always revalidate (cheap, by ETag), so a deploy reaches players at once.
+	header Cache-Control "no-cache"
+	encode zstd gzip {
+		match {
+			header Content-Type text/*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type application/wasm*
+			header Content-Type application/octet-stream*
+		}
+	}
+	file_server
 }
 CADDY
 	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 	systemctl enable caddy
 	systemctl reload-or-restart caddy
-	echo "Caddy serving wss://${DOMAIN} -> 127.0.0.1:${PORT}"
+	echo "Caddy serving https://${DOMAIN} (web client) and wss://${DOMAIN} -> 127.0.0.1:${PORT}"
 else
 	systemctl disable --now caddy >/dev/null 2>&1 || true
 fi

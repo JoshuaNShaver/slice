@@ -62,14 +62,15 @@ Mark your own suggestions `Proposed` until the user agrees.
   local slots, `user://families/`; chests in `user://chests.json`),
   `Accounts` (child of Net: login, server-held family slots, saving),
   `Controls` (input actions, default keys, rebinding saved
-  to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
+  to `user://controls.cfg`), `Touch` (playing by touch or keys; log 0122), `Graphics` (framerate cap, High/Low, saved to
   `user://graphics.cfg`), `Net` (offline / host / join over WebSocket, the online server's address, server-owned player list,
   version handshake),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
-- `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette, item slot,
-  theme, HUD, shape icon, stat bar, parchment background, atmosphere
+- `scripts/shape_geometry.gd`: polygon outlines. `scripts/web_app.gd`: the
+  web build's update-and-reload (log 0122). `scripts/ui/`: palette, item slot,
+  theme, HUD, touch controls, shape icon, stat bar, parchment background, atmosphere
   (foreground dust/light/fog), menu (Offline / Online, log 0119), online
   login, Google sign-in button.
 - UI is built in code from a bare root node; scenes stay minimal.
@@ -87,6 +88,7 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   first (open the editor, or `Godot --headless --path . --import`). Disable with `-- --no-hot-reload`.
 - Exporting builds (macOS, Web) and LAN play: see `docs/EXPORT-AND-LAN.md`.
   Web export: `Godot --headless --path . --export-release "Web" build/web/index.html`.
+  Deploys export it on the server, and Caddy serves it (log 0121).
   Guard web-only limits with `OS.has_feature("web")` (no hosting, no threads,
   Compatibility renderer).
 - The online server (Hetzner VPS, provisioned and deployed by manual GitHub

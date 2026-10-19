@@ -1,7 +1,7 @@
 # 0103: Game server on a Hetzner VPS, deployed by a manual GitHub Action
 
 - **Date:** 2026-10-18
-- **Status:** Accepted
+- **Status:** Accepted (web client on itch.io: superseded by 0121)
 - **Decision:** The online game server runs on a small Hetzner VPS
   (Ubuntu 24.04), from source with a plain Godot 4.5.1 binary. A manually
   run GitHub Action uploads the committed project, imports it, restarts the

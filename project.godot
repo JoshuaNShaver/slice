@@ -19,6 +19,7 @@ run/main_scene="res://scenes/main_menu.tscn"
 [autoload]
 
 FamilyStore="*res://scripts/autoload/family_store.gd"
+Touch="*res://scripts/autoload/touch.gd"
 Controls="*res://scripts/autoload/controls.gd"
 Graphics="*res://scripts/autoload/graphics.gd"
 Net="*res://scripts/autoload/net.gd"

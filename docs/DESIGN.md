@@ -162,6 +162,12 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   sheet. **Esc:** menu.
 - **All controls are rebindable (log 0035):** each is a named input action
   with up to two keys, changed in Esc > Controls (saved per machine).
+- **Touch (log 0122):** on a touch screen, a stick under the left thumb
+  rolls (analog); bottom right, a big **Jump** with the owned abilities in
+  an arc around it, plus **Use** / **Take** only while something is in
+  reach; top right, **Drink**, **Home**, **Bag**, **Menu**. Hints name
+  these buttons. A phone held upright is asked to turn sideways. Open:
+  dropping items by touch, HUD text size on phones.
 - *Proposed:* a regular n-gon holds still on slopes up to about 180°/n, so
   triangles grip steep ground and many-sided shapes slide. Terrain can gate
   shapes without doors.
@@ -330,7 +336,8 @@ Values marked * are proposed tuning.
 
 - **Energy** pays for abilities, 50 each (§2c). Jumps are free (log 0087).
 - **HUD (log 0026):** top left, your shape, level, health and XP bars.
-  Bottom right, the 1–5 quick-use slots over a 5×2 bag. **Tab** opens the character sheet
+  Bottom right, the 1–5 quick-use slots over a 5×2 bag (on touch, log 0122:
+  the quick slots at the bottom center, the bag only while a panel is open). **Tab** opens the character sheet
   (equipment, stats); **Esc** the menu (players here, Controls, Leave). Top right is
   for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 2 pips over your own shape, one per
   ability use, faded while full. Other players show a small health bar under their
@@ -447,7 +454,9 @@ As in the book, women are straight lines.
   the newest update. When updates run late, bodies keep moving at their last
   velocity (up to 100 ms) and corrections fade in rather than snap. No
   client-side prediction yet.
-- **Clients (log 0099):** the web build is the main online client.
+- **Clients (log 0099):** the web build is the main online client,
+  installable on phones as an app (PWA, landscape; log 0122). Turned away
+  for its version, it loads the newest build and reloads.
 - **Transport (log 0110, proposed, built; changes 0099):** WebSocket for
   every client, desktop and web, on TCP 24680; ENet dropped. A browser
   can't host. A server address may be a host, a host:port, or a full
@@ -464,7 +473,12 @@ As in the book, women are straight lines.
   any change an older client couldn't play with.
 - **Hosting (logs 0103, 0104):** game server on a Hetzner VPS. Manual
   GitHub Actions create, configure and deploy it; all keys are GitHub
-  secrets (`deploy/README.md`). Web client on itch.io, restricted.
+  secrets (`deploy/README.md`).
+- **Web client (log 0121):** at `https://flatland-online.duckdns.org/`,
+  served by the same Caddy (WebSocket upgrades go to the game, everything
+  else is the client). Each deploy exports it on the server from the same
+  commit, so client and server always match. itch.io, if used, only links
+  here.
 - **Content as data (log 0101):** the server owns content (items,
   abilities, prices, shops, NPCs, text) and sends it on joining; the
   client owns presentation (theme, HUD, rendering).

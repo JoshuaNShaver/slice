@@ -6,14 +6,17 @@ project_id = "slice"
 
 # Where Google login may send the player back (design log 0115). Declared
 # keys replace the dashboard's values, so this list is the whole list.
-# Desktop: the game's loopback catcher (LoopbackCatcher.PORTS). Add the web
-# build's page here once it has an address.
+# Desktop: the game's loopback catcher (LoopbackCatcher.PORTS). Web: the
+# page Caddy serves on the game server's domain (design log 0121), opened
+# at / in a browser or /index.html as an installed app.
 [auth]
 site_url = "http://127.0.0.1:47613/auth/callback"
 additional_redirect_urls = [
   "http://127.0.0.1:47613/auth/callback",
   "http://127.0.0.1:47614/auth/callback",
   "http://127.0.0.1:47615/auth/callback",
+  "https://flatland-online.duckdns.org/",
+  "https://flatland-online.duckdns.org/index.html",
 ]
 
 [auth.external.google]

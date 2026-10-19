@@ -4,9 +4,10 @@ extends RefCounted
 ## comes back with ?code=... . What the page needs after coming back (the
 ## PKCE verifier, project URL and key) waits in localStorage meanwhile.
 ##
-## TODO(log 0115): untested. Needs a page URL in Supabase's redirect list,
-## and itch.io runs the game in an iframe that Google won't load, so there
-## it likely needs a popup window (window.open) instead of a redirect.
+## The page is the game server's own site, not in a frame (design log
+## 0121), and its addresses are in Supabase's redirect list
+## (supabase/config.toml). TODO(log 0115): untested end to end, notably
+## from an installed app on iOS.
 
 const STORAGE_KEY := "slice_login"
 

@@ -32,6 +32,15 @@ const ACTIONS: Array[Dictionary] = [
 	{"action": "debug_level_up", "label": "Level up (debug)", "keys": [KEY_L], "debug": true},
 ]
 
+## On a touch screen (Touch, design log 0122), hints name these on-screen
+## buttons instead of keys. TouchControls labels its buttons with them.
+const TOUCH_NAMES := {
+	"roll_left": "Stick", "roll_right": "Stick", "jump": "Jump",
+	"nose_dive": "Dive", "spike_up": "Spike", "rush": "Rush",
+	"interact": "Use", "pickup": "Take", "drink": "Drink", "home": "Home",
+	"character_sheet": "Bag", "menu": "Menu",
+}
+
 ## True while the controls screen waits for a key, so gameplay ignores it.
 var capturing := false
 
@@ -39,6 +48,7 @@ var capturing := false
 func _ready() -> void:
 	_apply_defaults()
 	_load()
+	Touch.changed.connect(changed.emit)  # hints switch between keys and buttons
 
 
 func actions() -> Array[Dictionary]:
@@ -62,7 +72,10 @@ func keys(action: String) -> Array[Key]:
 
 
 ## "C", or "← / A" for an action with two keys. For hints in the HUD.
+## While playing by touch, the on-screen button's name ("Use").
 func describe(action: String) -> String:
+	if Touch.active and TOUCH_NAMES.has(action):
+		return TOUCH_NAMES[action]
 	var names: Array[String] = []
 	for key in keys(action):
 		if key != KEY_NONE:

@@ -23,17 +23,21 @@
 /Applications/Godot.app/Contents/MacOS/Godot --headless --path . --export-release "Web" build/web/index.html
 ```
 
-- Uses the no-threads template, so it runs on itch.io without special
-  headers. Upload the contents of `build/web/` as a zip (itch.io: *Kind of
-  project: HTML*, *This file will be played in the browser*).
+- Players don't need this: every deploy exports the web client on the
+  server and Caddy serves it at `https://flatland-online.duckdns.org/`
+  (design log 0121). Export locally only to test.
+- Uses the no-threads template, so it needs no special headers. It's an
+  installable app (PWA, landscape) with on-screen touch controls on
+  phones (log 0122); icons are in `web/`.
 - Test locally with `python3 -m http.server 8000 --directory build/web`
-  and open `http://localhost:8000`.
+  and open `http://localhost:8000`. To try touch controls on a desktop
+  browser, use its device toolbar (e.g. Chrome DevTools, phone mode). The
+  offline cache only works over HTTPS or on `localhost`.
 - Web renders with Compatibility (WebGL 2). Saves go to the browser's
   storage (IndexedDB), per site. A browser can't host, so the menu offers
   only Offline and Join.
-- A page served over HTTPS (itch.io) can only join `wss://` servers. Until
-  the server has a domain and TLS (design log 0111), the web build joins
-  only from a local `http://` page.
+- A page served over HTTPS can only join `wss://` servers, which the
+  online server is (log 0118).
 
 ### Gatekeeper
 

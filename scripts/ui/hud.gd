@@ -20,6 +20,9 @@ extends CanvasLayer
 ##   0071): opened by talking to them, closed by Esc or walking away.
 ## - Under the pay counter: a countdown popup while a squad musters or heads
 ##   home, with a Ready button to skip the wait (design log 0081).
+## - On a touch screen (Touch, design log 0122): TouchControls instead of
+##   the key hints, the quick slots at the bottom center, and the bag only
+##   while a panel is open.
 ## Energy is drawn by PlayerShape, as pips over your own shape.
 
 signal leave_requested
@@ -50,6 +53,10 @@ var _player_list: VBoxContainer
 var _stat_values: Dictionary = {}  # stat name -> its value Label
 var _bag_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.bag, quick slots last
 var _quick_keys: Array[Label] = []
+var _slots_column: VBoxContainer
+var _bag_grid: GridContainer
+var _touch: TouchControls
+var _touch_layout := false  # the slots are placed for touch
 var _gear_slots: Array[ItemSlot] = []  # indexed like Gear.SLOTS
 var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.chest
 var _storage: Control
@@ -195,6 +202,8 @@ func _hint_text() -> String:
 func update(me: PlayerShape) -> void:
 	_me = me
 	_set_underground(Regions.is_underworld(me.position))
+	_layout_for_touch()
+	_touch.update(me)
 	_portrait.sides = me.sides
 	_portrait.kind = me.kind
 	_portrait.apex = me.apex
@@ -451,6 +460,8 @@ func _build() -> void:
 
 	_root.add_child(_build_vitals())
 	_root.add_child(_build_slots())
+	_touch = TouchControls.new()
+	_root.add_child(_touch)  # under the panels
 
 	var hint := _faded(_hint_text())
 	_hint = hint
@@ -541,7 +552,30 @@ func _build_slots() -> Control:
 		hotbar.add_child(slot)
 	column.add_child(hotbar)
 	column.add_child(bag)
+	_slots_column = column
+	_bag_grid = bag
+	_touch_layout = false
 	return column
+
+
+## Touch (design log 0122): Jump and the abilities take the bottom right,
+## so the quick slots move to the bottom center and the bag shows only
+## while a panel is open.
+func _layout_for_touch() -> void:
+	var touch := Touch.active
+	var panel := _character.visible or _menu.visible or _controls.visible \
+			or _storage.visible or _orders.visible or _shop.visible
+	_touch.visible = touch
+	_touch.playing = not panel
+	_hint.visible = not touch
+	_bag_grid.visible = not touch or panel
+	var centered := touch and not panel
+	if centered == _touch_layout:
+		return
+	_touch_layout = centered
+	var preset := Control.PRESET_CENTER_BOTTOM if centered else Control.PRESET_BOTTOM_RIGHT
+	_slots_column.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, MARGIN)
+	_slots_column.grow_horizontal = Control.GROW_DIRECTION_BOTH if centered else Control.GROW_DIRECTION_BEGIN
 
 
 ## Bag slot i: drag to move, drop worn gear here to take it off.

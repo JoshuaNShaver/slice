@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs on the server, as the slice user, from inside a freshly uploaded
-# release (/opt/slice/releases/<commit>). Imports it, points
+# release (/opt/slice/releases/<commit>). Imports it, exports the web
+# client into it (build/web, which Caddy serves; log 0121), points
 # /opt/slice/current at it and restarts the server. If the server doesn't
-# come up, goes back to the previous release.
+# come up, goes back to the previous release, web client included.
 set -euo pipefail
 
 RELEASE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +18,16 @@ KEEP=5
 
 echo "Importing $RELEASE"
 timeout 600 "$GODOT" --headless --path "$RELEASE" --import
+
+echo "Exporting the web client"
+mkdir -p "$RELEASE/build/web"
+timeout 600 "$GODOT" --headless --path "$RELEASE" --export-release "Web" "$RELEASE/build/web/index.html" \
+	> "$RELEASE/build/web-export.log" 2>&1 || true
+if [ ! -s "$RELEASE/build/web/index.wasm" ] || [ ! -s "$RELEASE/build/web/index.pck" ]; then
+	tail -n 30 "$RELEASE/build/web-export.log"
+	echo "Web export failed. If the export template is missing, run 001-full-deploy."
+	exit 1
+fi
 
 PREVIOUS="$(readlink -e "$CURRENT" || true)"  # empty on the first deploy
 
