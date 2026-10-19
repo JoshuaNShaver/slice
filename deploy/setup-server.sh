@@ -45,10 +45,12 @@ fi
 id slice >/dev/null 2>&1 || useradd --create-home --shell /bin/bash slice
 
 # --- Web export template: deploys export the web client here (log 0121) ----
-# Only the no-threads web release template is kept from the ~1 GB bundle.
+# Only the no-threads web release template is kept from the 1.4 GB bundle.
+# It's downloaded to /var/tmp (disk): newer Ubuntus keep /tmp in memory.
 TEMPLATES="/home/slice/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
 if [ ! -f "$TEMPLATES/web_nothreads_release.zip" ]; then
-	TMP="$(mktemp -d)"
+	TMP="$(mktemp -d -p /var/tmp)"
+	trap 'rm -rf "$TMP"' EXIT
 	TPZ="Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
 	BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
 	curl -fsSL -o "$TMP/$TPZ" "$BASE/$TPZ"
@@ -57,6 +59,7 @@ if [ ! -f "$TEMPLATES/web_nothreads_release.zip" ]; then
 	install -d -o slice -g slice "$TEMPLATES"
 	unzip -o -q -j "$TMP/$TPZ" templates/web_nothreads_release.zip templates/version.txt -d "$TEMPLATES"
 	rm -rf "$TMP"
+	trap - EXIT
 fi
 chown -R slice:slice /home/slice/.local
 usermod -aG systemd-journal slice  # deploys show the server log on failure
