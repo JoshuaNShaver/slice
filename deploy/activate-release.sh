@@ -24,7 +24,7 @@ switch_to() {
 
 listening() {
 	for _ in $(seq 1 30); do
-		if ss -Huln "sport = :$PORT" | grep -q .; then
+		if ss -Htln "sport = :$PORT" | grep -q .; then  # TCP: WebSocket
 			return 0
 		fi
 		sleep 1
@@ -34,7 +34,7 @@ listening() {
 
 switch_to "$RELEASE"
 if listening; then
-	echo "Server is up on UDP $PORT running $(basename "$RELEASE")"
+	echo "Server is up on TCP $PORT running $(basename "$RELEASE")"
 else
 	echo "Server didn't start. Recent log:"
 	journalctl -u slice -n 40 --no-pager || true

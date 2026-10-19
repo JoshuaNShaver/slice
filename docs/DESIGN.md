@@ -415,7 +415,7 @@ As in the book, women are straight lines.
 - Online multiplayer like Realm of the Mad God / Borne Again. **Supported from
   the start, not optimized yet.**
 - *Proposed architecture:* server-authoritative, using Godot's high-level
-  multiplayer (ENet, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
+  multiplayer (WebSocket, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
 - **Smoothing (logs 0093, 0095):** clients draw other players and enemies a
@@ -423,9 +423,18 @@ As in the book, women are straight lines.
   the newest update. When updates run late, bodies keep moving at their last
   velocity (up to 100 ms) and corrections fade in rather than snap. No
   client-side prediction yet.
-- **Clients (log 0099, planned):** the web build is the main online
-  client, over WebSocket (ENet kept for desktop). Joining checks the build
-  version and turns away mismatches.
+- **Clients (log 0099):** the web build is the main online client.
+- **Transport (log 0110, proposed, built; changes 0099):** WebSocket for
+  every client, desktop and web, on TCP 24680; ENet dropped. A browser
+  can't host. The join address may be a host, or a full `ws://` / `wss://`
+  URL.
+- **TLS (log 0111, proposed):** HTTPS pages (itch.io) need `wss://`: a
+  domain plus Caddy on the VPS. Until then the server is plain `ws://`.
+- **Version check (log 0109, proposed, built):** the version is
+  `application/config/version` in `project.godot`, shown on the main menu.
+  A joining client says hello with it; a mismatch is turned away with
+  "This server runs version X; you have Y. Please update." Bump it with
+  any change an older client couldn't play with.
 - **Hosting (logs 0103, 0104):** game server on a Hetzner VPS. Manual
   GitHub Actions create, configure and deploy it; all keys are GitHub
   secrets (`deploy/README.md`). Web client on itch.io, restricted.
@@ -468,6 +477,7 @@ As in the book, women are straight lines.
 1. Confirm the blessed certificate rules (log 0039, proposed).
 2. How often do marriages at 10+ sides produce an heir?
 3. Does the 1-in-10 irregular roll apply to every heir, or only some shapes?
+4. Which domain points at the game server, for `wss://` (log 0111)?
    Is there a way out of the underworld for irregulars (cure quest, regular
    heir)?
 4. What does renown buy, and how does it relate to lineage?
