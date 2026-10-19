@@ -433,8 +433,8 @@ As in the book, women are straight lines.
   abilities, prices, shops, NPCs, text) and sends it on joining; the
   client owns presentation (theme, HUD, rendering).
 - **Before public hosting (log 0100):** split `PlayerShape` into
-  components, version check, accounts and server-owned saves, then the
-  web build.
+  components (done, log 0106), version check, accounts and server-owned
+  saves, then the web build.
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.

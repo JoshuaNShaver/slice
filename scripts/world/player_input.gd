@@ -1,0 +1,37 @@
+class_name PlayerInput
+extends Node
+## The owner's keys (PlayerShape's "Input"), sent to the server as RPCs on
+## the other parts. Only runs on the machine that owns the shape.
+
+var player: PlayerShape
+var _sent_move := 0.0  # last move value sent, so we only send changes
+
+
+func _physics_process(_delta: float) -> void:
+	if not player.is_local():
+		return
+	if Controls.capturing:  # the controls screen is waiting for a key
+		return
+	var move := Input.get_axis("roll_left", "roll_right")
+	if move != _sent_move:
+		_sent_move = move
+		player.motion._submit_move.rpc_id(1, move)
+	if Input.is_action_just_pressed("jump"):
+		player.motion._submit_jump.rpc_id(1)
+	if Input.is_action_just_pressed("interact"):
+		player.actions._submit_interact.rpc_id(1)
+	if Input.is_action_just_pressed("pickup"):
+		player.inventory._submit_pickup.rpc_id(1)
+	if Input.is_action_just_pressed("drink"):
+		player.inventory._submit_drink.rpc_id(1, -1)
+	if Input.is_action_just_pressed("home"):
+		player.motion._submit_home.rpc_id(1)
+	for id: String in Abilities.ALL:
+		if Input.is_action_just_pressed(Abilities.ALL[id].action) and id in player.stats.abilities:
+			player.moves._submit_ability.rpc_id(1, id)
+	for n in PlayerInventory.QUICK_SLOTS:
+		if Input.is_action_just_pressed("quick_%d" % (n + 1)):
+			player.inventory.request_use(PlayerInventory.BAG_SLOTS + n)
+	# There's no XP yet, so debug builds can level up by hand to test scaling.
+	if OS.is_debug_build() and Input.is_action_just_pressed("debug_level_up"):
+		player.stats._submit_debug_level_up.rpc_id(1)

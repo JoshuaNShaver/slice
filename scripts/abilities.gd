@@ -38,7 +38,7 @@ const RUSH_MAX_SPIN := 40.0  # rad/s
 const RUSH_TIME := 0.6  # s a rush counts as a move under way
 
 # Nose dive
-# Times PlayerShape.JUMP_SPEED. 3.5 rises ~140 px, over 3 triangle heights
+# Times PlayerMotion.JUMP_SPEED. 3.5 rises ~140 px, over 3 triangle heights
 # (42 px), to clear enemies (log 0090).
 const NOSE_DIVE_JUMP := 3.5
 const DIVE_GRAVITY := 2.0  # times gravity, coming down

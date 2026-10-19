@@ -42,7 +42,7 @@ func prompt_for(p: PlayerShape) -> String:
 ## Server only.
 func interact(p: PlayerShape) -> void:
 	if Regions.admits(RULE, p.sides, p.kind):
-		p.open_storage()
+		p.screen.open_storage()
 
 
 func _draw() -> void:

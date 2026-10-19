@@ -85,21 +85,21 @@ func request(player: PlayerShape, mission_type: String) -> void:
 				_musters.erase(other)
 			else:
 				_show_muster(other)
-	player.show_countdown("", 0.0, 0, 0, false)
+	player.screen.show_countdown("", 0.0, 0, 0, false)
 	if info.squad <= 1:
 		_deploy(mission_type, [player.peer_id])
 		return
 	if not _musters.has(mission_type):
 		_musters[mission_type] = {"members": [player.peer_id], "time": MUSTER_TIME, "ready": {}}
 		for p in _players_in_barracks():
-			p.tell("The General", "A %s squad musters here. %d seconds to join." % [
+			p.screen.tell("The General", "A %s squad musters here. %d seconds to join." % [
 					info.name.to_lower(), roundi(MUSTER_TIME)])
 		_show_muster(mission_type)
 		return
 	var muster: Dictionary = _musters[mission_type]
 	if player.peer_id not in muster.members:
 		muster.members.append(player.peer_id)
-	player.tell("The General", "You're in the %s squad. Moving out in %d seconds." % [
+	player.screen.tell("The General", "You're in the %s squad. Moving out in %d seconds." % [
 			info.name.to_lower(), ceili(muster.time)])
 	if muster.members.size() >= info.squad:
 		_musters.erase(mission_type)
@@ -127,9 +127,9 @@ func mark_ready(player: PlayerShape) -> void:
 			# Reporting the Captain back (design log 0089).
 			var info: Dictionary = Mission.TYPES[inst.type]
 			var pay: int = info.pay * info.report_pay
-			player.add_pay(pay)
-			player.show_countdown("", 0.0, 0, 0, false)
-			player.tell("The General", "A Captain, out on recon? Good eyes, soldier. +%d pay." % pay)
+			player.stats.add_pay(pay)
+			player.screen.show_countdown("", 0.0, 0, 0, false)
+			player.screen.tell("The General", "A Captain, out on recon? Good eyes, soldier. +%d pay." % pay)
 			player.teleport(Barracks.MUSTER)
 			inst.members.erase(id)
 			if inst.members.is_empty():
@@ -137,7 +137,7 @@ func mark_ready(player: PlayerShape) -> void:
 			return
 		if inst.done and inst.members.has(id):
 			# Going back early still gets the General's debrief.
-			player.show_countdown("", 0.0, 0, 0, false)
+			player.screen.show_countdown("", 0.0, 0, 0, false)
 			player.teleport(Barracks.MUSTER)
 			if inst.boss_down:
 				_schedule_debrief(id)
@@ -154,7 +154,7 @@ func _show_muster(mission_type: String) -> void:
 	for id: int in muster.members:
 		var p := world.player(id)
 		if p != null:
-			p.show_countdown(title, muster.time, muster.ready.size(), muster.members.size(),
+			p.screen.show_countdown(title, muster.time, muster.ready.size(), muster.members.size(),
 					muster.ready.has(id))
 
 func _physics_process(delta: float) -> void:
@@ -193,7 +193,7 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 	for id: int in member_ids:
 		var p := world.player(id)
 		if p != null:
-			p.show_countdown("", 0.0, 0, 0, false)
+			p.screen.show_countdown("", 0.0, 0, 0, false)
 		if p != null and Regions.at(p.position).get("id", "") == "barracks" and not _in_mission(id):
 			squad.append(p)
 	if squad.is_empty():
@@ -201,7 +201,7 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 	var slot := _free_slot()
 	if slot < 0:
 		for p in squad:
-			p.tell("The General", "The front's crowded. Wait a little.")
+			p.screen.tell("The General", "The front's crowded. Wait a little.")
 		return
 	var info: Dictionary = Mission.TYPES[mission_type]
 	_count += 1
@@ -218,12 +218,12 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 		var p := squad[i]
 		inst.members[p.peer_id] = true
 		p.teleport(node.ground_point(220.0 + i * 60.0, PlayerShape.RADIUS + 20.0))
-		p.heal_full()
-		p.tell("", info.brief)
+		p.combat.heal_full()
+		p.screen.tell("", info.brief)
 
 	var best_luck := 0
 	for p in squad:
-		best_luck = maxi(best_luck, p.luck)
+		best_luck = maxi(best_luck, p.stats.luck)
 	var revolt := _revolt_for(mission_type, best_luck)
 	# Bosses first, so a huddle has someone to huddle round.
 	var is_boss := func(type: String) -> bool: return Enemy.TYPES[type].get("boss", false)
@@ -372,7 +372,7 @@ func _watch(slot: int, delta: float) -> void:
 		if p == null or not field.has_point(p.position):
 			inst.members.erase(id)
 			if p != null:
-				p.tell("The General", "You left the front. No pay for deserters.")
+				p.screen.tell("The General", "You left the front. No pay for deserters.")
 	if inst.members.is_empty():
 		_close(slot)
 
@@ -389,7 +389,7 @@ func _hint(inst: Dictionary, delta: float) -> void:
 	for id: int in inst.members:
 		var p := world.player(id)
 		if p != null:
-			p.tell(Enemy.TYPES.soldier.name, line)
+			p.screen.tell(Enemy.TYPES.soldier.name, line)
 	if inst.offer_report:
 		inst.offer_report = false
 		inst.report_time = REPORT_TIME
@@ -405,10 +405,10 @@ func _offer_report(inst: Dictionary, show: bool) -> void:
 		if p == null:
 			continue
 		if show:
-			p.show_countdown("A Captain! Report back?", REPORT_TIME, 0, 0, false,
+			p.screen.show_countdown("A Captain! Report back?", REPORT_TIME, 0, 0, false,
 					"Report back (+%d pay)" % (info.pay * info.report_pay))
 		else:
-			p.show_countdown("", 0.0, 0, 0, false)
+			p.screen.show_countdown("", 0.0, 0, 0, false)
 
 
 func _win(slot: int) -> void:
@@ -422,14 +422,14 @@ func _win(slot: int) -> void:
 		var p := world.player(id)
 		if p == null:
 			continue
-		p.add_pay(pay)
+		p.stats.add_pay(pay)
 		if inst.boss_down:
-			p.tell("The General", "Their gentry is down. +%d pay. Report to me at the barracks." % pay)
+			p.screen.tell("The General", "Their gentry is down. +%d pay. Report to me at the barracks." % pay)
 		elif inst.pay_mult > 1:
-			p.tell("The General", "More than scouts out there, I hear. Well done. +%d pay." % pay)
+			p.screen.tell("The General", "More than scouts out there, I hear. Well done. +%d pay." % pay)
 		else:
-			p.tell("The General", "Mission complete. +%d pay. Back to the barracks." % pay)
-		p.show_countdown("Back to the barracks", RETURN_DELAY, 0, 0, false)
+			p.screen.tell("The General", "Mission complete. +%d pay. Back to the barracks." % pay)
+		p.screen.show_countdown("Back to the barracks", RETURN_DELAY, 0, 0, false)
 	inst.return_time = RETURN_DELAY
 
 
@@ -444,7 +444,7 @@ func _return_squad(slot: int) -> void:
 		if p == null:
 			continue
 		if field.has_point(p.position):
-			p.show_countdown("", 0.0, 0, 0, false)
+			p.screen.show_countdown("", 0.0, 0, 0, false)
 			p.teleport(Barracks.MUSTER + Vector2(i * 50.0, 0))
 			i += 1
 		if boss_down:
@@ -463,13 +463,13 @@ func _debrief(id: int) -> void:
 	var p := world.player(id)
 	if p == null:
 		return
-	if _rng.randf() < Stats.lucky_chance(DISCHARGE_CHANCE, p.luck):
+	if _rng.randf() < Stats.lucky_chance(DISCHARGE_CHANCE, p.stats.luck):
 		# The campaign is won: an honourable discharge (design log 0067).
-		if not p.add_to_bag(Gear.CERTIFICATE):
+		if not p.inventory.add_to_bag(Gear.CERTIFICATE):
 			world.drop_item(Gear.CERTIFICATE, id, p.position)
-		p.tell("The General", "You've earned this, soldier. An honourable discharge: a marriage certificate.")
+		p.screen.tell("The General", "You've earned this, soldier. An honourable discharge: a marriage certificate.")
 	else:
-		p.tell("The General", "Good work out there. Not your discharge yet. The Revolt has more gentry; I'll call on you.")
+		p.screen.tell("The General", "Good work out there. Not your discharge yet. The Revolt has more gentry; I'll call on you.")
 
 
 func _close(slot: int) -> void:

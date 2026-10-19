@@ -33,7 +33,12 @@ Mark your own suggestions `Proposed` until the user agrees.
 
 - `scenes/`: `main_menu.tscn` (main scene), `world.tscn` (the Center hub).
 - `scripts/world/`: `PlayerShape` (server-simulated rolling polygon, synced to
-  clients), `Regions` (where each place is, spawn points, who a gate admits),
+  clients; log 0106) and its child-node parts: `PlayerMotion` (rolling,
+  jumps, teleports, rides), `PlayerMoves` (using abilities), `PlayerCombat`
+  (hits, healing, death), `PlayerStats`, `PlayerInventory` (bag, gear,
+  chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
+  (server -> owner HUD messages), `PlayerInput` (owner's keys);
+  `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
   off the Undercroft), `Barracks` (drill yard, General, Quartermaster).
@@ -70,6 +75,8 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Exporting builds and LAN play: see `docs/EXPORT-AND-LAN.md`.
 - The online server (Hetzner VPS, provisioned and deployed by manual GitHub
   Actions, keys as GitHub secrets): see `deploy/README.md`.
+- Player smoke test: `Godot --headless --path . -s tools/tests/test_player.gd`
+  (prints RESULT lines to compare before and after a refactor).
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

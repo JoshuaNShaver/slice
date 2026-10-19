@@ -124,7 +124,7 @@ func _process(delta: float) -> void:
 		_hud.update(me)
 		_update_prompts(me)
 		_announce_place(me)
-		if _hud.storage_open() and not me.can_use_chest():
+		if _hud.storage_open() and not me.inventory.can_use_chest():
 			_hud.close_storage()
 		var panel := _hud.open_panel_name()
 		if panel != "" and not Npc.near_role(me, "general" if panel == "orders" else "quartermaster"):
@@ -185,8 +185,8 @@ func _set_camera_limits(bounds: Rect2) -> void:
 ## a new heir's shape hasn't synced yet, so the old heir's level can't be
 ## saved onto the new one.
 func _save_progress(me: PlayerShape) -> void:
-	if me != null and me.chest != PackedStringArray(FamilyStore.chest):
-		FamilyStore.save_chest(me.chest)  # the player's, whatever the family (log 0042)
+	if me != null and me.inventory.chest != PackedStringArray(FamilyStore.chest):
+		FamilyStore.save_chest(me.inventory.chest)  # the player's, whatever the family (log 0042)
 	var family := FamilyStore.active_family()
 	if me == null or family == null or family.extinct or me.generation != family.generation:
 		return
@@ -266,19 +266,19 @@ func _update_prompts(me: PlayerShape) -> void:
 		node.prompt = node.prompt_for(me) if node == nearest else ""
 
 
-## Server only (PlayerShape._submit_interact).
+## Server only (PlayerActions._submit_interact).
 func interact(who: PlayerShape) -> void:
 	var target := _nearest_interactable(who.position)
 	if target != null:
 		target.interact(who)
 
 
-## Server only (PlayerShape._submit_mission): the General's orders.
+## Server only (PlayerActions._submit_mission): the General's orders.
 func request_mission(who: PlayerShape, mission_type: String) -> void:
 	_missions.request(who, mission_type)
 
 
-## Server only (PlayerShape._submit_ready): Ready in a countdown popup.
+## Server only (PlayerActions._submit_ready): Ready in a countdown popup.
 func mission_ready(who: PlayerShape) -> void:
 	_missions.mark_ready(who)
 
@@ -353,16 +353,16 @@ func reward_kill(enemy: Enemy, drops := true) -> void:
 		var who := player(id)
 		if who == null:
 			continue
-		who.add_xp(info.xp)
+		who.stats.add_xp(info.xp)
 		if not drops:
 			continue
-		if info.tier > 0 and _rng.randf() < Stats.lucky_chance(info.get("drop", 0.0), who.luck):
+		if info.tier > 0 and _rng.randf() < Stats.lucky_chance(info.get("drop", 0.0), who.stats.luck):
 			drop_item.call_deferred(Gear.random_item(info.tier, _rng), id, enemy.position)
-		if _rng.randf() < Stats.lucky_chance(info.get("potion", 0.0), who.luck):
+		if _rng.randf() < Stats.lucky_chance(info.get("potion", 0.0), who.stats.luck):
 			drop_item.call_deferred(Gear.POTION, id, enemy.position + Vector2(-40, 0))
 		if enemy.is_boss():
 			drop_item.call_deferred(Gear.CERTIFICATE, id, enemy.position + Vector2(40, 0))
-			if _rng.randf() < Stats.lucky_chance(BLESSED_DROP_CHANCE, who.luck):
+			if _rng.randf() < Stats.lucky_chance(BLESSED_DROP_CHANCE, who.stats.luck):
 				drop_item.call_deferred(Gear.BLESSED_CERTIFICATE, id, enemy.position + Vector2(80, 0))
 
 

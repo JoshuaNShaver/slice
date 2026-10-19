@@ -100,7 +100,7 @@ const AGGRO_RANGE := 520.0
 const HOP_RANGE := 180.0  # hops when a target is this close
 const HOP_EVERY := Vector2(1.2, 2.6)  # seconds between hops, random in this range
 const SPIN_ACCEL := 6.0
-const TIP_ASSIST := 0.75  # as PlayerShape.TIP_ASSIST
+const TIP_ASSIST := 0.75  # as PlayerMotion.TIP_ASSIST
 const HOME_SLACK := 40.0  # px from home that counts as home
 const STAKE := 46.0  # px a straw dummy's stake reaches below its center
 const GROUP := "enemies"
@@ -152,11 +152,11 @@ const CATCHUP_RANGE := 350.0
 ## Soldiers on the move jump like a player pressing Space (log 0080): a
 ## jump that throws them forward with a spin, then steering in the air.
 ## Jumps come sooner and go further the more they're hurrying.
-const TRAVEL_JUMP := 150.0  # as PlayerShape.JUMP_SPEED
+const TRAVEL_JUMP := 150.0  # as PlayerMotion.JUMP_SPEED
 const TRAVEL_PUSH := 110.0  # forward speed a jump adds, x2 when hurrying
 const TRAVEL_FLIP := 12.0  # spin a jump gives
 const TRAVEL_EVERY := Vector2(0.5, 1.1)  # seconds between jumps, halved when hurrying
-const AIR_SPEED := 120.0  # as PlayerShape.AIR_SPEED; x2 when hurrying
+const AIR_SPEED := 120.0  # as PlayerMotion.AIR_SPEED; x2 when hurrying
 const AIR_ACCEL := 150.0
 ## Soldiers wear bronze plating, so they read as the army's (design log 0069).
 const SOLDIER_WEAR := ["", "plating_6", "", "", ""]
@@ -438,7 +438,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		var dealt := damage * (MOVE_DAMAGE if _moves.active() else 1.0)
 		for hit in Combat.find_hits(state, _corners, _prev_linear, _prev_angular, _is_foe, _cooldowns):
 			if hit.target is PlayerShape:
-				(hit.target as PlayerShape).take_hit(dealt, hit.push, info().get("lethal", true))
+				(hit.target as PlayerShape).combat.take_hit(dealt, hit.push, info().get("lethal", true))
 			else:
 				var foe: Enemy = hit.target
 				foe.apply_central_impulse(hit.push * Combat.KNOCKBACK * foe.mass)
