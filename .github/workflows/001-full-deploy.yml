@@ -25,6 +25,10 @@ jobs:
       SERVER_NAME: ${{ vars.SERVER_NAME || 'slice-server' }}
       SERVER_TYPE: ${{ vars.SERVER_TYPE || 'cax11' }}
       SERVER_LOCATION: ${{ vars.SERVER_LOCATION || 'nbg1' }}
+      # Players join wss://SERVER_DOMAIN through Caddy (design log 0118);
+      # set it to "none" for plain ws:// on SERVER_PORT instead.
+      SERVER_DOMAIN: ${{ vars.SERVER_DOMAIN || 'flatland-online.duckdns.org' }}
+      SERVER_PORT: ${{ vars.SERVER_PORT || '24680' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
@@ -49,7 +53,10 @@ jobs:
           exit 1
 
       - name: Configure the server
-        run: ssh root@server "bash -s -- '$DEPLOY_PUBKEY'" < deploy/setup-server.sh
+        run: |
+          DOMAIN="$SERVER_DOMAIN"
+          [ "$DOMAIN" = none ] && DOMAIN=""
+          ssh root@server "bash -s -- '$DEPLOY_PUBKEY' '$DOMAIN' '$SERVER_PORT'" < deploy/setup-server.sh
 
       - name: Check and install secrets
         env:

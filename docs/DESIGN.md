@@ -387,8 +387,15 @@ Values marked * are proposed tuning.
 
 ## 5b. Main menu and saves
 
-- Server selection: **offline** (local server, no network), **host**, or
-  **join** by address.
+- **Offline or Online (log 0119):** two modes, remembered. Offline is a
+  local server with no network; Online joins the game's server
+  (`online/server_address` in `project.godot`; on desktop
+  `-- --server-address=` or `SLICE_SERVER` points elsewhere, for dev or
+  LAN). No hosting from the menu; a server runs with `-- --server`.
+- **Sign-in screen (log 0120, proposed, built):** Online connects at once
+  and shows one card per step: reaching the server, can't reach it (Try
+  again), "Sign in with Google" (Google's white button and G), finish in
+  the browser. Signed in: "Signed in as … · Sign out" above the slots.
 - **3 family save slots.** Each slot: create a new family, play, or delete.
 - **Saved progress (log 0038):** a family save keeps the lineage and the
   current heir's level, XP, stats, bag and worn gear. The server still
@@ -443,10 +450,13 @@ As in the book, women are straight lines.
 - **Clients (log 0099):** the web build is the main online client.
 - **Transport (log 0110, proposed, built; changes 0099):** WebSocket for
   every client, desktop and web, on TCP 24680; ENet dropped. A browser
-  can't host. The join address may be a host, or a full `ws://` / `wss://`
-  URL.
-- **TLS (log 0111, proposed):** HTTPS pages (itch.io) need `wss://`: a
-  domain plus Caddy on the VPS. Until then the server is plain `ws://`.
+  can't host. A server address may be a host, a host:port, or a full
+  `ws://` / `wss://` URL.
+- **TLS (log 0118):** players join `wss://flatland-online.duckdns.org`
+  (free DuckDNS name). Caddy on the VPS serves 443 with a Let's Encrypt
+  certificate and passes WebSocket to the game on `127.0.0.1:24680`; the
+  game port is closed to the internet. GitHub variables `SERVER_DOMAIN`
+  and `SERVER_PORT` set both.
 - **Version check (log 0109, proposed, built):** the version is
   `application/config/version` in `project.godot`, shown on the main menu.
   A joining client says hello with it; a mismatch is turned away with
@@ -494,8 +504,7 @@ As in the book, women are straight lines.
 1. Confirm the blessed certificate rules (log 0039, proposed).
 2. How often do marriages at 10+ sides produce an heir?
 3. Does the 1-in-10 irregular roll apply to every heir, or only some shapes?
-4. Which domain points at the game server, for `wss://` (log 0111)?
-   Is there a way out of the underworld for irregulars (cure quest, regular
+4. Is there a way out of the underworld for irregulars (cure quest, regular
    heir)?
 4. What does renown buy, and how does it relate to lineage?
 5. Can you control rotation in mid-air (aiming corners)?

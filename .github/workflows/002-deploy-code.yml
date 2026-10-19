@@ -56,6 +56,7 @@ jobs:
       cancel-in-progress: false
     env:
       SERVER_NAME: ${{ vars.SERVER_NAME || 'slice-server' }}
+      SERVER_DOMAIN: ${{ vars.SERVER_DOMAIN || 'flatland-online.duckdns.org' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
@@ -73,3 +74,17 @@ jobs:
 
       - name: Activate release
         run: ssh slice@server "bash /opt/slice/releases/${GITHUB_SHA}/deploy/activate-release.sh"
+
+      # The way players come in: TLS through Caddy, upgraded to WebSocket.
+      - name: Check wss://${{ env.SERVER_DOMAIN }}
+        if: env.SERVER_DOMAIN != 'none'
+        run: |
+          for _ in $(seq 1 12); do
+            code="$(curl -sS --http1.1 --max-time 5 -o /dev/null -w '%{http_code}' \
+              -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
+              -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "https://$SERVER_DOMAIN/" || true)"
+            [ "$code" = 101 ] && { echo "wss://$SERVER_DOMAIN answers."; exit 0; }
+            sleep 5
+          done
+          echo "::error::wss://$SERVER_DOMAIN didn't answer (last HTTP code: ${code:-none}). Does the domain point at the server? Run 001-full-deploy to set up Caddy."
+          exit 1

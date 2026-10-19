@@ -155,15 +155,17 @@ supabase config diff && supabase config push         # auth settings
 godot --path .
 ```
 
-This opens the main menu. To join a server:
+This opens the main menu. Choose **Offline** for single player, or
+**Online** to join the game's server (`online/server_address` in
+`project.godot`, `wss://flatland-online.duckdns.org`), sign in, and pick a
+family slot.
 
-1. Choose **Join** in the server panel.
-2. Enter the address (blank means `127.0.0.1`) and the port (default `24680`).
-3. Pick a family slot to play.
+To join a local dev server instead, point Online elsewhere:
 
-You can also choose **Offline** for single player or **Host** to run a server
-inside your own game. There's no command-line flag to auto-join yet, so
-joining always goes through the menu.
+```sh
+godot --path . -- --server-address=127.0.0.1    # or 127.0.0.1:24680, ws://..., wss://...
+SLICE_SERVER=127.0.0.1 godot --path .            # same, as an environment variable
+```
 
 ### Several clients on one machine
 

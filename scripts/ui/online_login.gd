@@ -8,6 +8,10 @@ extends Node
 ## The menu should show the login button.
 signal needs_button
 signal message(text: String)
+## The browser login didn't finish (cancelled, timed out, refused).
+signal login_failed(reason: String)
+## A token is on its way to the server.
+signal signing_in(email: String)
 
 var auth := SupabaseAuth.new()
 ## Who we're logged in as on a Supabase server, or "".
@@ -50,13 +54,17 @@ func answer(info: Dictionary) -> void:
 
 
 func log_in_with_google() -> void:
-	message.emit("Finish logging in in your browser…")
 	var result := await auth.log_in()
 	if result.has("error"):
-		message.emit(result.error)
+		login_failed.emit(result.error)
 		needs_button.emit()
 		return
 	_send(result.token)
+
+
+## Stops waiting for the browser; log_in_with_google then fails.
+func cancel_google() -> void:
+	auth.cancel()
 
 
 func log_out() -> void:
@@ -74,5 +82,5 @@ func finish_web_login() -> bool:
 
 func _send(token: String) -> void:
 	email = auth.saved_email()
-	message.emit("Logging in as %s…" % email if email != "" else "Logging in…")
+	signing_in.emit(email)
 	Net.accounts.log_in_with_token(token)

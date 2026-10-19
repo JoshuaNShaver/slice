@@ -46,7 +46,9 @@ so no export templates are needed.
 
    Then delete the four key files from your machine.
 4. **Variables (optional)**, same page, Variables tab:
-   `SERVER_TYPE` (default `cax11`, ARM, EU only), `SERVER_LOCATION`
+   `SERVER_DOMAIN` (default `flatland-online.duckdns.org`; `none` for
+   plain `ws://` on the game port, no Caddy), `SERVER_PORT` (default
+   `24680`, the game server's own port behind Caddy), `SERVER_TYPE` (default `cax11`, ARM, EU only), `SERVER_LOCATION`
    (default `nbg1`), `SERVER_NAME` (default `slice-server`). For the US use
    an x86 type such as `cpx11` and `ash` or `hil`. Check current type names
    in the Hetzner console; the workflow shows the API's error if one is wrong.
@@ -58,6 +60,12 @@ so no export templates are needed.
 - `/opt/slice/releases/<commit>/`: the last 5 deploys; `/opt/slice/current`
   points at the running one.
 - `slice.service`: the game server, WebSocket on TCP 24680 (log 0110). Logs: `journalctl -u slice -f`.
+- `caddy.service`: `wss://SERVER_DOMAIN` on 443 with a Let's Encrypt
+  certificate, passed to the game on `127.0.0.1:24680` (log 0118). Config:
+  `/etc/caddy/Caddyfile`, written by `setup-server.sh`. Logs:
+  `journalctl -u caddy -f`.
+- Firewall (`ufw`): 22, 80 and 443 only; the game port is closed to the
+  internet when there's a domain.
 - `slice-traffic-watch.timer`: every 15 min, stops the server at 80% of the
   traffic allowance.
 - `/etc/slice/`: secrets installed by 001-full-deploy (root only):
@@ -70,11 +78,13 @@ the server, or use `slice_deploy` before deleting it.
 ## Notes
 
 - Changing `DEPLOY_HOST_KEY` only applies to a newly created server.
-- Players join at the server's IP, port 24680, over plain `ws://`. A web
-  page served over HTTPS (itch.io) may only open `wss://`, so the web
-  build can't reach the server until it has a domain and TLS (proposed in
-  log 0111: Caddy on 443 in front of the game server). Desktop builds
-  connect fine meanwhile.
+- Players join `wss://flatland-online.duckdns.org` (the game's
+  `online/server_address`). The DuckDNS name is pointed at the server's IP
+  by hand at duckdns.org; a new server (new IP) needs it updated there
+  before 001-full-deploy, or Caddy can't get a certificate. 002-deploy-code
+  ends by checking that `wss://` answers.
+- Changing the domain: set `SERVER_DOMAIN`, run 001-full-deploy, and
+  change `online/server_address` in `project.godot` for new builds.
 - Deploys need the server and every client on the same version
   (`application/config/version`, log 0109). After a deploy that bumps it,
   upload a new web build too.

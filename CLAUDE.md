@@ -63,14 +63,15 @@ Mark your own suggestions `Proposed` until the user agrees.
   `Accounts` (child of Net: login, server-held family slots, saving),
   `Controls` (input actions, default keys, rebinding saved
   to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
-  `user://graphics.cfg`), `Net` (offline / host / join over WebSocket, server-owned player list,
+  `user://graphics.cfg`), `Net` (offline / host / join over WebSocket, the online server's address, server-owned player list,
   version handshake),
   `HotReload` (dev only, see Running).
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/ui/`: palette, item slot,
   theme, HUD, shape icon, stat bar, parchment background, atmosphere
-  (foreground dust/light/fog), menu.
+  (foreground dust/light/fog), menu (Offline / Online, log 0119), online
+  login, Google sign-in button.
 - UI is built in code from a bare root node; scenes stay minimal.
 
 ## Running

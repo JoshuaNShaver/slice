@@ -9,6 +9,10 @@ RELEASE="$(cd "$(dirname "$0")/.." && pwd)"
 CURRENT=/opt/slice/current
 GODOT=/opt/godot/godot
 PORT=24680
+if [ -f /etc/default/slice ]; then  # written by setup-server.sh
+	. /etc/default/slice
+	PORT="${SLICE_PORT:-$PORT}"
+fi
 KEEP=5
 
 echo "Importing $RELEASE"

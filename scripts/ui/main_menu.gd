@@ -1,9 +1,11 @@
 extends Control
-## Main menu: pick a server and one of 3 family slots (design log 0018).
+## Main menu: Offline or Online, then one of 3 family slots (design logs
+## 0018, 0119).
 ##
-## Offline and hosting list this machine's own families (FamilyStore).
-## Joining connects first; the server asks for a login (OnlineLogin) and
-## sends the account's families, which live on the server (design log 0116).
+## Offline lists this machine's own families (FamilyStore). Online connects
+## to the game's server (Net.online_address), which asks for a login
+## (OnlineLogin) and sends the account's families, kept on the server
+## (design log 0116).
 ##
 ## Run as a dedicated server with:
 ## godot --headless -- --server [--port=24680] [--save-dir=user://server/]
@@ -11,28 +13,32 @@ extends Control
 const WORLD_SCENE := "res://scenes/world.tscn"
 const SETTINGS_PATH := "user://settings.cfg"
 const ROMAN: Array[String] = ["I", "II", "III"]
+const CARD_WIDTH := 420
 
-## Joining: not connected, connecting, logging in, picking a family, starting.
+## Online: not connected, connecting, logging in, picking a family, starting.
 enum Online { OFF, CONNECTING, LOGIN, SLOTS, STARTING }
 
-var _mode_select: OptionButton
-var _address_row: Control
-var _address_edit: LineEdit
-var _port_row: Control
-var _port_spin: SpinBox
-var _slots_box: HBoxContainer
+var _offline_tab: Button
+var _online_tab: Button
+var _body: VBoxContainer
 var _status: Label
-var _cancel_button: Button
 var _busy := false
 ## Each empty slot's chosen starting triangle (design log 0050).
 var _start_kinds := {}
+var _online_mode := false
 var _online := Online.OFF
-## Joining: the account's families from the server (Family or null).
+## Online: the account's families from the server (Family or null).
 var _server_families: Array = []
 var _login: OnlineLogin
 var _needs_login_button := false
-var _account_box: Control
-var _account_note: Label
+## Online: the Google page is open in the browser.
+var _in_browser := false
+## Online: the latest word from connecting or logging in, shown on the card.
+var _online_note := ""
+## Online: why the last connection failed, or "".
+var _online_error := ""
+## Online: why the last Google login didn't finish, or "".
+var _sign_in_problem := ""
 
 
 func _ready() -> void:
@@ -42,7 +48,6 @@ func _ready() -> void:
 		return
 	theme = UiTheme.build()
 	_build()
-	_load_settings()
 	Net.session_failed.connect(_on_session_failed)
 	Net.accounts.login_needed.connect(_on_login_needed)
 	Net.accounts.slots_received.connect(_on_slots_received)
@@ -52,14 +57,26 @@ func _ready() -> void:
 	_login.message.connect(_set_status)
 	_login.needs_button.connect(func() -> void:
 		_needs_login_button = true
-		_refresh_slots())
-	FamilyStore.slots_changed.connect(_refresh_slots)
+		_in_browser = false
+		_refresh())
+	_login.login_failed.connect(func(reason: String) -> void:
+		_sign_in_problem = reason)
+	_login.signing_in.connect(func(email: String) -> void:
+		_in_browser = false
+		_online_note = "Signing in as %s…" % email if email != "" else "Signing in…"
+		_refresh())
+	FamilyStore.slots_changed.connect(_refresh)
 	FamilyStore.reload()  # a local server may have saved since
+	_load_settings()
 	if Net.last_message != "":
 		_set_status(Net.last_message)
 		Net.last_message = ""
-	if OS.has_feature("web") and await _login.finish_web_login() and _joining():
-		_connect()  # back from the login page
+	if OS.has_feature("web"):
+		await _login.finish_web_login()  # back from the login page
+	if _online_mode:
+		_connect()
+	else:
+		_refresh()
 
 
 func _start_dedicated_server_if_requested() -> bool:
@@ -106,25 +123,16 @@ func _build() -> void:
 	subtitle.add_theme_color_override("font_color", Palette.INK_FADED)
 	column.add_child(subtitle)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 24)
-	column.add_child(row)
-	row.add_child(_build_server_panel())
-	_slots_box = HBoxContainer.new()
-	_slots_box.add_theme_constant_override("separation", 16)
-	row.add_child(_slots_box)
+	column.add_child(_build_mode_tabs())
 
-	var footer := HBoxContainer.new()
-	footer.alignment = BoxContainer.ALIGNMENT_CENTER
-	footer.add_theme_constant_override("separation", 12)
-	column.add_child(footer)
+	_body = VBoxContainer.new()
+	_body.add_theme_constant_override("separation", 14)
+	_body.custom_minimum_size = Vector2(0, 440)  # the tallest slot card; keeps the title still
+	column.add_child(_body)
+
 	_status = Label.new()
-	footer.add_child(_status)
-	_cancel_button = Button.new()
-	_cancel_button.text = "Cancel"
-	_cancel_button.visible = false
-	_cancel_button.pressed.connect(_on_cancel_pressed)
-	footer.add_child(_cancel_button)
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_status)
 
 	# Players compare this with a server's "please update" message (log 0109).
 	var version := Label.new()
@@ -135,111 +143,173 @@ func _build() -> void:
 	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 
 
-func _build_server_panel() -> Control:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(240, 0)
-	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	panel.add_child(box)
-	box.add_child(_heading("Server"))
-
-	_mode_select = OptionButton.new()
-	_mode_select.add_item("Offline", Net.Mode.OFFLINE)
-	if not OS.has_feature("web"):  # a browser can't listen for connections
-		_mode_select.add_item("Host a server", Net.Mode.HOST)
-	_mode_select.add_item("Join a server", Net.Mode.JOIN)
-	_mode_select.item_selected.connect(func(_index: int) -> void:
-		_update_server_fields()
-		_refresh_slots())
-	box.add_child(_mode_select)
-
-	_address_edit = LineEdit.new()
-	_address_edit.placeholder_text = "127.0.0.1"
-	_address_edit.tooltip_text = "An IP or host name, or a full ws:// or wss:// address."
-	_address_row = _labeled("Address", _address_edit)
-	box.add_child(_address_row)
-
-	_port_spin = SpinBox.new()
-	_port_spin.min_value = 1024
-	_port_spin.max_value = 65535
-	_port_spin.value = Net.DEFAULT_PORT
-	_port_row = _labeled("Port", _port_spin)
-	box.add_child(_port_row)
-
-	_account_box = VBoxContainer.new()
-	_account_note = _note("")
-	_account_box.add_child(_account_note)
-	var log_out := Button.new()
-	log_out.text = "Log out"
-	log_out.pressed.connect(func() -> void:
-		_login.log_out()
-		_on_cancel_pressed())
-	_account_box.add_child(log_out)
-	box.add_child(_account_box)
-	_account_box.visible = false
-	return panel
+## Offline | Online, side by side.
+func _build_mode_tabs() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 0)
+	var group := ButtonGroup.new()
+	_offline_tab = _mode_tab("Offline", group)
+	_offline_tab.tooltip_text = "Play families kept on this computer."
+	_offline_tab.pressed.connect(_set_online_mode.bind(false))
+	row.add_child(_offline_tab)
+	_online_tab = _mode_tab("Online", group)
+	_online_tab.tooltip_text = "Play with others. Your families are kept with your account."
+	_online_tab.pressed.connect(_set_online_mode.bind(true))
+	row.add_child(_online_tab)
+	return row
 
 
-func _refresh_slots() -> void:
-	if _slots_box == null:
+func _mode_tab(text: String, group: ButtonGroup) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.toggle_mode = true
+	button.button_group = group
+	button.custom_minimum_size = Vector2(150, 40)
+	return button
+
+
+func _refresh() -> void:
+	if _body == null:
 		return
-	for child in _slots_box.get_children():
+	for child in _body.get_children():
 		child.queue_free()
-	if not _joining():
-		for slot in FamilyStore.SLOT_COUNT:
-			_slots_box.add_child(_build_slot_card(slot, FamilyStore.get_family(slot)))
+	_offline_tab.disabled = _busy and _online_mode
+	_online_tab.disabled = _offline_tab.disabled
+	if not _online_mode:
+		_body.add_child(_slots_row(FamilyStore.SLOT_COUNT, FamilyStore.get_family))
 		return
 	match _online:
-		Online.OFF:
-			_slots_box.add_child(_build_connect_card())
 		Online.SLOTS:
-			for slot in _server_families.size():
-				_slots_box.add_child(_build_slot_card(slot, _server_families[slot]))
+			_body.add_child(_build_account_bar())
+			_body.add_child(_slots_row(_server_families.size(), func(slot: int) -> Family:
+				return _server_families[slot]))
+		Online.OFF:
+			_body.add_child(_centered(_build_retry_card()))
+		Online.LOGIN when _needs_login_button:
+			_body.add_child(_centered(_build_sign_in_card()))
+		Online.LOGIN when _in_browser:
+			_body.add_child(_centered(_build_browser_card()))
+		Online.STARTING:
+			_body.add_child(_centered(_build_wait_card("Entering the world…", false)))
 		_:
-			_slots_box.add_child(_build_wait_card())
+			_body.add_child(_centered(_build_wait_card(_online_note, true)))
 
 
-func _joining() -> bool:
-	return _mode_select.get_selected_id() == Net.Mode.JOIN
+func _slots_row(count: int, family_at: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	for slot in count:
+		row.add_child(_build_slot_card(slot, family_at.call(slot)))
+	return row
+
+
+func _centered(control: Control) -> Control:
+	var box := CenterContainer.new()
+	box.add_child(control)
+	return box
 
 
 func _family(slot: int) -> Family:
-	return _server_families[slot] if _joining() else FamilyStore.get_family(slot)
+	return _server_families[slot] if _online_mode else FamilyStore.get_family(slot)
 
 
-## Joining, before connecting: the families are on the server.
-func _build_connect_card() -> Control:
-	var box := _card("Your families")
-	box.add_child(_note("Online, your families are kept by the server. Connect to see them."))
-	box.add_child(_spacer())
-	var connect_button := Button.new()
-	connect_button.text = "Connect"
-	connect_button.pressed.connect(_connect)
-	box.add_child(connect_button)
+## Online, signed in: who, and a way out.
+func _build_account_bar() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var who := _note("")
+	who.autowrap_mode = TextServer.AUTOWRAP_OFF  # a wrapping label in a row has no width
+	if _login.email != "":
+		who.text = "Signed in as %s" % _login.email
+		row.add_child(who)
+		var sign_out := _small_button("Sign out")
+		sign_out.disabled = _busy
+		sign_out.pressed.connect(_sign_out)
+		row.add_child(sign_out)
+	else:
+		who.text = "Connected to %s" % _server_name()
+		row.add_child(who)
+	return row
+
+
+## Online, waiting on the server or the login.
+func _build_wait_card(text: String, can_cancel: bool) -> Control:
+	var box := _online_card("Online")
+	box.add_child(_note(text if text != "" else "Reaching the server…", true))
+	if can_cancel:
+		var cancel := _small_button("Cancel")
+		cancel.pressed.connect(_cancel)
+		box.add_child(_centered(cancel))
 	return box.get_parent() as Control
 
 
-func _build_wait_card() -> Control:
-	var box := _card("Your families")
-	if _online == Online.LOGIN and _needs_login_button:
-		box.add_child(_note("Log in to play online. Your families are kept with your account."))
-		box.add_child(_spacer())
-		var google := Button.new()
-		google.text = "Log in with Google"
-		google.pressed.connect(func() -> void:
-			_needs_login_button = false
-			_refresh_slots()
-			_login.log_in_with_google())
-		box.add_child(google)
-		return box.get_parent() as Control
-	var text := "Connecting…"
-	if _online == Online.LOGIN:
-		text = "Logging in…"
-	elif _online == Online.STARTING:
-		text = "Entering the world…"
-	box.add_child(_note(text))
+## Online, not connected: why, and try again.
+func _build_retry_card() -> Control:
+	var box := _online_card("Can't reach the server" if _online_error != "" else "Not connected")
+	var text := _online_error
+	if text == "":
+		text = "Connect to see your families."
+	elif text == "Couldn't reach the server.":  # the heading says it already
+		text = "It may be restarting. Check your connection, or play offline."
+	box.add_child(_note(text, true))
+	var again := Button.new()
+	again.text = "Try again" if _online_error != "" else "Connect"
+	again.custom_minimum_size = Vector2(180, 0)
+	again.pressed.connect(_connect)
+	box.add_child(_centered(again))
+	box.add_child(_server_line())
 	return box.get_parent() as Control
+
+
+func _build_sign_in_card() -> Control:
+	var box := _online_card("Sign in to play online")
+	box.add_child(_note("Your families are kept with your account, so you can play them from any computer or browser.", true))
+	if _sign_in_problem != "":
+		var problem := _note(_sign_in_problem, true)
+		problem.add_theme_color_override("font_color", Palette.INK)
+		box.add_child(problem)
+	var google := GoogleButton.new()
+	google.pressed.connect(func() -> void:
+		_needs_login_button = false
+		_in_browser = true
+		_sign_in_problem = ""
+		_refresh()
+		_login.log_in_with_google())
+	box.add_child(_centered(google))
+	box.add_child(_server_line())
+	return box.get_parent() as Control
+
+
+func _build_browser_card() -> Control:
+	var box := _online_card("Finish in your browser")
+	box.add_child(_note("A Google sign-in page opened in your browser. Come back here once you've signed in.", true))
+	var cancel := _small_button("Cancel")
+	cancel.pressed.connect(func() -> void:
+		_login.cancel_google())
+	box.add_child(_centered(cancel))
+	return box.get_parent() as Control
+
+
+func _server_line() -> Label:
+	var line := _note("Server: %s" % _server_name(), true)
+	line.add_theme_font_size_override("font_size", 13)
+	return line
+
+
+## The online card: one centred panel; returns the column to fill.
+func _online_card(title: String) -> VBoxContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(CARD_WIDTH, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	panel.add_child(box)
+	var heading := _heading(title)
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(heading)
+	return box
 
 
 ## A slot-sized panel with a heading; returns the column to fill.
@@ -343,20 +413,23 @@ func _heading(text: String) -> Label:
 	return label
 
 
-func _note(text: String) -> Label:
+func _note(text: String, centered := false) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", Palette.INK_FADED)
+	if centered:
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return label
 
 
-func _labeled(text: String, field: Control) -> Control:
-	var box := VBoxContainer.new()
-	box.add_child(_note(text))
-	box.add_child(field)
-	return box
+func _small_button(text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.add_theme_font_size_override("font_size", 15)
+	button.custom_minimum_size = Vector2(110, 0)
+	return button
 
 
 func _spacer() -> Control:
@@ -365,12 +438,30 @@ func _spacer() -> Control:
 	return spacer
 
 
+## The server's host name, for players to read.
+func _server_name() -> String:
+	var url := Net.server_url(Net.online_address(), Net.DEFAULT_PORT)
+	return url.trim_prefix("wss://").trim_prefix("ws://").trim_suffix("/")
+
+
 # --- Actions --------------------------------------------------------------
+
+func _set_online_mode(online: bool) -> void:
+	if online == _online_mode:
+		return
+	_online_mode = online
+	_save_settings()
+	_set_status("")
+	if online:
+		_connect()
+	else:
+		_disconnect()
+
 
 func _found_family(slot: int, name_edit: LineEdit) -> void:
 	if _busy:
 		return
-	if _joining():
+	if _online_mode:
 		_set_busy(true)
 		Net.accounts.found(slot, name_edit.text, _start_kinds.get(slot, "isosceles"))
 		return
@@ -389,7 +480,7 @@ func _confirm_delete(slot: int) -> void:
 	dialog.dialog_text = "Delete the %s family? This can't be undone." % family.family_name
 	dialog.ok_button_text = "Delete"
 	dialog.confirmed.connect(func() -> void:
-		if _joining():
+		if _online_mode:
 			_set_busy(true)
 			Net.accounts.delete(slot)
 		else:
@@ -405,33 +496,49 @@ func _play(slot: int) -> void:
 	var family := _family(slot)
 	if family == null or family.extinct or _busy:
 		return
-	_save_settings()
-	match _mode_select.get_selected_id():
-		Net.Mode.OFFLINE:
-			Net.start_offline(slot)
-		Net.Mode.HOST:
-			Net.host(int(_port_spin.value), slot)
-		Net.Mode.JOIN:
-			_online = Online.STARTING
-			_set_busy(true)
-			Net.accounts.play(slot)
+	if _online_mode:
+		_online = Online.STARTING
+		_set_busy(true)
+		Net.accounts.play(slot)
+	else:
+		Net.start_offline(slot)
 
 
 func _connect() -> void:
-	var address := _address_edit.text.strip_edges()
-	if address == "":
-		address = _address_edit.placeholder_text
-	var on_port := int(_port_spin.value)
-	_save_settings()
-	_online = Online.CONNECTING
 	_login.reset()
+	_online = Online.CONNECTING
+	_online_note = "Reaching the server…"
+	_online_error = ""
+	_needs_login_button = false
+	_in_browser = false
+	_sign_in_problem = ""
 	_set_busy(true)
-	_set_status("Connecting to %s…" % Net.server_url(address, on_port))
-	Net.join(address, on_port)
+	Net.join(Net.online_address(), Net.DEFAULT_PORT)
+
+
+func _disconnect() -> void:
+	if _online != Online.OFF:
+		Net.leave()
+		_login.reset()
+	_online = Online.OFF
+	_set_busy(false)
+
+
+func _cancel() -> void:
+	_disconnect()
+	_online_error = ""
+
+
+## Forget the saved session and reconnect, so the server asks again.
+func _sign_out() -> void:
+	_login.log_out()
+	Net.leave()
+	_connect()
 
 
 func _on_login_needed(info: Dictionary) -> void:
 	_online = Online.LOGIN
+	_online_note = "Signing in…"
 	_needs_login_button = false
 	_set_busy(false)
 	_login.answer(info)
@@ -440,15 +547,9 @@ func _on_login_needed(info: Dictionary) -> void:
 func _on_slots_received(families: Array) -> void:
 	_server_families = families
 	_online = Online.SLOTS
+	_in_browser = false
+	_set_status("")
 	_set_busy(false)
-
-
-func _on_cancel_pressed() -> void:
-	Net.leave()
-	_login.reset()
-	_online = Online.OFF
-	_set_busy(false)
-	_set_status("Disconnected.")
 
 
 func _on_session_started() -> void:
@@ -457,33 +558,25 @@ func _on_session_started() -> void:
 
 func _on_session_failed(reason: String) -> void:
 	_online = Online.OFF
+	_online_error = reason
 	_set_busy(false)
-	_set_status(reason)
 
 
 func _set_busy(busy: bool) -> void:
 	_busy = busy
-	var connected := _online != Online.OFF
-	_cancel_button.visible = busy or connected
-	_cancel_button.text = "Disconnect" if _online == Online.SLOTS else "Cancel"
-	_mode_select.disabled = busy or connected
-	_address_edit.editable = not (busy or connected)
-	_port_spin.editable = not (busy or connected)
-	_account_note.text = "Logged in as %s" % _login.email
-	_account_box.visible = _joining() and _online == Online.SLOTS and _login.email != ""
-	_refresh_slots()
+	_refresh()
 
 
+## Messages while connecting or logging in go on the online card; others
+## (a refused request, a founded family) go under the slots.
 func _set_status(text: String) -> void:
+	if _online_mode and _online in [Online.CONNECTING, Online.LOGIN]:
+		_online_note = text
+		_refresh()
+		return
 	_status.text = text
 	if _busy and _online == Online.SLOTS:
 		_set_busy(false)  # a refused request
-
-
-func _update_server_fields() -> void:
-	var mode := _mode_select.get_selected_id()
-	_address_row.visible = mode == Net.Mode.JOIN
-	_port_row.visible = mode != Net.Mode.OFFLINE
 
 
 # --- Settings -------------------------------------------------------------
@@ -491,17 +584,13 @@ func _update_server_fields() -> void:
 func _load_settings() -> void:
 	var config := ConfigFile.new()
 	config.load(SETTINGS_PATH)  # missing file just leaves the defaults
-	var mode: int = config.get_value("server", "mode", Net.Mode.OFFLINE)
-	var index := _mode_select.get_item_index(mode)
-	_mode_select.select(index if index >= 0 else 0)
-	_address_edit.text = config.get_value("server", "address", "")
-	_port_spin.value = config.get_value("server", "port", Net.DEFAULT_PORT)
-	_update_server_fields()
+	# Older menus saved Net.Mode (2 was joining a server).
+	var mode: Variant = config.get_value("server", "mode", "offline")
+	_online_mode = (mode is String and mode == "online") or (mode is int and mode == Net.Mode.JOIN)
+	(_online_tab if _online_mode else _offline_tab).button_pressed = true
 
 
 func _save_settings() -> void:
 	var config := ConfigFile.new()
-	config.set_value("server", "mode", _mode_select.get_selected_id())
-	config.set_value("server", "address", _address_edit.text.strip_edges())
-	config.set_value("server", "port", int(_port_spin.value))
+	config.set_value("server", "mode", "online" if _online_mode else "offline")
 	config.save(SETTINGS_PATH)

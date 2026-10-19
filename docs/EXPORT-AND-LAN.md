@@ -47,14 +47,16 @@ account (signing + notarization).
 On the same network there's nothing to open. Port forwarding is only for
 players joining over the internet.
 
-1. **Host:** run the game (or a dedicated server:
-   `Godot --headless --path . -- --server --port=24680`). It listens for
-   WebSocket connections on TCP port **24680** (`Net.DEFAULT_PORT`).
-2. **Join:** on the other machine, choose Join and enter the host's LAN IP
-   and port 24680. The address can also be a full `ws://` or `wss://` URL
-   (then the port field is ignored). Press Connect; the host's server
-   sends your families. They are kept on the host (design log 0112),
-   under its `user://accounts/`, by a device id of yours.
+1. **Server:** on one machine run a dedicated server:
+   `SAVES=local Godot --headless --path . -- --server --port=24680`. It
+   listens for WebSocket connections on TCP port **24680**
+   (`Net.DEFAULT_PORT`). The menu no longer hosts (design log 0119).
+2. **Join:** on each player's machine start the game pointed at it,
+   `Slice.app/Contents/MacOS/Slice -- --server-address=<server LAN IP>`
+   (or set `SLICE_SERVER=<IP>`), and choose **Online**. The address can
+   also be `host:port` or a full `ws://` / `wss://` URL. The server keeps
+   your families (design log 0112), under its `user://accounts/`, by a
+   device id of yours. The web build always joins the online server.
 3. Client and server must run the same version (shown at the bottom right
    of the main menu); a mismatch is turned away with a message.
 

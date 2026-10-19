@@ -33,6 +33,10 @@ window/size/window_height_override=1440
 window/stretch/mode="canvas_items"
 mouse_cursor/tooltip_position_offset=Vector2(22, 26)
 
+[online]
+
+server_address="wss://flatland-online.duckdns.org"
+
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.937, 0.890, 0.784, 1)

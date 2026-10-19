@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 # Configures an Ubuntu 24.04 VPS (Hetzner, x86 or ARM) as the game server.
 # Run as root by the 001-full-deploy workflow (see deploy/README.md):
-#   ssh root@server "bash -s -- '<deploy public key>'" < deploy/setup-server.sh
-# The argument is the public half of the key GitHub Actions deploys with.
+#   ssh root@server "bash -s -- '<deploy public key>' '<domain>' '<port>'" < deploy/setup-server.sh
+# Arguments: the public half of the key GitHub Actions deploys with; the
+# domain players join (wss:// through Caddy, design log 0118), or "" for
+# plain ws:// on the game port; the game server's port (default 24680).
 # Safe to run again. Secrets are installed separately (deploy/ci/install-secrets.sh).
 set -euo pipefail
 
-DEPLOY_PUBKEY="${1:?usage: setup-server.sh \"<deploy public key>\"}"
+DEPLOY_PUBKEY="${1:?usage: setup-server.sh \"<deploy public key>\" [domain] [port]}"
+DOMAIN="${2:-}"
+PORT="${3:-24680}"
 GODOT_VERSION="4.5.1"
-PORT=24680
+[[ "$PORT" =~ ^[0-9]+$ ]] || { echo "Bad port: $PORT"; exit 1; }
+[[ -z "$DOMAIN" || "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Bad domain: $DOMAIN"; exit 1; }
 
 # A new server may still be finishing first boot (and holding the apt lock).
 command -v cloud-init >/dev/null && cloud-init status --wait >/dev/null || true
 
 apt-get update -q
 apt-get install -y -q unzip curl jq ufw libfontconfig1  # fontconfig: quiets Godot's font errors
+[ -z "$DOMAIN" ] || apt-get install -y -q caddy
 
 # --- Godot (headless use of the normal Linux build) -------------------------
 case "$(uname -m)" in
@@ -43,6 +49,9 @@ echo "$DEPLOY_PUBKEY" > /home/slice/.ssh/authorized_keys
 chown slice:slice /home/slice/.ssh/authorized_keys
 chmod 600 /home/slice/.ssh/authorized_keys
 install -d -o slice -g slice /opt/slice /opt/slice/releases
+# The port, for deploys to check (activate-release.sh).
+echo "SLICE_PORT=${PORT}" > /etc/default/slice
+chmod 644 /etc/default/slice
 
 # Deploys may restart the game server, nothing else.
 cat > /etc/sudoers.d/slice <<'EOF'
@@ -123,9 +132,32 @@ systemctl start slice-traffic-watch.timer
 
 # --- Firewall ---------------------------------------------------------------
 ufw allow OpenSSH
-# WebSocket (TCP) since design log 0110; drop the old ENet (UDP) rule.
-ufw allow "${PORT}/tcp"
-ufw delete allow "${PORT}/udp" >/dev/null 2>&1 || true
+ufw delete allow "${PORT}/udp" >/dev/null 2>&1 || true  # ENet, before log 0110
+if [ -n "$DOMAIN" ]; then
+	# Players come in through Caddy only, so logins never cross the
+	# internet unencrypted (design log 0118). 80: certificates, redirects.
+	ufw allow 80/tcp
+	ufw allow 443/tcp
+	ufw delete allow "${PORT}/tcp" >/dev/null 2>&1 || true
+else
+	ufw allow "${PORT}/tcp"  # plain ws://
+fi
 ufw --force enable
+
+# --- Caddy: wss:// on 443 with a Let's Encrypt certificate (log 0118) -------
+if [ -n "$DOMAIN" ]; then
+	cat > /etc/caddy/Caddyfile <<CADDY
+# Written by deploy/setup-server.sh. Passes WebSocket through to the game.
+${DOMAIN} {
+	reverse_proxy 127.0.0.1:${PORT}
+}
+CADDY
+	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+	systemctl enable caddy
+	systemctl reload-or-restart caddy
+	echo "Caddy serving wss://${DOMAIN} -> 127.0.0.1:${PORT}"
+else
+	systemctl disable --now caddy >/dev/null 2>&1 || true
+fi
 
 echo "Server configured. Godot: $(/opt/godot/godot --version)"

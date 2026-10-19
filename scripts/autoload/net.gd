@@ -136,9 +136,26 @@ func leave() -> void:
 	_reset()
 
 
+## The online server players join (design log 0119): the project setting
+## online/server_address, unless `-- --server-address=` or SLICE_SERVER
+## names another (e.g. 127.0.0.1 for a dev server; the web build can't
+## read either).
+static func online_address() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--server-address="):
+			return arg.trim_prefix("--server-address=").strip_edges()
+	var from_env := OS.get_environment("SLICE_SERVER").strip_edges()
+	if from_env != "":
+		return from_env
+	return str(ProjectSettings.get_setting("online/server_address", "127.0.0.1"))
+
+
+## `address`: a full ws:// or wss:// URL, a host:port, or a host (then `on_port`).
 static func server_url(address: String, on_port: int) -> String:
 	if address.begins_with("ws://") or address.begins_with("wss://"):
 		return address
+	if address.contains(":"):
+		return "ws://%s" % address
 	return "ws://%s:%d" % [address, on_port]
 
 
