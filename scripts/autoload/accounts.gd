@@ -62,6 +62,8 @@ func setup_server(dedicated: bool, save_dir := "") -> String:
 	if not dedicated:
 		store = FamilyStore.store
 	elif supabase_url != "" and _secret_key != "":
+		if publishable_key == _secret_key or publishable_key.begins_with("sb_secret_"):
+			return "SUPABASE_PUBLISHABLE_KEY is a secret key; it would be sent to players."
 		store = SupabaseStore.new(supabase_url, _secret_key)
 		auth = "supabase"
 		if publishable_key == "":

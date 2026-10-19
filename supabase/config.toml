@@ -4,6 +4,18 @@
 # env(...) references filled from GitHub secrets, never written here.
 project_id = "slice"
 
+# Where Google login may send the player back (design log 0115). Declared
+# keys replace the dashboard's values, so this list is the whole list.
+# Desktop: the game's loopback catcher (LoopbackCatcher.PORTS). Add the web
+# build's page here once it has an address.
+[auth]
+site_url = "http://127.0.0.1:47613/auth/callback"
+additional_redirect_urls = [
+  "http://127.0.0.1:47613/auth/callback",
+  "http://127.0.0.1:47614/auth/callback",
+  "http://127.0.0.1:47615/auth/callback",
+]
+
 [auth.external.google]
 enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"

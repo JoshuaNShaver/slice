@@ -405,10 +405,17 @@ Values marked * are proposed tuning.
 - **When it saves (log 0113, proposed, built):** checked every 3 s; level,
   bag, gear, abilities and chests saved at once (at most every 10 s), XP
   and pay within 45 s; leaving, dying and marrying at once.
-- **Accounts (logs 0098, 0105, planned):** online play needs a Google
-  login (Supabase Auth). Supabase tables and auth settings live in the repo
-  and deploys apply them. The client sends its token on joining; the server checks
-  it. Offline needs no login.
+- **Accounts (logs 0098, 0105, 0115, proposed, built):** online play needs a
+  Google login (Supabase Auth). Supabase tables and auth settings live in the
+  repo and deploys apply them. The server sends the project URL and
+  publishable key; the client logs in by PKCE (desktop: system browser and a
+  `127.0.0.1` callback; web: page redirect, untested) and keeps the session,
+  so it logs in once. The server checks the token with Supabase on each join.
+  One account plays once per server at a time. Offline needs no login.
+- **Online slots (log 0116, proposed, built):** joining logs in first, then
+  shows the account's 3 slots from the server; founding, deleting and
+  playing are requests to the server. The menu shows who is logged in and
+  "Log out".
 
 ## 6. Women (lines)
 
