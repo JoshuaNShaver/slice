@@ -504,6 +504,9 @@ As in the book, women are straight lines.
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.
+- **Window shape (log 0126):** the game fills the window; 1280x720 is the
+  smallest view, and a wider or taller window shows more world, never black
+  bars. Loading screens show the game icon on parchment.
 
 ## 8. Art direction
 

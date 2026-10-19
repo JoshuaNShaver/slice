@@ -58,7 +58,7 @@ func _ready() -> void:
 	Net.session_failed.connect(_on_session_failed)
 	Net.accounts.login_needed.connect(_on_login_needed)
 	Net.accounts.slots_received.connect(_on_slots_received)
-	Net.accounts.account_error.connect(_set_status)
+	Net.accounts.account_error.connect(_on_account_error)
 	Net.accounts.username_needed.connect(_on_username_needed)
 	Net.accounts.signed_in.connect(func(username: String) -> void:
 		_username = username)
@@ -613,6 +613,14 @@ func _on_login_needed(info: Dictionary) -> void:
 	_needs_login_button = false
 	_set_busy(false)
 	_login.answer(info)
+
+
+## A refused request. While signing in it's why the login was refused: the
+## server asks for a login again right after, so keep it for the sign-in card.
+func _on_account_error(message: String) -> void:
+	if _online_mode and _online == Online.LOGIN:
+		_sign_in_problem = message
+	_set_status(message)
 
 
 func _on_slots_received(families: Array) -> void:

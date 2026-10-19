@@ -14,6 +14,9 @@ config/name="slice-game"
 config/version="0.2.2"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.png"
+boot_splash/bg_color=Color(0.937255, 0.890196, 0.784314, 1)
+boot_splash/image="res://splash.png"
+boot_splash/fullsize=false
 run/main_scene="res://scenes/main_menu.tscn"
 
 [autoload]
@@ -32,6 +35,7 @@ window/size/viewport_height=720
 window/size/window_width_override=2560
 window/size/window_height_override=1440
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 mouse_cursor/tooltip_position_offset=Vector2(22, 26)
 
 [online]

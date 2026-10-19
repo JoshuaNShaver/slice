@@ -8,10 +8,14 @@ extends Node
 ## Desktop: opens the system browser and catches the redirect on
 ## 127.0.0.1 (LoopbackCatcher). Web: sends the page to Supabase and reads
 ## the code when the page loads again (WebLogin). The session (refresh
-## token) is kept in user://account/, so players needn't log in each time.
+## token) is kept in user://account/, so players needn't log in each time;
+## on the web in localStorage instead, which saves at once: user:// there
+## saves a moment later, and a reload (the update to a new build right
+## after logging in) could lose it.
 
 const LOGIN_TIMEOUT := 300.0  # s to finish logging in in the browser
 const REFRESH_MARGIN := 120  # s before expiry to refresh
+const WEB_SESSION_KEY := "slice_session"  # localStorage, web only
 
 var url := ""
 var key := ""
@@ -94,6 +98,8 @@ func authorize_url(redirect: String, challenge: String) -> String:
 
 
 func forget() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("localStorage.removeItem(%s)" % JSON.stringify(WEB_SESSION_KEY), true)
 	if FileAccess.file_exists(session_path):
 		DirAccess.remove_absolute(session_path)
 
@@ -125,6 +131,10 @@ func _save_session(data: Variant) -> String:
 		"expires_at": int(Time.get_unix_time_from_system()) + int(data.get("expires_in", 3600)),
 		"email": str(user.get("email", "")) if user is Dictionary else "",
 	}
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("localStorage.setItem(%s, %s)" % [JSON.stringify(WEB_SESSION_KEY),
+				JSON.stringify(JSON.stringify(session))], true)
+		return data.access_token
 	DirAccess.make_dir_recursive_absolute(session_path.get_base_dir())
 	var file := FileAccess.open(session_path, FileAccess.WRITE)
 	if file != null:
@@ -134,9 +144,12 @@ func _save_session(data: Variant) -> String:
 
 ## The saved session, if it's for this project.
 func _load_session() -> Dictionary:
-	if not FileAccess.file_exists(session_path):
-		return {}
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(session_path))
+	var raw := ""
+	if OS.has_feature("web"):
+		raw = str(JavaScriptBridge.eval("localStorage.getItem(%s) || ''" % JSON.stringify(WEB_SESSION_KEY), true))
+	elif FileAccess.file_exists(session_path):
+		raw = FileAccess.get_file_as_string(session_path)
+	var data: Variant = JSON.parse_string(raw) if raw != "" else null
 	if data is Dictionary and data.get("url") == url and data.get("access_token") is String:
 		return data
 	return {}
