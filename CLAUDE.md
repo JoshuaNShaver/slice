@@ -68,8 +68,8 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   `@rpc` changes need a restart. A new `class_name` needs an import scan
   first (open the editor, or `Godot --headless --path . --import`). Disable with `-- --no-hot-reload`.
 - Exporting builds and LAN play: see `docs/EXPORT-AND-LAN.md`.
-- Deploying the online server (Hetzner VPS, manual GitHub Action): see
-  `deploy/README.md`.
+- The online server (Hetzner VPS, provisioned and deployed by manual GitHub
+  Actions, keys as GitHub secrets): see `deploy/README.md`.
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

@@ -425,9 +425,9 @@ As in the book, women are straight lines.
 - **Clients (log 0099, planned):** the web build is the main online
   client, over WebSocket (ENet kept for desktop). Joining checks the build
   version and turns away mismatches.
-- **Hosting (log 0103):** game server on a Hetzner VPS, deployed by a
-  manual GitHub Action (`deploy/README.md`); web client on itch.io,
-  restricted.
+- **Hosting (logs 0103, 0104):** game server on a Hetzner VPS. Manual
+  GitHub Actions create, configure and deploy it; all keys are GitHub
+  secrets (`deploy/README.md`). Web client on itch.io, restricted.
 - **Content as data (log 0101):** the server owns content (items,
   abilities, prices, shops, NPCs, text) and sends it on joining; the
   client owns presentation (theme, HUD, rendering).

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# One-time setup for a fresh Ubuntu 24.04 VPS (Hetzner, x86 or ARM).
-# Run as root from your machine:
-#   ssh root@SERVER_IP "bash -s -- '$(cat ~/.ssh/slice_deploy.pub)'" < deploy/setup-server.sh
+# Configures an Ubuntu 24.04 VPS (Hetzner, x86 or ARM) as the game server.
+# Run as root by the Provision server workflow (see deploy/README.md):
+#   ssh root@server "bash -s -- '<deploy public key>'" < deploy/setup-server.sh
 # The argument is the public half of the key GitHub Actions deploys with.
-# Safe to run again.
+# Safe to run again. Secrets are installed separately (deploy/ci/install-secrets.sh).
 set -euo pipefail
 
 DEPLOY_PUBKEY="${1:?usage: setup-server.sh \"<deploy public key>\"}"
 GODOT_VERSION="4.5.1"
 PORT=24680
+
+# A new server may still be finishing first boot (and holding the apt lock).
+command -v cloud-init >/dev/null && cloud-init status --wait >/dev/null || true
 
 apt-get update -q
 apt-get install -y -q unzip curl jq ufw
@@ -120,7 +123,4 @@ ufw allow OpenSSH
 ufw allow "${PORT}/udp"
 ufw --force enable
 
-echo
-echo "Done. Godot: $(/opt/godot/godot --version)"
-echo "Next: add the GitHub secrets and run the 'Deploy server' workflow."
-echo "Optional traffic watch: put HCLOUD_TOKEN=<read-only token> in /etc/slice/hcloud.env (chmod 600)."
+echo "Server configured. Godot: $(/opt/godot/godot --version)"

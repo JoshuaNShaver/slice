@@ -1,14 +1,11 @@
-# Manual deploy of the dedicated server. Actions tab -> Deploy server -> Run workflow.
-# Uploads the committed source of the chosen branch/tag to the VPS and
-# restarts the server there (see deploy/README.md for the one-time setup).
+# Deploys the committed source to the game server and restarts it.
+# Actions tab -> Deploy server -> Run workflow. Also run at the end of
+# Provision server. See deploy/README.md.
 name: Deploy server
 
 on:
   workflow_dispatch:
-
-concurrency:
-  group: deploy-server
-  cancel-in-progress: false
+  workflow_call:
 
 permissions:
   contents: read
@@ -17,28 +14,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: slice-server
+      cancel-in-progress: false
+    env:
+      SERVER_NAME: ${{ vars.SERVER_NAME || 'slice-server' }}
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+        run: bash deploy/ci/ssh-setup.sh
 
       - name: Upload release
-        env:
-          HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           RELEASE="/opt/slice/releases/${GITHUB_SHA}"
           git archive --format=tar.gz HEAD \
-            | ssh "slice@$HOST" "rm -rf '$RELEASE' && mkdir -p '$RELEASE' && tar -xz -C '$RELEASE'"
+            | ssh slice@server "rm -rf '$RELEASE' && mkdir -p '$RELEASE' && tar -xz -C '$RELEASE'"
 
       - name: Activate release
-        env:
-          HOST: ${{ secrets.DEPLOY_HOST }}
-        run: ssh "slice@$HOST" "bash /opt/slice/releases/${GITHUB_SHA}/deploy/activate-release.sh"
+        run: ssh slice@server "bash /opt/slice/releases/${GITHUB_SHA}/deploy/activate-release.sh"

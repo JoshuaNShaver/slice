@@ -1,45 +1,64 @@
 # Deploying the server
 
-The dedicated server runs on a Hetzner VPS (Ubuntu 24.04, x86 or ARM) from
-source: the server has a plain Godot 4.5.1 binary, and each deploy uploads
-the committed project and imports it there. No export templates needed.
+GitHub Actions manage the game server end to end. Every key lives as a
+GitHub secret; nothing is copied by hand.
 
-On the server:
-- `/opt/godot/godot`: Godot.
-- `/opt/slice/releases/<commit>/`: the last 5 deploys. `/opt/slice/current`
-  points at the running one.
-- `slice.service`: the game server, UDP 24680. Logs: `journalctl -u slice -f`.
-- `slice-traffic-watch.timer`: stops the server at 80% of the traffic
-  allowance (once a token is added, see step 4).
+- **Provision server** (manual): creates the Hetzner server if you tick
+  *Create the server*, configures it (`setup-server.sh`), checks and
+  installs its secrets (`ci/install-secrets.sh`), then deploys. Safe to
+  run again, e.g. after changing a secret or the setup script.
+- **Deploy server** (manual): uploads the committed source of the chosen
+  branch, imports it on the server, restarts it, and goes back to the
+  previous build if the new one doesn't start.
+
+The server runs the project from source with a plain Godot 4.5.1 binary,
+so no export templates are needed.
 
 ## One-time setup
 
-1. **Create the server** in the Hetzner console: Ubuntu 24.04, add your own
-   SSH key.
-2. **Make a deploy key** (no passphrase) on your machine:
+1. **Hetzner API tokens** (Console → your project → Security → API tokens):
+   one **Read & Write** and one **Read**.
+2. **Two SSH keys** on your machine, no passphrase:
    ```
-   ssh-keygen -t ed25519 -N "" -C slice-deploy -f ~/.ssh/slice_deploy
+   ssh-keygen -t ed25519 -N "" -C slice-deploy -f slice_deploy
+   ssh-keygen -t ed25519 -N "" -C slice-host -f slice_host
    ```
-3. **Run the setup script** (from the repo root):
-   ```
-   ssh root@SERVER_IP "bash -s -- '$(cat ~/.ssh/slice_deploy.pub)'" < deploy/setup-server.sh
-   ```
-4. **Traffic watch (optional, recommended):** in the Hetzner console make a
-   **Read** API token, then:
-   ```
-   ssh root@SERVER_IP 'umask 077; echo "HCLOUD_TOKEN=<token>" > /etc/slice/hcloud.env'
-   ```
-5. **GitHub secrets** (repo → Settings → Secrets and variables → Actions):
-   - `DEPLOY_HOST`: the server's IP.
-   - `DEPLOY_SSH_KEY`: contents of `~/.ssh/slice_deploy` (the private key).
-   - `DEPLOY_KNOWN_HOSTS`: output of `ssh-keyscan SERVER_IP`.
+   `slice_deploy` is how GitHub logs in. `slice_host` becomes the server's
+   own SSH identity, so GitHub can verify it's talking to the real server.
+3. **GitHub secrets** (repo → Settings → Secrets and variables → Actions):
 
-## Deploying
+   | Secret | Value |
+   |---|---|
+   | `HCLOUD_TOKEN` | the Read & Write token (creates and finds the server) |
+   | `HCLOUD_READ_TOKEN` | the Read token (goes on the server, for the traffic watch) |
+   | `DEPLOY_SSH_KEY` | contents of `slice_deploy` (private key) |
+   | `DEPLOY_HOST_KEY` | contents of `slice_host` (private key) |
 
-GitHub → Actions → **Deploy server** → Run workflow, and pick the branch.
-It deploys the latest commit on that branch (uncommitted or unpushed work
-isn't included). If the new build doesn't start, the server goes back to the
-previous one and the workflow fails with the log.
+   Then delete the four key files from your machine.
+4. **Variables (optional)**, same page, Variables tab:
+   `SERVER_TYPE` (default `cax11`, ARM, EU only), `SERVER_LOCATION`
+   (default `nbg1`), `SERVER_NAME` (default `slice-server`). For the US use
+   an x86 type such as `cpx11` and `ash` or `hil`. Check current type names
+   in the Hetzner console; the workflow shows the API's error if one is wrong.
+5. Push, then run **Provision server** with *Create the server* ticked.
 
-Players join at `SERVER_IP` port 24680. When WebSocket support lands (log
-0099), the setup gains Caddy and ports 80/443 for `wss://`.
+## On the server
+
+- `/opt/godot/godot`: Godot.
+- `/opt/slice/releases/<commit>/`: the last 5 deploys; `/opt/slice/current`
+  points at the running one.
+- `slice.service`: the game server, UDP 24680. Logs: `journalctl -u slice -f`.
+- `slice-traffic-watch.timer`: every 15 min, stops the server at 80% of the
+  traffic allowance.
+- `/etc/slice/`: secrets installed by Provision server (root only).
+
+To log in yourself, add your own key in the Hetzner console before creating
+the server, or use `slice_deploy` before deleting it.
+
+## Notes
+
+- Changing `DEPLOY_HOST_KEY` only applies to a newly created server.
+- Players join at the server's IP, port 24680. When WebSocket support lands
+  (log 0099), setup gains Caddy and ports 80/443 for `wss://`.
+- New secrets (e.g. Supabase, log 0098) get a check and an install step in
+  `ci/install-secrets.sh`.

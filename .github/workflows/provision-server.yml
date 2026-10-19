@@ -1,0 +1,62 @@
+# Creates (if asked) and configures the Hetzner game server, installs its
+# secrets, then deploys. Actions tab -> Provision server -> Run workflow.
+# Safe to run again. See deploy/README.md.
+name: Provision server
+
+on:
+  workflow_dispatch:
+    inputs:
+      create:
+        description: Create the server if it doesn't exist (costs money)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: slice-server
+      cancel-in-progress: false
+    env:
+      SERVER_NAME: ${{ vars.SERVER_NAME || 'slice-server' }}
+      SERVER_TYPE: ${{ vars.SERVER_TYPE || 'cax11' }}
+      SERVER_LOCATION: ${{ vars.SERVER_LOCATION || 'nbg1' }}
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make sure the server exists
+        env:
+          CREATE: ${{ inputs.create }}
+        run: bash deploy/ci/ensure-server.sh
+
+      - name: Set up SSH
+        run: bash deploy/ci/ssh-setup.sh
+
+      - name: Wait for SSH
+        run: |
+          for _ in $(seq 1 36); do
+            ssh root@server true && exit 0
+            sleep 5
+          done
+          echo "::error::Server didn't answer on SSH within 3 minutes."
+          exit 1
+
+      - name: Configure the server
+        run: ssh root@server "bash -s -- '$DEPLOY_PUBKEY'" < deploy/setup-server.sh
+
+      - name: Check and install secrets
+        env:
+          HCLOUD_READ_TOKEN: ${{ secrets.HCLOUD_READ_TOKEN }}
+        run: bash deploy/ci/install-secrets.sh
+
+  deploy:
+    needs: provision
+    uses: ./.github/workflows/deploy-server.yml
+    secrets: inherit
