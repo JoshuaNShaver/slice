@@ -81,12 +81,15 @@ func _ready() -> void:
 	if Net.last_message != "":
 		_set_status(Net.last_message)
 		Net.last_message = ""
+	var login_problem := ""
 	if OS.has_feature("web"):
 		WebApp.use_new_build()
-		await _login.finish_web_login()  # back from the login page
+		login_problem = await _login.finish_web_login()  # back from the login page
 	if _online_mode:
 		_connect()
+		_sign_in_problem = login_problem  # shown on the sign-in card
 	else:
+		_set_status(login_problem)
 		_refresh()
 
 

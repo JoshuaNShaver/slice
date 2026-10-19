@@ -1,7 +1,7 @@
 # 0115: Google login through Supabase, PKCE, checked by the server
 
 - **Date:** 2026-10-18
-- **Status:** Proposed
+- **Status:** Proposed (its one-login-per-account rule: superseded by 0128)
 - **Decision:** After the version handshake, an online server sends the
   client its Supabase URL and publishable key (never the secret key; the
   server won't start if they match). The client logs in with Google by

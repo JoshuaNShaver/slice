@@ -68,12 +68,13 @@ func log_out() -> void:
 	auth.forget()
 
 
-## Web: after coming back from the login page. True if now logged in.
-func finish_web_login() -> bool:
+## Web: after coming back from the login page. Why it failed, or "".
+func finish_web_login() -> String:
 	var result := await auth.finish_web_login()
 	if result.has("error"):
-		message.emit(result.error)
-	return result.has("token")
+		print("Sign-in: ", result.error)  # the browser console
+		return str(result.error)
+	return ""
 
 
 func _send(token: String) -> void:

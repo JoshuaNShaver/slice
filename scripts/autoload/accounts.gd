@@ -242,7 +242,7 @@ func _log_in(credential: Variant) -> void:
 	var account: String = result.account
 	for other: int in sessions:
 		if sessions[other].account == account:
-			_refuse_login(id, "This account is already playing on this server.")
+			_take_over(other, id)
 			return
 	var data: Dictionary = await store.load_account(account)
 	var profile := {"ok": true, "username": "", "role": "player"}
@@ -259,6 +259,24 @@ func _log_in(credential: Variant) -> void:
 	sessions[id].role = "admin" if profile.get("role") == "admin" else "player"
 	print("Peer %d logged in as %s" % [id, account])
 	if auth == "supabase" and profile.username == "":
+		_username_needed.rpc_id(id, "")
+	else:
+		_welcome(id)
+
+
+## The newest login wins (design log 0128): `id` takes the account over
+## from `old`, which is saved and sent away. The session moves as it is in
+## memory, so nothing is read back before its saves land.
+func _take_over(old: int, id: int) -> void:
+	_final_save(old)
+	var session: Dictionary = sessions[old]
+	sessions.erase(old)
+	_tries.erase(old)
+	session.slot = -1  # back to the family screen
+	sessions[id] = session
+	print("Peer %d took over %s from peer %d" % [id, session.account, old])
+	Net.turn_away(old, "You signed in somewhere else.")
+	if auth == "supabase" and session.username == "":
 		_username_needed.rpc_id(id, "")
 	else:
 		_welcome(id)

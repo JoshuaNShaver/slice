@@ -431,7 +431,8 @@ Values marked * are proposed tuning.
   publishable key; the client logs in by PKCE (desktop: system browser and a
   `127.0.0.1` callback; web: page redirect, untested) and keeps the session,
   so it logs in once. The server checks the token with Supabase on each join.
-  One account plays once per server at a time. Offline needs no login.
+  An account is online in one place per server; a new login takes it over
+  and sends the older one away (log 0128, proposed). Offline needs no login.
 - **Online slots (log 0116, proposed, built):** joining logs in first, then
   shows the account's 3 slots from the server; founding, deleting and
   playing are requests to the server. The menu shows who is logged in and

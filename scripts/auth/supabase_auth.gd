@@ -78,6 +78,8 @@ func cancel() -> void:
 ## {} if there was nothing to finish.
 func finish_web_login() -> Dictionary:
 	var back := WebLogin.take_result()
+	if back.get("stale", false) and has_saved_session():
+		return {}  # a reload of a login already finished
 	if back.is_empty() or back.has("error"):
 		return back
 	configure(back.url, back.key)
@@ -95,6 +97,13 @@ func exchange(code: String, verifier: String) -> Dictionary:
 func authorize_url(redirect: String, challenge: String) -> String:
 	return "%s/auth/v1/authorize?provider=google&redirect_to=%s&code_challenge=%s&code_challenge_method=s256" \
 			% [url, redirect.uri_encode(), challenge]
+
+
+## Whether any session is saved, for any project.
+func has_saved_session() -> bool:
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("localStorage.getItem(%s) || ''" % JSON.stringify(WEB_SESSION_KEY), true)) != ""
+	return FileAccess.file_exists(session_path)
 
 
 func forget() -> void:

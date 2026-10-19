@@ -18,7 +18,9 @@ static func use_new_build() -> void:
 			if (!('serviceWorker' in navigator)) { return; }
 			navigator.serviceWorker.getRegistration().then(function (reg) {
 				if (!reg) { return; }
-				if (reg.waiting && navigator.serviceWorker.controller) {
+				// Once per tab, so a worker that won't take over can't loop reloads.
+				if (reg.waiting && navigator.serviceWorker.controller && !sessionStorage.getItem('slice_new_build')) {
+					sessionStorage.setItem('slice_new_build', '1');
 					reg.waiting.postMessage('update');  // the worker reloads this page
 				} else {
 					reg.update();

@@ -39,5 +39,8 @@ static func take_result() -> Dictionary:
 	if params.has("error"):
 		return {"error": "Login failed: %s" % params.get("error_description", "unknown error")}
 	if not saved is Dictionary:
-		return {}  # this page reloaded with an old address; that login was finished
+		# This page didn't start that login: it reloaded with an old address,
+		# or the login came back in another browser view (an installed app).
+		return {"error": "Sign-in came back, but not to the page that started it. Please try again.",
+				"stale": true}
 	return {"code": params.code, "verifier": saved.verifier, "url": saved.url, "key": saved.key}
