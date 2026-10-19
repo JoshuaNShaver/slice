@@ -7,8 +7,7 @@ extends RefCounted
 const WORLD_SCENE := "res://scenes/world.tscn"
 const SETTLE_FRAMES := 60
 const ZOOM := 1.4  # closer in than play: the shapes read better at GIF size
-const CLIPS := ["invasion", "lift", "crowd"]
-const MARCH := 0.5  # the squad's pace to the front, so the soldiers keep up
+const CLIPS := ["invasion", "lift"]
 
 var tree: SceneTree
 ## The tree's process frames so far (record.gd counts them).
@@ -67,14 +66,6 @@ func _cast(clip: String) -> Dictionary:
 		"lift":
 			return {1: {"info": _info("Ashworth", 6, "regular"), "progress": _progress(8, []),
 					"pos": Vector2(-450, -80)}}
-		"crowd":
-			return {
-				1: {"info": _info("Ashworth", 6, "regular"), "progress": _progress(8, [])},
-				2: {"info": _info("Brindle", 3, "regular"), "progress": _progress(2, [])},
-				3: {"info": _info("Copperfield", 4, "regular"), "progress": _progress(4, [])},
-				4: {"info": _info("Dunmore", 5, "regular"), "progress": _progress(6, [])},
-				5: {"info": _info("Ellery", 3, "isosceles", 40), "progress": _progress(1, [])},
-			}
 	return {}
 
 
@@ -98,32 +89,31 @@ func _invasion() -> void:
 	_world._missions._deploy("invasion", [1, 2, 3])
 	await _wait(20)
 	for p in squad:
-		p.motion._submit_move(MARCH)
+		p.motion._submit_move(1.0)
 	var hero := squad[0]
-	for i in 4000:  # up to a minute of marching
+	for i in 3000:  # up to 50 s of marching
 		await _wait(1)
-		if _nearest_foe(hero) < 1300.0:
+		if _nearest_foe(hero) < 1100.0:
 			break
 	_start()
-	await _wait(60)
-	for p in squad:
-		p.motion._submit_move(1.0)
-	var plan := ["rush", "spike_up", "nose_dive", "spike_up", "rush", "spike_up"]
-	for step in plan.size():
+	# Roll on until a rebel is in reach, then a move every second or so.
+	var plan := ["spike_up", "nose_dive", "spike_up", "rush", "spike_up", "nose_dive", "spike_up"]
+	var used := 0
+	for tick in 60:  # up to 15 s
 		for p in squad:
 			p.combat.heal_full()  # nobody dies on camera
-		var near := _nearest_foe(hero) < SpikeUpAbility.RANGE
-		var move: String = plan[step]
-		if move == "spike_up" and not near:
-			move = "rush"
-		hero.moves._submit_ability(move)
-		# The others keep pushing in, hopping now and then.
-		squad[1 + step % 2].motion._submit_jump()
-		if step % 3 == 2:
-			squad[2 - step % 2].moves._submit_ability("spike_up")
-		await _wait(70)
 		hero.motion._submit_move(1.0 if _foe_side(hero) >= 0.0 else -1.0)
-	await _wait(40)
+		if _nearest_foe(hero) < SpikeUpAbility.RANGE:
+			hero.moves._submit_ability(plan[used])
+			# The others pitch in now and then.
+			squad[1 + used % 2].moves._submit_ability("spike_up" if used % 2 == 0 else "nose_dive")
+			used += 1
+			if used == plan.size():
+				break
+			await _wait(60)
+		else:
+			await _wait(15)
+	await _wait(60)
 
 
 ## Roll onto the underworld lift and ride it down to the Undercroft.
@@ -131,47 +121,19 @@ func _lift() -> void:
 	var p := _world.player(1)
 	var stop: Vector2 = CenterTerrain.LIFT_DOWN.top
 	_start()
-	p.motion._submit_move(-1.0)
-	for i in 600:
-		if p.position.x <= stop.x + 10.0:
+	for attempt in 5:
+		await _roll_to(p, stop.x)
+		p.actions._submit_interact()
+		await _wait(10)
+		if p.motion.riding():
 			break
-		await _wait(1)
-	p.motion._submit_move(0.0)
-	await _wait(30)
-	p.actions._submit_interact()
-	for i in 1200:
-		await _wait(1)
-		if i > 10 and not p.motion.riding():
-			break
+	while p.motion.riding():
+		await _wait(5)
 	await _wait(20)
 	p.motion._submit_move(1.0)
 	await _wait(80)
 	p.motion._submit_move(0.0)
 	await _wait(30)
-
-
-## Five families in the Center: rolling, hopping, saying hello.
-func _crowd() -> void:
-	var lines := {1: "Morning!", 2: "Off to the barracks?", 3: "Mind the Constable.",
-			4: "Lovely angles today.", 5: "Wait for me!"}
-	var moves := {1: 0.6, 2: 1.0, 3: -0.5, 4: 0.8, 5: 1.0}
-	_start()
-	for id: int in moves:
-		_world.player(id).motion._submit_move(moves[id])
-	for step in 6:
-		for id: int in lines:
-			var p := _world.player(id)
-			if (step + id) % 3 == 0:
-				p.motion._submit_jump()
-			if step == id - 1:
-				p.chat._submit_line(lines[id])
-		await _wait(30)
-	for id: int in moves:
-		_world.player(id).motion._submit_move(-moves[id] * 0.7)
-	await _wait(60)
-	for id: int in moves:
-		_world.player(id).motion._submit_move(0.0)
-	await _wait(40)
 
 
 # --- Helpers --------------------------------------------------------------
@@ -204,6 +166,18 @@ func _foe_side(p: PlayerShape) -> float:
 			best = d
 			side = signf(e.position.x - p.position.x)
 	return side
+
+
+## Steers `p` to rest at `x`: pushes toward it, braking by its speed.
+func _roll_to(p: PlayerShape, x: float) -> void:
+	for i in 600:  # up to 10 s
+		var dx := x - p.position.x
+		if absf(dx) < 15.0 and absf(p.linear_velocity.x) < 20.0:
+			break
+		p.motion._submit_move(clampf((dx - p.linear_velocity.x * 0.6) / 120.0, -1.0, 1.0))
+		await _wait(1)
+	p.motion._submit_move(0.0)
+	await _wait(20)
 
 
 ## Waits `frames` sixtieths of a second (physics runs faster, at 120).

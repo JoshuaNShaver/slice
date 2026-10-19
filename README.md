@@ -3,6 +3,14 @@
 A multiplayer Flatland roguelite, built with Godot 4.5 (GDScript).
 The design lives in `docs/DESIGN.md`.
 
+![A squad marches to an invasion and throws the Revolt's rebels into the air](docs/media/invasion.gif)
+
+![Riding the lift down from the Center to the Undercroft](docs/media/lift.gif)
+
+The GIFs are scripted runs of the real game. To record them again after the
+art changes: `tools/record/make_gifs.sh` (needs ffmpeg; see
+`tools/record/clips.gd`).
+
 ## Setup
 
 You need Godot 4.5.1. The commands below use an alias for the macOS app

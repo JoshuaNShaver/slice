@@ -6,11 +6,9 @@ extends SceneTree
 ##   Godot --path . --resolution 1280x720 --write-movie out.avi -s tools/record/record.gd -- --no-hot-reload --clip=invasion
 ##
 ## Clips (clips.gd): invasion (a battle at the front), lift (the ride down
-## to the Undercroft), crowd (players in the Center). The world runs offline
-## with made-up players and no account, so nothing is saved.
-##
-## Prints "TRIM <frames>": the frames before the clip starts (loading and
-## settling), for the GIF maker to cut.
+## to the Undercroft). The world runs offline with made-up players and no
+## account, so nothing is saved. Prints "TRIM <frames>" where the clip
+## starts, for the GIF maker to cut what's before.
 
 var _clips: RefCounted
 

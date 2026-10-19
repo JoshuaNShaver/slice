@@ -18,6 +18,13 @@ GODOT_VERSION="4.5.1"
 # A new server may still be finishing first boot (and holding the apt lock).
 command -v cloud-init >/dev/null && cloud-init status --wait >/dev/null || true
 
+# Template downloads left by a failed run (before cleanup was added, one
+# filled the disk), then what's using the disk, in case it's full again.
+find /tmp /var/tmp -maxdepth 2 -name 'Godot_v*_export_templates.tpz' -print -delete 2>/dev/null || true
+find /tmp /var/tmp -maxdepth 1 -type d -name 'tmp.*' -empty -delete 2>/dev/null || true
+df -h / /tmp /var/tmp
+du -xh --max-depth=3 / 2>/dev/null | sort -h | tail -n 12 || true
+
 apt-get update -q
 apt-get install -y -q unzip curl jq ufw libfontconfig1  # fontconfig: quiets Godot's font errors
 [ -z "$DOMAIN" ] || apt-get install -y -q caddy
@@ -46,9 +53,14 @@ id slice >/dev/null 2>&1 || useradd --create-home --shell /bin/bash slice
 
 # --- Web export template: deploys export the web client here (log 0121) ----
 # Only the no-threads web release template is kept from the 1.4 GB bundle.
-# It's downloaded to /var/tmp (disk): newer Ubuntus keep /tmp in memory.
+# Downloaded to /var/tmp and removed even if a step fails.
 TEMPLATES="/home/slice/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
 if [ ! -f "$TEMPLATES/web_nothreads_release.zip" ]; then
+	FREE_MB="$(df -Pm /var/tmp | awk 'NR == 2 {print $4}')"
+	if [ "$FREE_MB" -lt 2000 ]; then
+		echo "Only ${FREE_MB} MB free; the web export template needs about 2000 MB to download. See the disk report above."
+		exit 1
+	fi
 	TMP="$(mktemp -d -p /var/tmp)"
 	trap 'rm -rf "$TMP"' EXIT
 	TPZ="Godot_v${GODOT_VERSION}-stable_export_templates.tpz"

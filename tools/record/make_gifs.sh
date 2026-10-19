@@ -17,7 +17,7 @@ OUT=docs/media
 TMP=build/record
 mkdir -p "$OUT" "$TMP"
 
-clips=${*:-"invasion lift crowd"}
+clips=${*:-"invasion lift"}
 for clip in $clips; do
 	echo "== $clip"
 	log="$TMP/$clip.log"
