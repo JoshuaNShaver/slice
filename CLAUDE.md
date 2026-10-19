@@ -53,8 +53,13 @@ Mark your own suggestions `Proposed` until the user agrees.
   players and Revolt bosses). Log 0107.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
-- `scripts/autoload/`: `FamilyStore` (3 local save slots in
-  `user://families/`, house chests in `user://chests.json`), `Controls` (input actions, default keys, rebinding saved
+- `scripts/saves/`: the server's account storage (logs 0097, 0112):
+  `SaveStore` (the interface), `LocalFileStore` (JSON files),
+  `SaveKeeper` (when to save, log 0113).
+- `scripts/autoload/`: `FamilyStore` (the menu's view of this machine's 3
+  local slots, `user://families/`; chests in `user://chests.json`),
+  `Accounts` (child of Net: login, server-held family slots, saving),
+  `Controls` (input actions, default keys, rebinding saved
   to `user://controls.cfg`), `Graphics` (framerate cap, High/Low, saved to
   `user://graphics.cfg`), `Net` (offline / host / join over WebSocket, server-owned player list,
   version handshake),
@@ -85,6 +90,10 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   Actions, keys as GitHub secrets): see `deploy/README.md`.
 - Player smoke test: `Godot --headless --path . -s tools/tests/test_player.gd`
   (prints RESULT lines to compare before and after a refactor).
+- Save test (offline, temp folder): `-s tools/tests/test_saves.gd`. Online
+  test against a running server: `-s tools/tests/test_online.gd -- --port=N`
+  (see the file). A dev server can keep saves elsewhere with
+  `-- --server --save-dir=user://some-folder/`.
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
 

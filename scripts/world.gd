@@ -11,8 +11,9 @@ extends Node2D
 ## all of these to every client. NPCs, elevators and the house door are built
 ## from data on every peer alike; only the server acts on them (interact).
 ##
-## Each player's own machine saves their heir's progress into the family
-## save every few seconds and on leaving (design log 0038).
+## The server saves each player's family and chests through Net.accounts
+## (design logs 0097, 0113): it checks every few seconds and writes what
+## changed, sooner for what matters.
 
 const MENU_SCENE := "res://scenes/main_menu.tscn"
 const GROUP := "world"  # PlayerShape asks the world to drop items
@@ -24,7 +25,7 @@ const BOSS_RESPAWN := 90.0
 ## chance (before luck) of a blessed certificate from a boss that drops
 ## certificates (design log 0032):
 const BLESSED_DROP_CHANCE := 0.05
-const SAVE_INTERVAL := 3.0  # s between progress saves
+const SAVE_CHECK_INTERVAL := 3.0  # s between the server's save checks
 
 var _players_root: Node2D
 var _spawner: MultiplayerSpawner
@@ -111,6 +112,7 @@ func _ready() -> void:
 	Net.session_ended.connect(_on_session_ended)
 	Net.heir_born.connect(_on_heir_born)
 	if multiplayer.is_server():
+		Net.accounts.find_player = player
 		_spawn_all_enemies()
 		_on_players_changed()
 	else:
@@ -130,10 +132,12 @@ func _process(delta: float) -> void:
 		if panel != "" and not Npc.near_role(me, "general" if panel == "orders" else "quartermaster"):
 			_hud.close_panel()
 		_follow_camera_limits(me)
+	if multiplayer.is_server():
 		_save_timer -= delta
 		if _save_timer <= 0.0:
-			_save_timer = SAVE_INTERVAL
-			_save_progress(me)
+			_save_timer = SAVE_CHECK_INTERVAL
+			for shape: PlayerShape in _players_root.get_children():
+				Net.accounts.checkpoint(shape)
 	var view := _camera.get_screen_center_position()
 	_background.view_offset = view
 	_background.depth = Regions.underworld_blend(view.y)
@@ -141,8 +145,8 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_save_progress(_local_player())
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and multiplayer.is_server():
+		Net.accounts.save_all_now()
 
 
 func _local_player() -> PlayerShape:
@@ -179,22 +183,6 @@ func _set_camera_limits(bounds: Rect2) -> void:
 	_camera.limit_right = int(bounds.end.x)
 	_camera.limit_top = int(bounds.position.y)
 	_camera.limit_bottom = int(bounds.end.y)
-
-
-## Owner's machine: keep the family save in step with this heir. Waits while
-## a new heir's shape hasn't synced yet, so the old heir's level can't be
-## saved onto the new one.
-func _save_progress(me: PlayerShape) -> void:
-	if me != null and me.inventory.chest != PackedStringArray(FamilyStore.chest):
-		FamilyStore.save_chest(me.inventory.chest)  # the player's, whatever the family (log 0042)
-	var family := FamilyStore.active_family()
-	if me == null or family == null or family.extinct or me.generation != family.generation:
-		return
-	var now := me.progress()
-	if now == family.progress:
-		return
-	family.progress = now
-	FamilyStore.save_slot(FamilyStore.active_slot)
 
 
 func _on_players_changed() -> void:
@@ -392,8 +380,7 @@ func _show_damage(pos: Vector2, amount: int, kind: String) -> void:
 
 
 func _leave() -> void:
-	_save_progress(_local_player())
-	Net.leave()
+	Net.leave()  # a local server saves everyone first
 	get_tree().change_scene_to_file(MENU_SCENE)
 
 
