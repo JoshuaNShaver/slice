@@ -44,7 +44,7 @@ const SETTINGS := ROOT + "imsdow.cfg"
 const ABOUT_FIRST_ARCHITECT := ROOT + "imsdow_about_first_architect.cfg"
 ## Her settings and lines if imsdow.cfg is missing or leaves one out.
 const DEFAULTS := {
-	"name": "imsdow", "title": "the architect", "asleep_on_open": 0.3, "commands_to_wake": 3,
+	"name": "imsdow", "title": "the second architect", "asleep_on_open": 0.3, "commands_to_wake": 3,
 	"quip_after_command": 0.35, "quip_every": Vector2(25, 45), "line_time": 6.0,
 }
 ## Lists every file should have; any other [lines] list is read too.

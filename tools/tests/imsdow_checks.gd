@@ -48,7 +48,7 @@ func run() -> int:
 	_check(not _her.is_asleep() and _said_from("waking"), "the third wakes her: %s" % _speech())
 
 	# Her title, and clicking her for something new (log 0149).
-	_check((_her.get("_name_tag") as Label).text == "imsdow — the architect",
+	_check((_her.get("_name_tag") as Label).text == "imsdow — the second architect",
 			"name tag: %s" % (_her.get("_name_tag") as Label).text)
 	var picture: Control = _her.get("_picture")
 	_check(picture.mouse_filter == Control.MOUSE_FILTER_STOP, "her picture takes clicks")

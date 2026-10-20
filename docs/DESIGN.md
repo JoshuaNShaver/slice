@@ -524,7 +524,7 @@ As in the book, women are straight lines.
   chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
   leaves, and `\bye` says goodbye to imsdow first. It's 25% see-through
   dark, fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
-  ASCII-art companion, **imsdow — the architect**, who waves hello
+  ASCII-art companion, **imsdow — the second architect**, who waves hello
   (click her for a new line), now and then blushes
   (pink cheeks, hearts), and is sometimes found asleep (or dozes off after
   45 s without typing): commands get mumbles until the third wakes her,
