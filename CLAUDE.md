@@ -117,7 +117,8 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
   (see the file; start that server with `--dev-admins`, since the test
   levels up with an admin command). Chat and admin commands:
-  `-s tools/tests/test_chat.gd`. A dev server can keep saves elsewhere with
+  `-s tools/tests/test_chat.gd`; the admin terminal and imsdow:
+  `-s tools/tests/test_imsdow.gd`. A dev server can keep saves elsewhere with
   `-- --server --save-dir=user://some-folder/`. `SAVES=local|supabase`
   picks its store (log 0117); settings are in `.env.example`, steps in README.md "Saves and logins". Quick tests use a
   mock Supabase, `python3 tools/tests/supabase_mock.py` (see its header;

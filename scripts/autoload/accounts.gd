@@ -32,6 +32,7 @@ const MAX_LOGIN_TRIES := 5
 const GUEST_PREFIX := "guest-"
 const USERNAME_MIN := 3
 const USERNAME_MAX := 16
+const ROLES: Array[String] = ["player", "admin", "josh"]  # logs 0125, 0147
 
 ## Server only.
 var store: SaveStore
@@ -46,7 +47,7 @@ var _secret_key := ""
 ## Server only. Finds a peer's shape (set by the world): Callable(id) -> PlayerShape.
 var find_player := Callable()
 ## Server only. Peer id -> {"account", "username" ("" until chosen;
-## always "" for guests), "role" ("player" or "admin", log 0125),
+## always "" for guests), "role" ("player", "admin" or "josh"; logs 0125, 0147),
 ## "families" (Family or null), "chest", "slot" (-1 until playing),
 ## "saved_at"}.
 var sessions: Dictionary = {}
@@ -54,6 +55,10 @@ var sessions: Dictionary = {}
 ## servers; log 0125).
 var dev_admins := false
 var _tries: Dictionary = {}
+
+## Client only. This player's role, as the server said (log 0147): picks
+## how imsdow talks in the admin terminal.
+var my_role := "player"
 
 ## Client only. Where this device keeps its guest id (tests change it).
 var guest_id_path := "user://account/guest_id.txt"
@@ -119,6 +124,7 @@ func attach_local(id: int, slot: int) -> bool:
 	session.slot = slot
 	session.role = "admin"  # your own machine's game (log 0125)
 	sessions[id] = session
+	my_role = session.role  # only this machine's own player attaches here
 	return true
 
 
@@ -131,11 +137,13 @@ func chest_of(id: int) -> Array:
 	return sessions[id].chest if sessions.has(id) else []
 
 
-## "admin" or "player" (log 0125): admins may use \ commands in chat.
+## "player", "admin" or "josh" (logs 0125, 0147): admins and josh may use
+## \ commands in chat; josh is the one imsdow talks to in the first person.
 func role_of(id: int) -> String:
 	if not sessions.has(id):
 		return "player"
-	return "admin" if dev_admins else sessions[id].get("role", "player")
+	var role: String = sessions[id].get("role", "player")
+	return "admin" if dev_admins and role == "player" else role
 
 
 func is_playing(id: int) -> bool:
@@ -256,7 +264,8 @@ func _log_in(credential: Variant) -> void:
 		return
 	sessions[id] = _new_session(account, data)
 	sessions[id].username = profile.username
-	sessions[id].role = "admin" if profile.get("role") == "admin" else "player"
+	var role := str(profile.get("role", "player"))
+	sessions[id].role = role if role in ROLES else "player"
 	print("Peer %d logged in as %s" % [id, account])
 	if auth == "supabase" and profile.username == "":
 		_username_needed.rpc_id(id, "")
@@ -284,6 +293,7 @@ func _take_over(old: int, id: int) -> void:
 
 ## Logged in and named: the client gets its name and slots.
 func _welcome(id: int) -> void:
+	_role.rpc_id(id, role_of(id))
 	if auth == "supabase":
 		_signed_in.rpc_id(id, sessions[id].username)
 	_send_slots(id)
@@ -490,6 +500,11 @@ func _username_needed(problem: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _signed_in(username: String) -> void:
 	signed_in.emit(username)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _role(role: String) -> void:
+	my_role = role if role in ROLES else "player"
 
 
 @rpc("authority", "call_remote", "reliable")

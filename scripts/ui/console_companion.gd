@@ -4,7 +4,9 @@ extends VBoxContainer
 ## waves hello when the terminal opens (or is found asleep, now and then),
 ## dozes off when left alone, and talks: puns, and bits of the game's design
 ## history. Asleep, commands get mumbled answers until the third wakes her,
-## blushing. Her lines and settings: assets/companion/imsdow.cfg.
+## blushing. Her lines and settings: assets/companion/imsdow.cfg. She talks
+## to Josh (the "josh" role) in the first person, with that file's lines;
+## to other admins she talks about him, with imsdow_about_josh.cfg's (log 0147).
 ##
 ## Each folder in assets/companion/ is one animation, each file in it one
 ## frame, in name order: text (.txt, ASCII art drawn in the terminal font)
@@ -13,6 +15,9 @@ extends VBoxContainer
 ##   frame_time  s per frame (0.25)
 ##   repeat      times through the frames (1)
 ##   sequence    frame numbers to play, from 1, e.g. [1, 2, 3, 2, 1]
+##   sometimes   another sequence, played instead now and then:
+##   sometimes_chance  how often (0-1), and
+##   sometimes_says    a [lines] list she says when it plays (log 0151)
 ##   offsets     a Vector2 per picture frame, in image px, to line them up
 ##   every       Vector2(min, max) s: plays by itself while she rests
 ##   after_quiet s with nothing typed before it plays by itself (sleeping)
@@ -31,15 +36,34 @@ const MAX_BLUSH_AREAS := 4  # as in companion_pop.gdshader
 const CHAR_SIZE := Vector2(0.6, 1.18)
 const POP := preload("res://scripts/ui/companion_pop.gdshader")
 const SETTINGS := ROOT + "imsdow.cfg"
+## Her lines for admins other than Josh: about him, not to him (log 0147).
+## Its [lines] replace imsdow.cfg's; settings stay imsdow.cfg's.
+const ABOUT_JOSH := ROOT + "imsdow_about_josh.cfg"
 ## Her settings and lines if imsdow.cfg is missing or leaves one out.
 const DEFAULTS := {
-	"name": "imsdow", "asleep_on_open": 0.3, "commands_to_wake": 3,
+	"name": "imsdow", "title": "the architect", "asleep_on_open": 0.3, "commands_to_wake": 3,
 	"quip_after_command": 0.35, "quip_every": Vector2(25, 45), "line_time": 6.0,
 }
+## Lists every file should have; any other [lines] list is read too.
+## When each is said (log 0148):
+##   hello        the terminal opens (late_night instead, midnight to 5 am)
+##   asleep       she's found asleep when it opens
+##   dozing       she falls asleep after a quiet spell
+##   mumbles      a command while she sleeps (until the one that wakes her)
+##   waking       that command
+##   blushing     she blushes by herself
+##   puns, lore, reflections   now and then, and after some commands
+##   unknown      the server didn't know the command
+##   repeat       the same command twice in a row
+##   stuck        \enemies found one AWAY
+##   power        \player set or levelup changed someone
+##   goodbye      \bye, or the terminal closing
 const DEFAULT_LINES := {
 	"hello": ["hi, admin! ~"], "asleep": ["zzz..."], "mumbles": ["mmm, a few more minutes..."],
-	"waking": ["w-wasn't sleeping!"], "puns": [], "lore": [],
+	"waking": ["w-wasn't sleeping!"], "goodbye": ["bye, admin!"],
 }
+## Local hours (from, to) when she greets you with late_night.
+const LATE_NIGHT := Vector2i(0, 5)
 
 var font: Font
 var font_size := 10:
@@ -64,14 +88,19 @@ var _text: Label
 var _picture: _Picture
 var _playing := ""  # the animation under way, or "" when resting
 var _time := 0.0  # s into the animation
+var _seq: Array[int] = []  # the frames the animation under way is playing
 var _due := {}  # animation -> s until it plays by itself (those with an every)
 var _quiet := 0.0  # s since anything was typed
 var _settings := DEFAULTS.duplicate()
 var _lines := DEFAULT_LINES.duplicate(true)  # list name -> lines
+var _lines_from := ""  # the file her lines came from
 var _sleepy_commands := 0  # commands typed since she fell asleep
+var _last_command := ""
+var _answered := false  # she's already reacted to the last command
 var _speech_left := 0.0  # s until her line clears
 var _quip_in := 30.0  # s until she says something by herself
 var _name_tag: Label
+var _last_said := ""  # so a new line is never the one just said
 var _rng := RandomNumberGenerator.new()
 
 
@@ -80,6 +109,7 @@ func _ready() -> void:
 	alignment = BoxContainer.ALIGNMENT_END
 	_rng.randomize()
 	_load_settings()
+	_load_lines()
 	_speech = Label.new()
 	_speech.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_speech.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -95,8 +125,14 @@ func _ready() -> void:
 	add_child(_picture)
 	_name_tag = Label.new()
 	_name_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_tag.text = "~ %s ~" % _settings.name
+	var title := str(_settings.title)
+	_name_tag.text = "%s — %s" % [_settings.name, title] if title != "" else str(_settings.name)
 	add_child(_name_tag)
+	# Click her for something new to say (log 0149).
+	for part: Control in [_picture, _text]:
+		part.mouse_filter = Control.MOUSE_FILTER_STOP
+		part.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		part.gui_input.connect(_on_clicked)
 	_load()
 	_quip_in = _next_quip_wait()
 	_style()
@@ -107,15 +143,36 @@ func _ready() -> void:
 ## found asleep.
 func hello() -> void:
 	_quiet = 0.0
+	_load_lines()
+	_last_command = ""
 	if _anims.has("sleeping") and _rng.randf() < float(_settings.asleep_on_open):
-		_fall_asleep()
+		_fall_asleep("asleep")
 		return
 	play("wave")
-	say(_pick("hello"))
+	var hour: int = Time.get_datetime_dict_from_system().hour
+	var late := hour >= LATE_NIGHT.x and hour < LATE_NIGHT.y and _lines.has("late_night")
+	say(_pick("late_night" if late else "hello"))
+
+
+## Her name, from imsdow.cfg.
+func display_name() -> String:
+	return str(_settings.name)
+
+
+## \bye, or the terminal closing: says goodbye (and waves, if she's up).
+## Returns the line, for the chat log.
+func goodbye() -> String:
+	var line := _pick("goodbye")
+	if is_asleep():
+		_playing = ""
+	play("wave")
+	say(line)
+	return line
 
 
 ## Says something (or nothing, with ""), for a while.
 func say(line: String) -> void:
+	_last_said = line
 	_speech.text = "< %s >" % line if line != "" else ""
 	_speech_left = maxf(float(_settings.line_time), line.length() * 0.07)
 
@@ -125,16 +182,42 @@ func poke() -> void:
 	_quiet = 0.0
 
 
-## A command was run. Asleep, she mumbles, and the third wakes her; awake,
-## she sometimes has something to say.
-func command() -> void:
+## A command was run. Asleep, she mumbles, and the third wakes her. Awake,
+## she notices a repeat; otherwise she waits for the answer (reply).
+func command(line: String) -> void:
 	_quiet = 0.0
+	var again := line == _last_command
+	_last_command = line
+	_answered = true
 	if is_asleep():
 		_sleepy_commands += 1
 		if _sleepy_commands >= int(_settings.commands_to_wake):
 			_wake()
 		else:
 			say(_pick("mumbles"))
+	elif again and _lines.has("repeat"):
+		say(_pick("repeat"))
+	else:
+		_answered = false
+
+
+## The server answered `line` with `text`: she reacts to a command it
+## didn't know, a lost enemy, or a player changed; else sometimes quips.
+func reply(line: String, text: String) -> void:
+	if _answered or is_asleep():
+		return
+	_answered = true
+	var asked := line.to_lower()
+	var list := ""
+	if text.begins_with("There's no command") or " has no \"" in text:
+		list = "unknown"
+	elif (asked.begins_with("\\enemies") or asked.begins_with("\\enemy list")) and "AWAY" in text:
+		list = "stuck"
+	elif (asked.begins_with("\\player set") or asked.begins_with("\\player levelup")) \
+			and (" is now " in text or " -> " in text):
+		list = "power"
+	if list != "" and _lines.has(list):
+		say(_pick(list))
 	elif _rng.randf() < float(_settings.quip_after_command):
 		say(_quip())
 
@@ -144,10 +227,11 @@ func is_asleep() -> bool:
 	return _playing != "" and _anims[_playing].loop
 
 
-func _fall_asleep() -> void:
+## Asleep, saying a line from `list` (asleep or dozing).
+func _fall_asleep(list: String) -> void:
 	_sleepy_commands = 0
 	play("sleeping")
-	say(_pick("asleep"))
+	say(_pick(list if _lines.has(list) else "asleep"))
 
 
 ## Woken up: caught napping, she blushes.
@@ -156,18 +240,26 @@ func _wake() -> void:
 	_playing = ""
 	say(_pick("waking"))
 	if _anims.has("blush"):
-		play("blush")
+		play("blush", false)  # she's already said her waking line
 	else:
 		_rest()
 
 
-## Starts an animation (a folder's name) from its first frame.
-func play(anim: String) -> void:
+## Starts an animation (a folder's name) from its first frame: its
+## sequence, or now and then its "sometimes" one, which may come with a
+## line (unless `speak` is false). True if it was the sometimes one.
+func play(anim: String, speak := true) -> bool:
 	if not _anims.has(anim):
-		return
+		return false
+	var data: Dictionary = _anims[anim]
+	var rare: bool = not data.sometimes.is_empty() and _rng.randf() < data.sometimes_chance
+	_seq = data.sometimes if rare else data.sequence
 	_playing = anim
 	_time = 0.0
-	_show(anim, _anims[anim].sequence[0])
+	_show(anim, _seq[0])
+	if rare and speak and _lines.has(data.sometimes_says):
+		say(_pick(data.sometimes_says))
+	return rare
 
 
 ## Sizes her to fit in `box` px: text by font size (4 to 12), pictures by
@@ -198,7 +290,7 @@ func _process(delta: float) -> void:
 			var after: float = _anims[anim].after_quiet
 			if after > 0.0 and _quiet >= after:
 				if anim == "sleeping":
-					_fall_asleep()
+					_fall_asleep("dozing")
 				else:
 					play(anim)
 				return
@@ -215,24 +307,55 @@ func _process(delta: float) -> void:
 	var anim: Dictionary = _anims[_playing]
 	var step := int(_time / anim.frame_time)
 	if anim.loop:
-		step %= anim.sequence.size()
-	if step >= anim.sequence.size():
+		step %= _seq.size()
+	if step >= _seq.size():
 		_playing = ""
 		_rest()
 	else:
-		_show(_playing, anim.sequence[step])
+		_show(_playing, _seq[step])
 
 
 ## A random line from one of imsdow.cfg's lists.
 func _pick(list: String) -> String:
-	var lines: Array = _lines.get(list, [])
-	return str(lines[_rng.randi() % lines.size()]) if not lines.is_empty() else ""
+	return _fresh(_lines.get(list, []))
 
 
-## A pun or a bit of design history.
+## A pun, a bit of design history, or a quiet thought.
 func _quip() -> String:
-	var all: Array = _lines.get("puns", []) + _lines.get("lore", [])
-	return str(all[_rng.randi() % all.size()]) if not all.is_empty() else ""
+	return _fresh(_lines.get("puns", []) + _lines.get("lore", []) + _lines.get("reflections", []))
+
+
+## A random line from `lines`, not the one she just said if there's another.
+func _fresh(lines: Array) -> String:
+	if lines.is_empty():
+		return ""
+	var line := str(lines[_rng.randi() % lines.size()])
+	for _try in 4:
+		if line != _last_said:
+			break
+		line = str(lines[_rng.randi() % lines.size()])
+	return line
+
+
+## Clicked (or tapped): asleep, it's a nudge, like a command; awake, she
+## says something new, and now and then blushes at the attention.
+func _on_clicked(event: InputEvent) -> void:
+	var press := event as InputEventMouseButton
+	if press == null or not press.pressed or press.button_index != MOUSE_BUTTON_LEFT:
+		return
+	accept_event()
+	_quiet = 0.0
+	if is_asleep():
+		_sleepy_commands += 1
+		if _sleepy_commands >= int(_settings.commands_to_wake):
+			_wake()
+		else:
+			say(_pick("mumbles"))
+	elif _playing == "" and _anims.has("blush") and _rng.randf() < 1.0 / 6.0:
+		if not play("blush"):  # the full blush brings its own line
+			say(_quip())
+	else:
+		say(_quip())
 
 
 func _next_quip_wait() -> float:
@@ -248,7 +371,23 @@ func _load_settings() -> void:
 		var value: Variant = config.get_value("imsdow", key, DEFAULTS[key])
 		if typeof(value) == typeof(DEFAULTS[key]) or (value is int and DEFAULTS[key] is float):
 			_settings[key] = value
-	for list: String in DEFAULT_LINES:
+
+
+## Her lines for whoever's at the terminal: to Josh, or about him. Reloads
+## only when that changes (the role arrives from the server after login).
+func _load_lines() -> void:
+	var path := SETTINGS if Net.accounts.my_role == "josh" else ABOUT_JOSH
+	if path == _lines_from:
+		return
+	_lines_from = path
+	_lines = DEFAULT_LINES.duplicate(true)
+	var config := ConfigFile.new()
+	if config.load(path) != OK:
+		push_warning("ConsoleCompanion: couldn't read %s" % path)
+		return
+	if not config.has_section("lines"):
+		return
+	for list in config.get_section_keys("lines"):
 		var lines: Variant = config.get_value("lines", list, [])
 		if lines is Array and not (lines as Array).is_empty():
 			_lines[list] = lines
@@ -332,10 +471,7 @@ func _load() -> void:
 			if frames[i] is Texture2D:
 				var rect := Rect2(offsets[i], (frames[i] as Texture2D).get_size())
 				canvas = rect if canvas.size == Vector2.ZERO else canvas.merge(rect)
-		var sequence: Array[int] = []
-		for n: Variant in config.get_value("anim", "sequence", []):
-			if (n is int or n is float) and int(n) >= 1 and int(n) <= frames.size():
-				sequence.append(int(n) - 1)
+		var sequence := _frame_numbers(config.get_value("anim", "sequence", []), frames.size())
 		if sequence.is_empty():
 			for _round in maxi(int(config.get_value("anim", "repeat", 1)), 1):
 				for i in frames.size():
@@ -353,6 +489,9 @@ func _load() -> void:
 			"loop": bool(config.get_value("anim", "loop", false)),
 			"frame_time": maxf(float(config.get_value("anim", "frame_time", 0.25)), 0.02),
 			"sequence": sequence,
+			"sometimes": _frame_numbers(config.get_value("anim", "sometimes", []), frames.size()),
+			"sometimes_chance": float(config.get_value("anim", "sometimes_chance", 0.0)),
+			"sometimes_says": str(config.get_value("anim", "sometimes_says", "")),
 		}
 	for anim: String in _anims:
 		var frames: Array = _anims[anim].frames
@@ -365,6 +504,16 @@ func _load() -> void:
 	_picture.canvas = canvas
 	if _anims.is_empty():
 		push_warning("ConsoleCompanion: no frames in %s" % ROOT)
+
+
+## anim.cfg frame numbers (from 1) as frame indexes, dropping any out of range.
+static func _frame_numbers(given: Variant, count: int) -> Array[int]:
+	var out: Array[int] = []
+	if given is Array:
+		for n: Variant in given:
+			if (n is int or n is float) and int(n) >= 1 and int(n) <= count:
+				out.append(int(n) - 1)
+	return out
 
 
 ## A folder's frame files in natural order (frame_2 before frame_10). An

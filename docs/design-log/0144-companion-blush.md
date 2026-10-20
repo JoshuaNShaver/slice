@@ -1,7 +1,7 @@
 # 0144: The companion blushes
 
 - **Date:** 2026-10-19
-- **Status:** Accepted
+- **Status:** Superseded by 0151
 - **Decision:** A `blush` animation from the user's four pictures (a
   blushing smile, startled, hearts, hiding in her sleeve) plays by itself
   every 18-35 s while she rests (`every` in anim.cfg; any animation can

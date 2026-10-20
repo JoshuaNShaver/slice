@@ -16,7 +16,8 @@ extends Control
 ##
 ## A line starting with "\" turns the chat into the admin terminal (log
 ## 0138) until it closes: the whole screen, dark and see-through, in a
-## fixed-width font, with an ASCII companion who waves hello.
+## fixed-width font, with imsdow, the companion. In the terminal Enter never
+## leaves; Esc (or ✕) does, and \bye says goodbye to her first (log 0148).
 
 signal line_entered(text: String)
 signal closed
@@ -35,6 +36,8 @@ const TERM_GREEN := Color(0.49, 1.0, 0.63)
 const TERM_TEXT := Color(0.86, 0.93, 0.88)
 const TERM_PINK := Color(1.0, 0.72, 0.86)
 const TERM_PROMPT := "admin@slice:~$"
+const BYE := "\\bye"  # says goodbye to imsdow and closes the terminal; never sent
+const BYE_TIME := 1.8  # s her goodbye shows before the terminal closes
 ## Narrower than this, the companion draws smaller.
 const TERM_WIDE := 1000.0
 
@@ -57,6 +60,8 @@ var _backdrop: ColorRect
 var _header: Label
 var _prompt: Label
 var _companion: ConsoleCompanion
+var _asked := ""  # the last command sent from the terminal, awaiting its answer
+var _goodbye := ""  # her goodbye, once said, so closing doesn't say another
 var _ages: Array[float] = []  # s since each log line arrived, like _log's children
 var _history: Array[String] = []
 var _history_at := 0
@@ -89,16 +94,25 @@ func open(text := "") -> void:
 func close() -> void:
 	if not is_open:
 		return
+	var leaving_terminal := terminal
 	is_open = false
 	_field.release_focus()
 	_field.text = ""
 	_set_terminal(false)
 	_refresh()
+	if leaving_terminal:
+		# Her goodbye stays in the chat log a while after the terminal's gone.
+		var line := _goodbye if _goodbye != "" else _companion.goodbye()
+		add_said(_companion.display_name(), line)
+	_goodbye = ""
+	_asked = ""
 	closed.emit()
 
 
 func toggle() -> void:
-	if is_open:
+	if is_open and terminal:
+		_focus_field()  # only Esc leaves the terminal
+	elif is_open:
 		close()
 	else:
 		open()
@@ -112,6 +126,9 @@ func add_said(speaker: String, text: String) -> void:
 ## The server's answer to you (an admin command, "too fast"). May be
 ## several lines.
 func add_notice(text: String) -> void:
+	if terminal and _asked != "":
+		_companion.reply(_asked, text)
+		_asked = ""
 	for line in text.split("\n"):
 		_add_line(line, "notice")
 
@@ -344,18 +361,26 @@ func _refresh() -> void:
 func _on_submitted(text: String) -> void:
 	var line := text.strip_edges()
 	if line == "":
-		close()
+		if terminal:
+			_focus_field.call_deferred()  # Enter never leaves the terminal
+		else:
+			close()
 		return
 	if terminal:
 		_add_line("%s %s" % [TERM_PROMPT, line], "echo")
-		_companion.command()
+		if line.to_lower() == BYE:
+			_say_bye()
+			return
+		_companion.command(line)
+		# A command gets an answer (a notice) for her to react to; chat doesn't.
+		_asked = line if line.begins_with(AdminConsole.ESCAPE) else ""
 	line_entered.emit(line)
 	if _history.is_empty() or _history[-1] != line:
 		_history.append(line)
 		if _history.size() > MAX_HISTORY:
 			_history.pop_front()
 	_history_at = _history.size()
-	if line.begins_with(AdminConsole.ESCAPE):
+	if line.begins_with(AdminConsole.ESCAPE) or terminal:
 		_field.text = ""  # stay open for the next command
 		_focus_field.call_deferred()
 	else:
@@ -398,9 +423,12 @@ func _step_history(step: int) -> void:
 
 ## With keys, clicking away from the line closes the chat. On a touch
 ## screen it stays open (a tap to scroll the log can take focus away); the
-## close button or Chat closes it.
+## close button or Chat closes it. The terminal takes focus back: only Esc
+## (or ✕) leaves it.
 func _on_focus_lost() -> void:
-	if is_open and not _touch:
+	if is_open and terminal:
+		_focus_field.call_deferred()  # only Esc leaves the terminal
+	elif is_open and not _touch:
 		close()
 
 
@@ -435,3 +463,15 @@ func _set_terminal(on: bool) -> void:
 	# Next frame: her new size is known by then, and it's safe while the
 	# HUD is being torn down (closing on lost focus).
 	_place.call_deferred()
+
+
+## \bye: imsdow says goodbye and waves, then the terminal closes.
+func _say_bye() -> void:
+	_field.text = ""
+	_goodbye = _companion.goodbye()
+	_field.editable = false
+	await get_tree().create_timer(BYE_TIME).timeout
+	_field.editable = true
+	if is_open and terminal:
+		close()
+	_goodbye = ""

@@ -509,8 +509,9 @@ As in the book, women are straight lines.
   the speaker. One line, 160 characters, 5 lines per 5 s. With keys the
   log sits bottom left and fades; on a touch screen it sits top left with
   the typing line on top, clear of the phone's keyboard.
-- **Admins (log 0125):** `profiles.role` is `player` or `admin`, set only
-  by a database update. Admins type commands into chat:
+- **Admins (logs 0125, 0147):** `profiles.role` is `player`, `admin` or
+  `josh` (an admin imsdow talks to in the first person), set only by a
+  database update. Admins type commands into chat:
   `\<noun> <verb> [words] [--flags]`, e.g. `\player list`,
   `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
   `\help` lists them. Offline and a host's own player are admins; a
@@ -518,14 +519,18 @@ As in the book, women are straight lines.
   `\enemies` (short for `\enemy list [--away] [--type]`) and
   `\enemy get E3` show each enemy's place, hp and distance from home,
   marking ones away from home (log 0137).
-- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146):** a chat line starting with `\` turns the
-  chat into a full-screen terminal until it closes: 25% see-through dark,
-  fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
-  ASCII-art companion, **imsdow**, who waves hello, now and then blushes
+- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149):** a chat line starting with `\` turns the
+  chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
+  leaves, and `\bye` says goodbye to imsdow first. It's 25% see-through
+  dark, fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
+  ASCII-art companion, **imsdow — the architect**, who waves hello
+  (click her for a new line), now and then blushes
   (pink cheeks, hearts), and is sometimes found asleep (or dozes off after
   45 s without typing): commands get mumbles until the third wakes her,
-  blushing. Awake she makes shape puns and recalls design history, with
-  log numbers (lines in `assets/companion/imsdow.cfg`). Her animations are folders of frames in
+  blushing. Awake she makes shape puns, reflects, recalls design history
+  with log numbers, and reacts to commands (unknown, repeated, a lost
+  enemy, a player changed) (lines in `assets/companion/imsdow.cfg`, written to Josh; other admins get
+  `imsdow_about_josh.cfg`, where she talks about him, log 0147). Her animations are folders of frames in
   `assets/companion/` (text, or ink-on-clear pictures recolored
   pink/violet with a cyan shimmer; `tools/companion_ink.py` cleans a
   picture that has a background).
