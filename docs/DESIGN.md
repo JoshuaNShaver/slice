@@ -403,7 +403,7 @@ Values marked * are proposed tuning.
   local server with no network; Online joins the game's server
   (`online/server_address` in `project.godot`; on desktop
   `-- --server-address=` or `SLICE_SERVER` points elsewhere, for dev or
-  LAN). No hosting from the menu; a server runs with `-- --server`.
+  LAN; a web build takes `SLICE_SERVER` at export time, log 0135). No hosting from the menu; a server runs with `-- --server`.
 - **Sign-in screen (log 0120, proposed, built):** Online connects at once
   and shows one card per step: reaching the server, can't reach it (Try
   again), "Sign in with Google" (Google's white button and G), finish in
@@ -515,6 +515,20 @@ As in the book, women are straight lines.
   `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
   `\help` lists them. Offline and a host's own player are admins; a
   dedicated server with `--dev-admins` makes everyone one (tests, dev).
+  `\enemies` (short for `\enemy list [--away] [--type]`) and
+  `\enemy get E3` show each enemy's place, hp and distance from home,
+  marking ones away from home (log 0137).
+- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146):** a chat line starting with `\` turns the
+  chat into a full-screen terminal until it closes: 25% see-through dark,
+  fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
+  ASCII-art companion, **imsdow**, who waves hello, now and then blushes
+  (pink cheeks, hearts), and is sometimes found asleep (or dozes off after
+  45 s without typing): commands get mumbles until the third wakes her,
+  blushing. Awake she makes shape puns and recalls design history, with
+  log numbers (lines in `assets/companion/imsdow.cfg`). Her animations are folders of frames in
+  `assets/companion/` (text, or ink-on-clear pictures recolored
+  pink/violet with a cyan shimmer; `tools/companion_ink.py` cleans a
+  picture that has a background).
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
   High / Low. Low drops the atmosphere and background stains and renders at
   1280x720, scaled up. Saved per machine.

@@ -16,6 +16,9 @@ const FPS_CHOICES: Array[int] = [30, 60, 120, 144, 0]
 const SERVER_FPS := 120
 ## The smallest view, wide; a tall window gets it turned (log 0134).
 const BASE_SIZE := Vector2i(1280, 720)
+## Arrows and a few symbols (← → ↑ ↓ ↗ ✕) the default font lacks. Desktop
+## borrows them from system fonts, the web build has none (log 0136).
+const SYMBOLS_FONT := preload("res://assets/fonts/symbols.ttf")
 
 var max_fps := 0
 var low := false
@@ -25,6 +28,9 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		Engine.max_fps = SERVER_FPS
 		return
+	var default_font := ThemeDB.fallback_font
+	if SYMBOLS_FONT not in default_font.fallbacks:
+		default_font.fallbacks = default_font.fallbacks + [SYMBOLS_FONT]
 	var config := ConfigFile.new()
 	config.load(SAVE_PATH)  # missing file just leaves the defaults
 	max_fps = config.get_value("graphics", "max_fps", 0)

@@ -71,7 +71,10 @@ on your PATH (add this to `~/.zshrc`):
 export PATH="$HOME/.docker/bin:$PATH"
 ```
 
-Then, from the project root:
+`make web-local` does all of this for you (Docker, `supabase start`, the
+keys) and runs the game server and web page on top. Put the two
+`SUPABASE_AUTH_EXTERNAL_GOOGLE_*` settings below in `.env` so it can start
+Supabase with Google login. By hand, from the project root:
 
 ```sh
 supabase start     # first run downloads images; creates the save tables

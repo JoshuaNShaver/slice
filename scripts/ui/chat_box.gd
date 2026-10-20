@@ -13,6 +13,10 @@ extends Control
 ## it sits top left under your health, with the typing line on top, so
 ## the phone's keyboard (which covers the bottom half) never hides it; the
 ## Send and close buttons are big enough for a thumb.
+##
+## A line starting with "\" turns the chat into the admin terminal (log
+## 0138) until it closes: the whole screen, dark and see-through, in a
+## fixed-width font, with an ASCII companion who waves hello.
 
 signal line_entered(text: String)
 signal closed
@@ -24,8 +28,18 @@ const WIDTH := 480.0
 const KEYS_BOTTOM := 76.0  # px from the bottom edge: clear of the key hints
 const TOUCH_TOP := 112.0  # px from the top edge: under the health bars
 const MAX_HISTORY := 30
+const MONO := preload("res://assets/fonts/mono.ttf")
+const TERM_MARGIN := 24.0
+const TERM_BACK := Color(0.02, 0.05, 0.03, 0.75)  # 25% see-through (log 0142)
+const TERM_GREEN := Color(0.49, 1.0, 0.63)
+const TERM_TEXT := Color(0.86, 0.93, 0.88)
+const TERM_PINK := Color(1.0, 0.72, 0.86)
+const TERM_PROMPT := "admin@slice:~$"
+## Narrower than this, the companion draws smaller.
+const TERM_WIDE := 1000.0
 
 var is_open := false
+var terminal := false  # the admin terminal look, while a "\" line is open
 
 var _touch := false
 var _underground := false
@@ -38,6 +52,11 @@ var _bar: HBoxContainer
 var _field: LineEdit
 var _send: Button
 var _close: Button
+var _focus_box: StyleBox
+var _backdrop: ColorRect
+var _header: Label
+var _prompt: Label
+var _companion: ConsoleCompanion
 var _ages: Array[float] = []  # s since each log line arrived, like _log's children
 var _history: Array[String] = []
 var _history_at := 0
@@ -49,6 +68,9 @@ func _ready() -> void:
 	_build()
 	_place()
 	_refresh()
+	resized.connect(func() -> void:
+		if terminal:
+			_place())
 
 
 ## Opens the typing line. `text` starts it, e.g. "\" for a command.
@@ -57,6 +79,8 @@ func open(text := "") -> void:
 	_field.text = text
 	_field.caret_column = text.length()
 	_history_at = _history.size()
+	if text.begins_with(AdminConsole.ESCAPE):
+		_set_terminal(true)
 	_refresh()
 	_focus_field.call_deferred()
 	_scroll_to_end()
@@ -68,6 +92,7 @@ func close() -> void:
 	is_open = false
 	_field.release_focus()
 	_field.text = ""
+	_set_terminal(false)
 	_refresh()
 	closed.emit()
 
@@ -81,14 +106,14 @@ func toggle() -> void:
 
 ## A line someone said, "Name: words".
 func add_said(speaker: String, text: String) -> void:
-	_add_line("%s: %s" % [speaker, text], false)
+	_add_line("%s: %s" % [speaker, text], "said")
 
 
 ## The server's answer to you (an admin command, "too fast"). May be
 ## several lines.
 func add_notice(text: String) -> void:
 	for line in text.split("\n"):
-		_add_line(line, true)
+		_add_line(line, "notice")
 
 
 func set_touch(on: bool) -> void:
@@ -116,12 +141,14 @@ func _process(delta: float) -> void:
 			(labels[i] as Label).modulate.a = clampf(SHOW_TIME - _ages[i], 0.0, 1.0)
 
 
-func _add_line(text: String, notice: bool) -> void:
+## `kind`: "said", "notice" (the server to you) or "echo" (a command you
+## typed, in the terminal).
+func _add_line(text: String, kind: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.set_meta("notice", notice)
+	label.set_meta("kind", kind)
 	_style_line(label)
 	_log.add_child(label)
 	_ages.append(0.0)
@@ -134,7 +161,17 @@ func _add_line(text: String, notice: bool) -> void:
 
 
 func _style_line(label: Label) -> void:
-	var notice: bool = label.get_meta("notice", false)
+	var kind: String = label.get_meta("kind", "said")
+	if terminal:
+		label.add_theme_font_override("font", MONO)
+		label.add_theme_color_override("font_color",
+				{"notice": TERM_GREEN, "echo": TERM_PINK}.get(kind, TERM_TEXT))
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		label.add_theme_constant_override("outline_size", 3)
+		label.add_theme_font_size_override("font_size", 16 if _touch else 14)
+		return
+	label.remove_theme_font_override("font")
+	var notice := kind != "said"
 	# Over the world, lines need an outline to read; in the open panel they don't.
 	var on_slate := _underground and not is_open
 	var ink := Palette.CHALK_LINE if on_slate else Palette.INK
@@ -151,6 +188,16 @@ func _scroll_to_end() -> void:
 
 
 func _build() -> void:
+	_backdrop = ColorRect.new()
+	_backdrop.color = TERM_BACK
+	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_backdrop)
+	_companion = ConsoleCompanion.new()
+	_companion.font = MONO
+	_companion.color = TERM_PINK
+	add_child(_companion)
+
 	_column = VBoxContainer.new()
 	_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_column.add_theme_constant_override("separation", 6)
@@ -162,6 +209,15 @@ func _build() -> void:
 	_panel_box.set_corner_radius_all(4)
 	_panel_box.set_content_margin_all(8)
 	_panel.add_theme_stylebox_override("panel", _panel_box)
+	_header = Label.new()
+	_header.text = "SLICE admin console v%s   \\help for commands   Esc to close" \
+			% ProjectSettings.get_setting("application/config/version", "?")
+	_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_header.add_theme_font_override("font", MONO)
+	_header.add_theme_color_override("font_color", TERM_GREEN)
+	_header.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	_header.add_theme_constant_override("outline_size", 3)
+	_column.add_child(_header)
 	_column.add_child(_panel)
 
 	_scroll = ScrollContainer.new()
@@ -178,6 +234,11 @@ func _build() -> void:
 	_bar = HBoxContainer.new()
 	_bar.add_theme_constant_override("separation", 6)
 	_column.add_child(_bar)
+	_prompt = Label.new()
+	_prompt.text = TERM_PROMPT
+	_prompt.add_theme_font_override("font", MONO)
+	_prompt.add_theme_color_override("font_color", TERM_GREEN)
+	_bar.add_child(_prompt)
 	_field = LineEdit.new()
 	_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_field.max_length = PlayerChat.MAX_LENGTH
@@ -188,7 +249,12 @@ func _build() -> void:
 			if get_theme_stylebox("normal", "LineEdit") is StyleBoxFlat else StyleBoxFlat.new()
 	focus_box.bg_color = Palette.PARCHMENT_LIGHT  # the theme's see-through focus is unreadable over the world
 	_field.add_theme_stylebox_override("focus", focus_box)
+	_focus_box = focus_box
 	_field.text_submitted.connect(_on_submitted)
+	_field.text_changed.connect(func(text: String) -> void:
+		_companion.poke()  # someone's here: she won't doze off
+		if text.begins_with(AdminConsole.ESCAPE):
+			_set_terminal(true))
 	_field.gui_input.connect(_on_field_input)
 	_field.focus_exited.connect(_on_focus_lost)
 	_bar.add_child(_field)
@@ -217,9 +283,31 @@ func _place() -> void:
 	_send.visible = _touch
 	_close.visible = _touch
 	# Touch: the typing line on top, out of the keyboard's way.
-	_column.move_child(_bar, 0 if _touch else 1)
+	_column.move_child(_bar, 1 if _touch else -1)  # after the terminal header
+	_header.add_theme_font_size_override("font_size", 16 if _touch else 14)
+	_prompt.add_theme_font_size_override("font_size", 20 if _touch else 16)
+	_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL if terminal else Control.SIZE_FILL
 	var height := lines_height + 16.0 + row_height + 6.0
-	if _touch:
+	if terminal:
+		var wide := size.x >= TERM_WIDE
+		# Wide: up to 40% of the width beside the log. Narrow: over the log's empty top.
+		_companion.fit(Vector2(size.x * 0.4, size.y * 0.8) if wide else Vector2(size.x * 0.62, size.y * 0.42))
+		# Room on the right for her, unless the screen's too narrow to share.
+		var right := TERM_MARGIN + (_companion.get_combined_minimum_size().x + TERM_MARGIN if wide else 0.0)
+		var fig := _companion.get_combined_minimum_size()
+		_companion.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		# Wide: bottom right, beside the log. Narrow: top right inside the
+		# log, which fills from the bottom up.
+		_companion.position = size - fig - Vector2(TERM_MARGIN, TERM_MARGIN) if wide \
+				else Vector2(size.x - fig.x - TERM_MARGIN - 8.0, TERM_MARGIN + _header.get_combined_minimum_size().y
+						+ (row_height + 6.0 if _touch else 0.0) + 14.0)
+		_companion.size = fig
+		_column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_column.offset_left = TERM_MARGIN
+		_column.offset_top = TERM_MARGIN
+		_column.offset_right = -right
+		_column.offset_bottom = -TERM_MARGIN
+	elif _touch:
 		_column.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		_column.position = Vector2(Hud.MARGIN, TOUCH_TOP)
 	else:
@@ -227,15 +315,20 @@ func _place() -> void:
 		_column.offset_left = Hud.MARGIN
 		_column.offset_top = -KEYS_BOTTOM - height
 		_column.offset_bottom = -KEYS_BOTTOM
-	_column.size = Vector2(WIDTH, height)
+	if not terminal:
+		_column.size = Vector2(WIDTH, height)
 	for label in _log.get_children():
 		_style_line(label as Label)
 
 
 func _refresh() -> void:
 	_bar.visible = is_open
-	_panel_box.bg_color = Color(Palette.PARCHMENT, 0.92) if is_open else Color.TRANSPARENT
-	_panel_box.border_color = Palette.INK_FADED
+	_backdrop.visible = terminal
+	_companion.visible = terminal
+	_header.visible = terminal
+	_prompt.visible = terminal
+	_panel_box.bg_color = Color(Palette.PARCHMENT, 0.92) if is_open and not terminal else Color.TRANSPARENT
+	_panel_box.border_color = Color(TERM_GREEN, 0.35) if terminal else Palette.INK_FADED
 	_panel_box.set_border_width_all(1 if is_open else 0)
 	# Open, the log takes the mouse so it can scroll; closed, clicks pass through.
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_open else Control.MOUSE_FILTER_IGNORE
@@ -253,6 +346,9 @@ func _on_submitted(text: String) -> void:
 	if line == "":
 		close()
 		return
+	if terminal:
+		_add_line("%s %s" % [TERM_PROMPT, line], "echo")
+		_companion.command()
 	line_entered.emit(line)
 	if _history.is_empty() or _history[-1] != line:
 		_history.append(line)
@@ -306,3 +402,36 @@ func _step_history(step: int) -> void:
 func _on_focus_lost() -> void:
 	if is_open and not _touch:
 		close()
+
+
+## The admin terminal look on or off (log 0138).
+func _set_terminal(on: bool) -> void:
+	if on == terminal:
+		return
+	terminal = on
+	if on:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(0, 0, 0, 0.35)
+		box.border_color = Color(TERM_GREEN, 0.5)
+		box.border_width_bottom = 1
+		box.set_content_margin_all(6)
+		for state in ["normal", "focus"]:
+			_field.add_theme_stylebox_override(state, box)
+		_field.add_theme_font_override("font", MONO)
+		_field.add_theme_color_override("font_color", TERM_TEXT)
+		_field.add_theme_color_override("caret_color", TERM_GREEN)
+		_field.add_theme_color_override("font_placeholder_color", Color(TERM_TEXT, 0.4))
+		_field.placeholder_text = "\\help"
+	else:
+		_field.remove_theme_stylebox_override("normal")
+		_field.add_theme_stylebox_override("focus", _focus_box)
+		for color in ["font_color", "caret_color", "font_placeholder_color"]:
+			_field.remove_theme_color_override(color)
+		_field.remove_theme_font_override("font")
+		_field.placeholder_text = "Say something"
+	_refresh()
+	if on:
+		_companion.hello()
+	# Next frame: her new size is known by then, and it's safe while the
+	# HUD is being torn down (closing on lost focus).
+	_place.call_deferred()

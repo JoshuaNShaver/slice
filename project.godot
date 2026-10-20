@@ -38,6 +38,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 mouse_cursor/tooltip_position_offset=Vector2(22, 26)
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/server_address/plugin.cfg")
+
 [online]
 
 server_address="wss://flatland-online.duckdns.org"

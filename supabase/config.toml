@@ -8,13 +8,16 @@ project_id = "slice"
 # keys replace the dashboard's values, so this list is the whole list.
 # Desktop: the game's loopback catcher (LoopbackCatcher.PORTS). Web: the
 # page Caddy serves on the game server's domain (design log 0121), opened
-# at / in a browser or /index.html as an installed app.
+# at / in a browser or /index.html as an installed app. Local web: the
+# page `make web-local` serves on port 8000.
 [auth]
 site_url = "http://127.0.0.1:47613/auth/callback"
 additional_redirect_urls = [
   "http://127.0.0.1:47613/auth/callback",
   "http://127.0.0.1:47614/auth/callback",
   "http://127.0.0.1:47615/auth/callback",
+  "http://127.0.0.1:8000/",
+  "http://127.0.0.1:8000/index.html",
   "https://flatland-online.duckdns.org/",
   "https://flatland-online.duckdns.org/index.html",
 ]

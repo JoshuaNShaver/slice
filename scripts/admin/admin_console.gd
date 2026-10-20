@@ -19,6 +19,11 @@ extends RefCounted
 const ESCAPE := "\\"
 const NOUNS := {
 	"player": preload("res://scripts/admin/player_commands.gd"),
+	"enemy": preload("res://scripts/admin/enemy_commands.gd"),
+}
+## Short forms: the first word becomes these words.
+const ALIASES := {
+	"enemies": ["enemy", "list"],
 }
 
 ## Peer id -> short id, the small number `\player list` shows. Handed out
@@ -50,6 +55,11 @@ static func run(caller: PlayerShape, line: String) -> String:
 		return parsed.error
 	var words: Array[String] = parsed.words
 	var flags: Dictionary = parsed.flags
+	if not words.is_empty() and ALIASES.has(words[0]):
+		var full: Array[String] = []
+		full.assign(ALIASES[words[0]])
+		full.append_array(words.slice(1))
+		words = full
 	if words.is_empty() or words[0] == "help":
 		return help()
 	if not NOUNS.has(words[0]):
@@ -120,6 +130,8 @@ static func help() -> String:
 	var lines: Array[String] = ["Commands (%s<command> help for more):" % ESCAPE]
 	for noun: String in NOUNS:
 		lines.append("  %s%s: %s" % [ESCAPE, noun, NOUNS[noun].HELP])
+	for alias: String in ALIASES:
+		lines.append("  %s%s: short for %s%s" % [ESCAPE, alias, ESCAPE, " ".join(ALIASES[alias])])
 	return "\n".join(lines)
 
 

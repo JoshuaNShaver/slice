@@ -54,7 +54,7 @@ Mark your own suggestions `Proposed` until the user agrees.
   players and Revolt bosses). Log 0107.
 - `scripts/admin/`: admin commands typed into chat after `\` (log 0125):
   `AdminConsole` (parsing, help, who's an admin, short player ids) and one
-  script per noun (`PlayerCommands`). Roles: `profiles.role`, set only in
+  script per noun (`PlayerCommands`, `EnemyCommands`). Roles: `profiles.role`, set only in
   the database.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
@@ -75,16 +75,29 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/web_app.gd`: the
   web build's update-and-reload (log 0122). `scripts/ui/`: palette, item slot,
-  theme, HUD, touch controls, chat box, shape icon, stat bar, parchment background, atmosphere
+  theme, HUD, touch controls, chat box (and its admin terminal's
+  `ConsoleCompanion`, imsdow, whose lines are in `imsdow.cfg` and animations are folders of text or picture
+  frames in `assets/companion/<animation>/`, colored by
+  `companion_pop.gdshader`; `tools/companion_ink.py` cleans pictures into
+  ink; logs 0138, 0141, 0143-0146), shape icon, stat bar, parchment background, atmosphere
   (foreground dust/light/fog), menu (Offline / Online, log 0119), online
   login, Google sign-in button.
 - UI is built in code from a bare root node; scenes stay minimal.
+- Fonts: `assets/fonts/` (DejaVu subsets, log 0136). The web build has no
+  system fonts, so a symbol must be in one of them to show there.
 
 ## Running
 
 Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
 - Check scripts: `Godot --headless --path . --quit-after 60`
 - Dedicated server: `Godot --headless --path . -- --server --port=24680`
+- `make web-local`: the local stack, in the deploy workflow's order:
+  Supabase settings (starts Docker/Supabase; restarts it when
+  `supabase/config.toml` or `.env`'s Google settings changed), migrations
+  (`supabase migration up --local`), web export, then server + page on
+  127.0.0.1:8000, checked, with a banner of URLs (Studio too). Ctrl-C stops
+  server and page. `SAVES=local` skips Supabase and uses the LAN IP. Also
+  `make server`, `migrate`, `stop`, `supabase-stop`, `supabase-reset`, `check`.
 - **Hot reload:** a server or game run from source reloads any `.gd` file
   you save, keeping node state. `_ready` doesn't rerun; give a node a
   `_hot_reload()` method to rebuild (Hud rebuilds itself, CenterTerrain

@@ -74,6 +74,23 @@ func run() -> int:
 	_check("Can't set" in _run_cmd(me, "\\player set luck 50"), "unlisted field refused")
 	_check("whole number" in _run_cmd(me, "\\player set pay lots"), "non-number refused")
 
+	# Enemies.
+	var spawn := Barracks.spawn_points()[3]  # a sparring partner
+	var e := Enemy.create(spawn.merged({"name": "E3"}))
+	world.add_child(e)
+	e.freeze = true
+	await tree.physics_frame
+	var enemies := _run_cmd(me, "\\enemies")
+	_check("1 of 1" in enemies and "E3" in enemies and "sparring" in enemies and not "AWAY" in enemies,
+			"\\enemies lists it at home: %s" % enemies)
+	_check("\\enemies" in _run_cmd(me, "\\help"), "help lists the alias")
+	_check("No enemies match" in _run_cmd(me, "\\enemy list --away"), "none away")
+	e.position = spawn.pos + Vector2(3000, 0)
+	_check("AWAY" in _run_cmd(me, "\\enemy list --away"), "one knocked far off is away")
+	_check("home (" in _run_cmd(me, "\\enemy get e3"), "get by name")
+	_check("No enemy" in _run_cmd(me, "\\enemy get E99"), "unknown enemy")
+	e.queue_free()
+
 	# Chat: heard in the same room only, cleaned, and rate limited.
 	_notices.clear()
 	me.chat._submit_line("  hello\nthere  ")

@@ -20,6 +20,8 @@ signal heir_born(heir: Dictionary)
 enum Mode { OFFLINE, HOST, JOIN }
 
 const DEFAULT_PORT := 24680
+## Written into web exports when SLICE_SERVER is set (see online_address).
+const BAKED_ADDRESS_FILE := "res://server_address.txt"
 const MAX_CLIENTS := 32
 const MAX_SIDES := 64
 ## WebSocket buffers per connection. The defaults (64 KiB) are too small for
@@ -138,8 +140,9 @@ func leave() -> void:
 
 ## The online server players join (design log 0119): the project setting
 ## online/server_address, unless `-- --server-address=` or SLICE_SERVER
-## names another (e.g. 127.0.0.1 for a dev server; the web build can't
-## read either).
+## names another (e.g. 127.0.0.1 for a dev server). A browser has neither,
+## so a web build exported with SLICE_SERVER set carries it in
+## BAKED_ADDRESS_FILE (addons/server_address).
 static func online_address() -> String:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--server-address="):
@@ -147,6 +150,10 @@ static func online_address() -> String:
 	var from_env := OS.get_environment("SLICE_SERVER").strip_edges()
 	if from_env != "":
 		return from_env
+	if FileAccess.file_exists(BAKED_ADDRESS_FILE):
+		var baked := FileAccess.get_file_as_string(BAKED_ADDRESS_FILE).strip_edges()
+		if baked != "":
+			return baked
 	return str(ProjectSettings.get_setting("online/server_address", "127.0.0.1"))
 
 

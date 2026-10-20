@@ -29,6 +29,14 @@
 - Uses the no-threads template, so it needs no special headers. It's an
   installable app (PWA, landscape) with on-screen touch controls on
   phones (log 0122); icons are in `web/`.
+- The web build joins the prod server unless `SLICE_SERVER` is set when
+  you export it (a browser has no environment, so the address goes into
+  the build; log 0135). To play against a local server:
+  `SLICE_SERVER=ws://127.0.0.1:24680 Godot --headless --path . --export-release "Web" build/web/index.html`.
+  The export prints `Web build will join ...` when it's set. Deploys
+  don't set it, so they get prod.
+  `make web-local` does all of this (stop, export, server, web host) in
+  one command.
 - Test locally with `python3 -m http.server 8000 --directory build/web`
   and open `http://localhost:8000`. To try touch controls on a desktop
   browser, use its device toolbar (e.g. Chrome DevTools, phone mode). The
