@@ -151,6 +151,9 @@ func set_underground(on: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	# A phone's keyboard can change the text without text_changed, so look.
+	if is_open and not terminal and _field.text.begins_with(AdminConsole.ESCAPE):
+		_set_terminal(true)
 	for i in _ages.size():
 		_ages[i] += delta
 	if not is_open:
@@ -361,6 +364,8 @@ func _refresh() -> void:
 
 func _on_submitted(text: String) -> void:
 	var line := text.strip_edges()
+	if line.begins_with(AdminConsole.ESCAPE):
+		_set_terminal(true)  # in case the typing didn't already
 	if line == "":
 		if terminal:
 			_focus_field.call_deferred()  # Enter never leaves the terminal

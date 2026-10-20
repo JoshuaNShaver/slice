@@ -58,7 +58,7 @@ var dev_admins := false
 var _tries: Dictionary = {}
 
 ## Client only. This player's role, as the server said (log 0147): picks
-## how imsdow talks in the admin terminal.
+## imsdow's lines in the terminal, an admin's or a player's (log 0156).
 var my_role := "player"
 
 ## Client only. Where this device keeps its guest id (tests change it).
@@ -139,8 +139,8 @@ func chest_of(id: int) -> Array:
 
 
 ## "player", "admin" or "first_architect" (logs 0125, 0147, 0152): admins
-## and the first architect may use \ commands in chat; the first architect
-## is the one imsdow (the second architect) talks to in the first person.
+## and the first architect (an admin like any other, log 0156) may use \
+## commands in chat.
 func role_of(id: int) -> String:
 	if not sessions.has(id):
 		return "player"

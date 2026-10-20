@@ -15,6 +15,10 @@ func run() -> int:
 	_her = _chat.get("_companion")
 	_her.set("_settings", (_her.get("_settings") as Dictionary).merged({"asleep_on_open": 0.0}, true))
 
+	# Admins get imsdow.cfg's lines (log 0156).
+	var role_before: String = Net.accounts.my_role
+	Net.accounts.my_role = "admin"
+
 	# Opening on a command makes the terminal; Enter on nothing doesn't leave.
 	_chat.open("\\")
 	await tree.process_frame
@@ -111,6 +115,28 @@ func run() -> int:
 	_chat.call("_on_field_input", esc)
 	_check(not _chat.is_open, "Esc leaves the terminal")
 	_check(_last_log().begins_with(_her.display_name() + ": "), "goodbye in chat after Esc too")
+
+	# A phone's keyboard can set the text without text_changed.
+	_chat.open()
+	_chat.get("_field").text = "\\"
+	await tree.process_frame
+	_check(_chat.terminal, "a \\ typed without text_changed still opens the terminal")
+	_chat.close()
+	_chat.open()
+	_enter("\\help")
+	_check(_chat.terminal, "sending a \\ line opens the terminal")
+	_chat.close()
+
+	# Players who aren't admins get imsdow_non_admin.cfg's lines (log 0156).
+	Net.accounts.my_role = "player"
+	_chat.open("\\")
+	await tree.process_frame
+	_check(_her.get("_lines_from") == ConsoleCompanion.NON_ADMIN, "a player gets the non-admin lines")
+	_check(_said_from("hello") or _said_from("asleep"), "she greets a player: %s" % _speech())
+	_command("\\player list", "Only admins can use \\ commands. Try \\help.")
+	_check(_said_from("not_admin"), "an admin command from a player: %s" % _speech())
+	_chat.close()
+	Net.accounts.my_role = role_before
 
 	_chat.queue_free()
 	print("IMSDOW TEST: %s" % ("PASS" if _fails == 0 else "%d FAILED" % _fails))

@@ -11,7 +11,7 @@
 - Use `--export-debug` for a build with the debug console.
 - In the editor, the same export is **Project → Export → macOS → Export Project**.
 - The preset lives in `export_presets.cfg`. The bundle identifier
-  (`com.joshuashaver.slice`) is required, or the export fails.
+  (`com.slice.game`) is required, or the export fails.
 - Export templates for 4.5.1 are installed. To build for Windows or Linux, add a
   preset in the Export dialog and export it by name the same way.
 - Hot reload turns itself off in exported builds (it only runs with the

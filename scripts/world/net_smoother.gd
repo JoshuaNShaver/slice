@@ -10,19 +10,26 @@ extends RefCounted
 ## - Your own shape (`live` true) shows the newest update, so steering stays
 ##   as quick as the round trip allows.
 ## - When updates run late, the body keeps moving at its last velocity for up
-##   to MAX_GUESS, instead of freezing.
+##   to MAX_GUESS, instead of freezing. The guess stops at terrain and slides
+##   along it (log 0154), so a landing shape isn't drawn sunk into the floor.
 ## - When an update disagrees with what's on screen, the difference fades out
 ##   over about SETTLE instead of snapping.
 
-const DELAY := 0.06  # seconds: a few server updates' worth
-const MAX_GUESS := 0.1  # seconds to keep moving with no news
+## Seconds between the server's updates of each body (log 0154). Over TCP,
+## fewer, fuller packets stall less than a flood of tiny ones.
+const SEND_INTERVAL := 1.0 / 30.0
+const DELAY := 0.1  # seconds: three server updates' worth
+const MAX_GUESS := 0.25  # seconds to keep moving with no news: rides out a TCP resend
 const SETTLE := 0.08  # seconds: how fast a correction fades (time constant)
 const KEEP := 0.5  # seconds of updates to hold on to
 const TELEPORT := 300.0  # px moved in one update that means a jump cut, not motion
 const CLOCK_WRAP := 4096.0  # server time is sent as seconds mod this, to fit a float32
-const CLOCK_DRIFT := 0.01  # how fast the clock estimate gives in to slower packets
+const STATS_WINDOW := 10.0  # seconds of arrivals that stats() looks back over
+const CLOCK_DRIFT := 0.04  # how fast the clock estimate gives in to slower packets
 
 var live := false
+## The body being drawn, if any: guesses are stopped by what it collides with.
+var body: PhysicsBody2D
 
 var _times := PackedFloat64Array()  # server time, unwrapped
 var _last_sent := -INF  # newest server time seen, unwrapped; kept through snaps
@@ -30,6 +37,10 @@ var _clock := INF  # local time minus server time, on the quickest recent packet
 var _poses: Array[Vector3] = []  # x, y, rotation
 var _vels: Array[Vector3] = []  # vx, vy, spin
 var _offset := Vector3.ZERO  # what's on screen minus where the updates say
+var _arrived := PackedFloat64Array()  # local time each update landed, for stats()
+var _late := PackedFloat64Array()  # how much later than the quickest packets each was
+var _test := PhysicsTestMotionParameters2D.new()
+var _hit := PhysicsTestMotionResult2D.new()
 
 
 ## Server side: what to send for a body this frame.
@@ -50,6 +61,11 @@ func push(state: PackedFloat32Array) -> void:
 	_last_sent = sent
 	var lag := _now() - sent
 	_clock = lag if lag < _clock else _clock + (lag - _clock) * CLOCK_DRIFT
+	_arrived.append(_now())
+	_late.append(lag - _clock)
+	while _arrived.size() > 1 and _now() - _arrived[0] > STATS_WINDOW:
+		_arrived.remove_at(0)
+		_late.remove_at(0)
 	var now := _server_now()
 	var pose := Vector3(state[0], state[1], state[2])
 	var before := Vector3.ZERO
@@ -74,6 +90,25 @@ func push(state: PackedFloat32Array) -> void:
 		# Keep the screen where it was; the difference fades in current().
 		var after := _target(now)
 		_offset += Vector3(before.x - after.x, before.y - after.y, angle_difference(after.z, before.z))
+
+
+## How updates have been arriving over the last STATS_WINDOW (\diagnostics,
+## log 0155): {"rate": per second, "gap": longest wait, "late": average and
+## "late_max" most late, compared with the quickest packets}, in seconds.
+func stats() -> Dictionary:
+	var now := _now()
+	var count := _arrived.size()
+	if count < 2:
+		return {}
+	var gap := now - _arrived[-1]
+	var late := 0.0
+	for i in count:
+		late += _late[i]
+		if i > 0:
+			gap = maxf(gap, _arrived[i] - _arrived[i - 1])
+	var span := _arrived[-1] - _arrived[0]
+	return {"rate": (count - 1) / maxf(span, 0.001), "gap": gap,
+			"late": late / count, "late_max": Array(_late).max()}
 
 
 func is_empty() -> bool:
@@ -114,7 +149,29 @@ func _target(now: float) -> Vector3:
 ## Update i carried forward to time t at its velocity, for at most MAX_GUESS.
 func _guess(i: int, t: float) -> Vector3:
 	var ahead := clampf(t - _times[i], 0.0, MAX_GUESS)
-	return _poses[i] + _vels[i] * ahead
+	var guess := _poses[i] + _vels[i] * ahead
+	if body == null or ahead <= 0.0:
+		return guess
+	var moved := _clip(_poses[i], _xy(_vels[i]) * ahead)
+	return Vector3(_poses[i].x + moved.x, _poses[i].y + moved.y, guess.z)
+
+
+## How far the body can move by `motion` from `pose` before it hits
+## something, sliding along what it hits.
+func _clip(pose: Vector3, motion: Vector2) -> Vector2:
+	if not body.is_inside_tree():
+		return motion
+	var done := Vector2.ZERO
+	for _slide in 2:
+		if motion.length_squared() < 0.01:
+			break
+		_test.from = Transform2D(pose.z, _xy(pose) + done)
+		_test.motion = motion
+		if not PhysicsServer2D.body_test_motion(body.get_rid(), _test, _hit):
+			return done + motion
+		done += _hit.get_travel()
+		motion = _hit.get_remainder().slide(_hit.get_collision_normal())
+	return done
 
 
 static func _xy(v: Vector3) -> Vector2:

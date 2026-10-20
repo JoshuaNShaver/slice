@@ -274,6 +274,7 @@ static func create(data: Dictionary) -> Enemy:
 		config.property_set_spawn(prop, true)
 		config.property_set_replication_mode(prop, SceneReplicationConfig.REPLICATION_MODE_ON_CHANGE)
 	sync.replication_config = config
+	sync.replication_interval = NetSmoother.SEND_INTERVAL
 	sync.add_visibility_filter(func(id: int) -> bool: return Net.players.has(id))
 	e.add_child(sync)
 	return e
@@ -300,6 +301,7 @@ func _ready() -> void:
 		freeze = true
 		freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 		_smoother = NetSmoother.new()
+		_smoother.body = self
 	elif info().get("still", false):
 		freeze = true
 		freeze_mode = RigidBody2D.FREEZE_MODE_STATIC

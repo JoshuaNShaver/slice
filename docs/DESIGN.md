@@ -461,11 +461,12 @@ As in the book, women are straight lines.
   multiplayer (WebSocket, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
-- **Smoothing (logs 0093, 0095):** clients draw other players and enemies a
-  little behind (60 ms), blended between server updates; your own shape uses
-  the newest update. When updates run late, bodies keep moving at their last
-  velocity (up to 100 ms) and corrections fade in rather than snap. No
-  client-side prediction yet.
+- **Smoothing (logs 0093, 0095, 0154):** the server sends each body's state
+  30 times a second. Clients draw other players and enemies a little behind
+  (100 ms), blended between server updates; your own shape uses the newest
+  update. When updates run late, bodies keep moving at their last velocity
+  (up to 250 ms), stopping at and sliding along terrain, and corrections
+  fade in rather than snap. No client-side prediction yet.
 - **Clients (log 0099):** the web build is the main online client,
   installable on phones as an app (PWA, any orientation; logs 0122, 0134).
   It uses our own page (`web/shell.html`, log 0132): the phone keyboard
@@ -509,9 +510,8 @@ As in the book, women are straight lines.
   the speaker. One line, 160 characters, 5 lines per 5 s. With keys the
   log sits bottom left and fades; on a touch screen it sits top left with
   the typing line on top, clear of the phone's keyboard.
-- **Admins (logs 0125, 0147):** `profiles.role` is `player`, `admin` or
-  `first_architect` (an admin imsdow, the second architect, talks to in
-  the first person; log 0152), set only by a
+- **Admins (logs 0125, 0147, 0152, 0156):** `profiles.role` is `player`,
+  `admin` or `first_architect` (an admin like any other), set only by a
   database update. Admins type commands into chat:
   `\<noun> <verb> [words] [--flags]`, e.g. `\player list`,
   `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
@@ -520,11 +520,15 @@ As in the book, women are straight lines.
   `\enemies` (short for `\enemy list [--away] [--type]`) and
   `\enemy get E3` show each enemy's place, hp and distance from home,
   marking ones away from home (log 0137).
-- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153):** a chat line starting with `\` turns the
+- **Diagnostics (log 0155):** anyone can type `\diagnostics` (`\diag`):
+  5 pings to the server, then your fps and frame time, ping, how steadily
+  your shape's updates arrive, and the server's fps, physics load, players,
+  enemies, memory and uptime. Only you see it.
+- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153, 0156):** a chat line starting with `\` turns the
   chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
   leaves, `\hello` has imsdow wave and say hi, and `\bye` says goodbye to
   her first. Players who aren't admins can open it too; their `\help`
-  lists just `\hello` and `\bye` (log 0153). It's 25% see-through
+  lists just `\hello`, `\bye` and `\diagnostics` (logs 0153, 0155). It's 25% see-through
   dark, fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
   ASCII-art companion, **imsdow — the second architect**, who waves hello
   (click her for a new line), now and then blushes
@@ -532,8 +536,10 @@ As in the book, women are straight lines.
   45 s without typing): commands get mumbles until the third wakes her,
   blushing. Awake she makes shape puns, reflects, recalls design history
   with log numbers, and reacts to commands (unknown, repeated, a lost
-  enemy, a player changed) (lines in `assets/companion/imsdow.cfg`, written to the first architect; other admins get
-  `imsdow_about_first_architect.cfg`, where she talks about him; logs 0147, 0152). Her animations are folders of frames in
+  enemy, a player changed, an admin command from a player). Admins get the
+  lines in `assets/companion/imsdow.cfg` (kind words, and facts about the
+  first architect, who made the game); players who aren't admins get
+  `imsdow_non_admin.cfg` (log 0156). Settings are in `imsdow.cfg`. Her animations are folders of frames in
   `assets/companion/` (text, or ink-on-clear pictures recolored
   pink/violet with a cyan shimmer; `tools/companion_ink.py` cleans a
   picture that has a background).

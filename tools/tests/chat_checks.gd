@@ -109,6 +109,23 @@ func run() -> int:
 	await tree.process_frame
 	_check(_notices.has("You're talking too fast."), "rate limited")
 
+	# \diagnostics (log 0155): anyone, never sent as a line.
+	_heard.clear()
+	_notices.clear()
+	_check("\\diagnostics" in their_help, "a player's help lists diagnostics")
+	me.chat.send_line("\\Diag ")  # peer 1: the only one an offline test can answer
+	await tree.create_timer(PlayerChat.PINGS * PlayerChat.PING_GAP + 0.5).timeout
+	var report: String = _notices[-1] if not _notices.is_empty() else ""
+	_check(report.begins_with("Diagnostics") and "fps" in report and "Server: " in report
+			and "enemies" in report and not "didn't answer" in report and _heard.is_empty(),
+			"diagnostics report: %s" % report)
+	var smoother := NetSmoother.new()
+	for i in 4:
+		smoother.push(PackedFloat32Array([0, 0, 0, 0, 0, 0, fmod(Time.get_ticks_usec() / 1e6, 4096.0)]))
+		await tree.create_timer(0.05).timeout
+	var stats := smoother.stats()
+	_check(stats.get("rate", 0.0) > 10.0 and stats.get("gap", 1.0) < 0.2, "update stats: %s" % stats)
+
 	Net.accounts.sessions.clear()
 	print("CHAT TEST: %s" % ("PASS" if _fails == 0 else "%d FAILED" % _fails))
 	return _fails

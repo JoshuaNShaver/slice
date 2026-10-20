@@ -38,7 +38,8 @@ Mark your own suggestions `Proposed` until the user agrees.
   (hits, healing, death), `PlayerStats`, `PlayerInventory` (bag, gear,
   chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
   (server -> owner HUD messages), `PlayerChat` (chat lines and admin
-  commands, log 0124), `PlayerInput` (owner's keys);
+  commands, log 0124; `Diagnostics` writes up `\diagnostics`, log 0155),
+  `PlayerInput` (owner's keys);
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave

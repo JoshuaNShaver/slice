@@ -141,6 +141,7 @@ static func create(data: Dictionary) -> PlayerShape:
 		config.property_set_spawn(prop, true)
 		config.property_set_replication_mode(prop, SceneReplicationConfig.REPLICATION_MODE_ON_CHANGE)
 	p.sync.replication_config = config
+	p.sync.replication_interval = NetSmoother.SEND_INTERVAL
 	# Only peers whose world has loaded (registered players) get this shape.
 	p.sync.add_visibility_filter(func(id: int) -> bool: return Net.players.has(id))
 	p.add_child(p.sync)
@@ -181,7 +182,14 @@ func _ready() -> void:
 		freeze = true
 		freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 		_smoother = NetSmoother.new()
+		_smoother.body = self
 		_smoother.live = is_local()
+
+
+## Clients: how the server's updates of this shape have been arriving
+## (NetSmoother.stats); {} on the server.
+func net_stats() -> Dictionary:
+	return {} if _smoother == null else _smoother.stats()
 
 
 func is_local() -> bool:

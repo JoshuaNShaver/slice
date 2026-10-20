@@ -4,11 +4,9 @@ extends VBoxContainer
 ## waves hello when the terminal opens (or is found asleep, now and then),
 ## dozes off when left alone, and talks: puns, and bits of the game's design
 ## history. Asleep, commands get mumbled answers until the third wakes her,
-## blushing. Her lines and settings: assets/companion/imsdow.cfg. She talks
-## to the first architect (the "first_architect" role) in the first person,
-## with that file's lines; to other admins she talks about him, with
-## imsdow_about_first_architect.cfg's (logs 0147, 0152). She's the second
-## architect.
+## blushing. Her settings: assets/companion/imsdow.cfg. Admins get that
+## file's lines; players who aren't admins get imsdow_non_admin.cfg's (log
+## 0156). She's the second architect.
 ##
 ## Each folder in assets/companion/ is one animation, each file in it one
 ## frame, in name order: text (.txt, ASCII art drawn in the terminal font)
@@ -38,10 +36,10 @@ const MAX_BLUSH_AREAS := 4  # as in companion_pop.gdshader
 const CHAR_SIZE := Vector2(0.6, 1.18)
 const POP := preload("res://scripts/ui/companion_pop.gdshader")
 const SETTINGS := ROOT + "imsdow.cfg"
-## Her lines for admins other than the first architect: about him, not to
-## him (logs 0147, 0152).
-## Its [lines] replace imsdow.cfg's; settings stay imsdow.cfg's.
-const ABOUT_FIRST_ARCHITECT := ROOT + "imsdow_about_first_architect.cfg"
+## Her lines for players who aren't admins (log 0156). Its [lines] replace
+## imsdow.cfg's; settings stay imsdow.cfg's.
+const NON_ADMIN := ROOT + "imsdow_non_admin.cfg"
+const ADMIN_ROLES: Array[String] = ["admin", "first_architect"]  # as AdminConsole.is_admin
 ## Her settings and lines if imsdow.cfg is missing or leaves one out.
 const DEFAULTS := {
 	"name": "imsdow", "title": "the second architect", "asleep_on_open": 0.3, "commands_to_wake": 3,
@@ -57,6 +55,7 @@ const DEFAULTS := {
 ##   blushing     she blushes by herself
 ##   puns, lore, reflections   now and then, and after some commands
 ##   unknown      the server didn't know the command
+##   not_admin    a player who isn't an admin tried an admin command
 ##   repeat       the same command twice in a row
 ##   stuck        \enemies found one AWAY
 ##   power        \player set or levelup changed someone
@@ -225,6 +224,8 @@ func reply(line: String, text: String) -> void:
 	var list := ""
 	if text.begins_with("There's no command") or " has no \"" in text:
 		list = "unknown"
+	elif text.begins_with("Only admins can use"):
+		list = "not_admin"
 	elif (asked.begins_with("\\enemies") or asked.begins_with("\\enemy list")) and "AWAY" in text:
 		list = "stuck"
 	elif (asked.begins_with("\\player set") or asked.begins_with("\\player levelup")) \
@@ -387,11 +388,11 @@ func _load_settings() -> void:
 			_settings[key] = value
 
 
-## Her lines for whoever's at the terminal: to the first architect, or
-## about him. Reloads
-## only when that changes (the role arrives from the server after login).
+## Her lines for whoever's at the terminal: an admin's, or a player's.
+## Reloads only when that changes (the role arrives from the server after
+## login).
 func _load_lines() -> void:
-	var path := SETTINGS if Net.accounts.my_role == "first_architect" else ABOUT_FIRST_ARCHITECT
+	var path := SETTINGS if Net.accounts.my_role in ADMIN_ROLES else NON_ADMIN
 	if path == _lines_from:
 		return
 	_lines_from = path

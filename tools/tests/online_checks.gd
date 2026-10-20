@@ -78,6 +78,14 @@ func run() -> int:
 	var level := me.stats.level
 	_check(level == start_level + LEVEL_UPS, "leveled up to %d by \\player levelup (server answered: %s)"
 			% [level, " / ".join(hud.notices)])
+	# \diagnostics (log 0155): pings over the real connection.
+	hud.notices.clear()
+	me.chat.send_line("\\diagnostics")
+	await tree.create_timer(PlayerChat.PINGS * PlayerChat.PING_GAP + 0.5).timeout
+	var report: String = hud.notices[-1] if not hud.notices.is_empty() else ""
+	print(report)
+	_check("Ping: " in report and not "no answer" in report and "a second" in report
+			and not "didn't answer" in report, "diagnostics over the network")
 	hud.queue_free()
 	_leave_world()
 	await tree.create_timer(1.0).timeout
