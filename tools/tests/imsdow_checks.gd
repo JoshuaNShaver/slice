@@ -89,6 +89,11 @@ func run() -> int:
 	for list in ["reflections", "dozing", "unknown", "repeat", "stuck", "power", "late_night", "blushing", "goodbye"]:
 		_check(lines.has(list), "lines has %s" % list)
 
+	# \hello: she waves and says hi, and the terminal stays.
+	_enter("\\hello")
+	_check(_said_from("hello"), "\\hello says hello: %s" % _speech())
+	_check(_chat.is_open and _chat.terminal, "\\hello stays in the terminal")
+
 	# \bye: goodbye, a wave, then the terminal closes, leaving her line in chat.
 	_enter("\\bye")
 	_check(_said_from("goodbye"), "\\bye says goodbye: %s" % _speech())

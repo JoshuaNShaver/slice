@@ -48,7 +48,10 @@ static func short_id(peer_id: int) -> int:
 ## Runs one line ("\player list") for `caller`; returns the answer.
 static func run(caller: PlayerShape, line: String) -> String:
 	if not is_admin(caller.peer_id):
-		return "Only admins can use %s commands." % ESCAPE
+		var asked := line.trim_prefix(ESCAPE).strip_edges().to_lower()
+		if asked == "" or asked == "help":
+			return player_help()
+		return "Only admins can use %s commands. Try %shelp." % [ESCAPE, ESCAPE]
 	var account: String = Net.accounts.sessions.get(caller.peer_id, {}).get("account", "?")
 	print("[admin] %s (%s): %s" % [PlayerChat.name_of(caller), account, line])
 	var parsed := parse(line.trim_prefix(ESCAPE))
@@ -134,6 +137,16 @@ static func help() -> String:
 	for alias: String in ALIASES:
 		lines.append("  %s%s: short for %s%s" % [ESCAPE, alias, ESCAPE, " ".join(ALIASES[alias])])
 	return "\n".join(lines)
+
+
+## \help for players who aren't admins (log 0153): the terminal's own
+## commands, which ChatBox handles and never sends.
+static func player_help() -> String:
+	return "\n".join([
+		"Commands:",
+		"  %shello: imsdow says hi" % ESCAPE,
+		"  %sbye: say goodbye and close the terminal" % ESCAPE,
+	])
 
 
 static func noun_help(noun: String) -> String:

@@ -60,6 +60,7 @@ const DEFAULTS := {
 ##   repeat       the same command twice in a row
 ##   stuck        \enemies found one AWAY
 ##   power        \player set or levelup changed someone
+##   hello        the terminal opening, or \hello
 ##   goodbye      \bye, or the terminal closing
 const DEFAULT_LINES := {
 	"hello": ["hi, admin! ~"], "asleep": ["zzz..."], "mumbles": ["mmm, a few more minutes..."],
@@ -155,6 +156,16 @@ func hello() -> void:
 	var hour: int = Time.get_datetime_dict_from_system().hour
 	var late := hour >= LATE_NIGHT.x and hour < LATE_NIGHT.y and _lines.has("late_night")
 	say(_pick("late_night" if late else "hello"))
+
+
+## \hello: waves and says hello. Asleep, it wakes her instead.
+func greet() -> void:
+	_quiet = 0.0
+	if is_asleep():
+		_wake()
+		return
+	play("wave")
+	say(_pick("hello"))
 
 
 ## Her name, from imsdow.cfg.

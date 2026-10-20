@@ -33,6 +33,10 @@ func run() -> int:
 
 	# Who may run commands.
 	_check("Only admins" in AdminConsole.run(other, "\\player list"), "a player can't run commands")
+	var their_help := AdminConsole.run(other, "\\help")
+	_check("\\hello" in their_help and "\\bye" in their_help and not "\\player" in their_help,
+			"a player's help lists hello and bye: %s" % their_help)
+	_check(AdminConsole.run(other, "\\") == their_help, "so does a lone \\")
 	_check("\\player" in _run_cmd(me, "\\help"), "help lists nouns")
 	_check("levelup" in _run_cmd(me, "\\player help"), "noun help lists verbs")
 	_check("Usage" in _run_cmd(me, "\\player set"), "set without words shows usage")

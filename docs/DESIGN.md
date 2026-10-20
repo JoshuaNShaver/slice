@@ -520,9 +520,11 @@ As in the book, women are straight lines.
   `\enemies` (short for `\enemy list [--away] [--type]`) and
   `\enemy get E3` show each enemy's place, hp and distance from home,
   marking ones away from home (log 0137).
-- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149):** a chat line starting with `\` turns the
+- **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153):** a chat line starting with `\` turns the
   chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
-  leaves, and `\bye` says goodbye to imsdow first. It's 25% see-through
+  leaves, `\hello` has imsdow wave and say hi, and `\bye` says goodbye to
+  her first. Players who aren't admins can open it too; their `\help`
+  lists just `\hello` and `\bye` (log 0153). It's 25% see-through
   dark, fixed-width font, commands echoed after an `admin@slice:~$` prompt, and an
   ASCII-art companion, **imsdow — the second architect**, who waves hello
   (click her for a new line), now and then blushes

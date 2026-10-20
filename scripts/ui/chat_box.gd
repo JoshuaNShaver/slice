@@ -37,6 +37,7 @@ const TERM_TEXT := Color(0.86, 0.93, 0.88)
 const TERM_PINK := Color(1.0, 0.72, 0.86)
 const TERM_PROMPT := "admin@slice:~$"
 const BYE := "\\bye"  # says goodbye to imsdow and closes the terminal; never sent
+const HELLO := "\\hello"  # imsdow waves and says hi; never sent (log 0153)
 const BYE_TIME := 1.8  # s her goodbye shows before the terminal closes
 ## Narrower than this, the companion draws smaller.
 const TERM_WIDE := 1000.0
@@ -370,6 +371,11 @@ func _on_submitted(text: String) -> void:
 		_add_line("%s %s" % [TERM_PROMPT, line], "echo")
 		if line.to_lower() == BYE:
 			_say_bye()
+			return
+		if line.to_lower() == HELLO:
+			_field.text = ""
+			_companion.greet()
+			_focus_field.call_deferred()
 			return
 		_companion.command(line)
 		# A command gets an answer (a notice) for her to react to; chat doesn't.
