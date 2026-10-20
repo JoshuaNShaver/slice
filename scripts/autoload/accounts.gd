@@ -32,7 +32,7 @@ const MAX_LOGIN_TRIES := 5
 const GUEST_PREFIX := "guest-"
 const USERNAME_MIN := 3
 const USERNAME_MAX := 16
-const ROLES: Array[String] = ["player", "admin", "josh"]  # logs 0125, 0147
+const ROLES: Array[String] = ["player", "admin", "first_architect"]  # logs 0125, 0147, 0152
 
 ## Server only.
 var store: SaveStore
@@ -47,7 +47,8 @@ var _secret_key := ""
 ## Server only. Finds a peer's shape (set by the world): Callable(id) -> PlayerShape.
 var find_player := Callable()
 ## Server only. Peer id -> {"account", "username" ("" until chosen;
-## always "" for guests), "role" ("player", "admin" or "josh"; logs 0125, 0147),
+## always "" for guests), "role" ("player", "admin" or "first_architect";
+## logs 0125, 0147, 0152),
 ## "families" (Family or null), "chest", "slot" (-1 until playing),
 ## "saved_at"}.
 var sessions: Dictionary = {}
@@ -137,8 +138,9 @@ func chest_of(id: int) -> Array:
 	return sessions[id].chest if sessions.has(id) else []
 
 
-## "player", "admin" or "josh" (logs 0125, 0147): admins and josh may use
-## \ commands in chat; josh is the one imsdow talks to in the first person.
+## "player", "admin" or "first_architect" (logs 0125, 0147, 0152): admins
+## and the first architect may use \ commands in chat; the first architect
+## is the one imsdow (the second architect) talks to in the first person.
 func role_of(id: int) -> String:
 	if not sessions.has(id):
 		return "player"

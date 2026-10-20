@@ -10,7 +10,8 @@ extends RefCounted
 ## a flag with no value is true. Quote words with spaces: "two words".
 ##
 ## Only admins may run them (Accounts.role_of): the player at an offline or
-## hosting machine, or an account whose role is "admin" or "josh" in the database,
+## hosting machine, or an account whose role is "admin" or "first_architect"
+## in the database,
 ## which only a database update can set. Every command is logged.
 ##
 ## Each noun is a script in NOUNS with HELP, VERBS ({verb: {"usage",
@@ -33,7 +34,7 @@ static var _next_short_id := 1
 
 
 static func is_admin(peer_id: int) -> bool:
-	return Net.accounts.role_of(peer_id) in ["admin", "josh"]
+	return Net.accounts.role_of(peer_id) in ["admin", "first_architect"]
 
 
 ## A small number for this peer, the same for as long as the server runs.

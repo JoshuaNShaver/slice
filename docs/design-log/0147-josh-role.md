@@ -1,7 +1,7 @@
 # 0147: The josh role, and who imsdow talks to
 
 - **Date:** 2026-10-19
-- **Status:** Accepted
+- **Status:** Superseded by 0152
 - **Decision:** A third account role, `josh` (`profiles.role`, set only in
   the database), is an admin in every way. imsdow talks to Josh in the
   first person (`assets/companion/imsdow.cfg`); to every other admin,

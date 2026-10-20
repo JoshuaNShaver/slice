@@ -510,7 +510,8 @@ As in the book, women are straight lines.
   log sits bottom left and fades; on a touch screen it sits top left with
   the typing line on top, clear of the phone's keyboard.
 - **Admins (logs 0125, 0147):** `profiles.role` is `player`, `admin` or
-  `josh` (an admin imsdow talks to in the first person), set only by a
+  `first_architect` (an admin imsdow, the second architect, talks to in
+  the first person; log 0152), set only by a
   database update. Admins type commands into chat:
   `\<noun> <verb> [words] [--flags]`, e.g. `\player list`,
   `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
@@ -529,8 +530,8 @@ As in the book, women are straight lines.
   45 s without typing): commands get mumbles until the third wakes her,
   blushing. Awake she makes shape puns, reflects, recalls design history
   with log numbers, and reacts to commands (unknown, repeated, a lost
-  enemy, a player changed) (lines in `assets/companion/imsdow.cfg`, written to Josh; other admins get
-  `imsdow_about_josh.cfg`, where she talks about him, log 0147). Her animations are folders of frames in
+  enemy, a player changed) (lines in `assets/companion/imsdow.cfg`, written to the first architect; other admins get
+  `imsdow_about_first_architect.cfg`, where she talks about him; logs 0147, 0152). Her animations are folders of frames in
   `assets/companion/` (text, or ink-on-clear pictures recolored
   pink/violet with a cyan shimmer; `tools/companion_ink.py` cleans a
   picture that has a background).

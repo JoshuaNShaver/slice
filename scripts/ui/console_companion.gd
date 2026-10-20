@@ -5,8 +5,10 @@ extends VBoxContainer
 ## dozes off when left alone, and talks: puns, and bits of the game's design
 ## history. Asleep, commands get mumbled answers until the third wakes her,
 ## blushing. Her lines and settings: assets/companion/imsdow.cfg. She talks
-## to Josh (the "josh" role) in the first person, with that file's lines;
-## to other admins she talks about him, with imsdow_about_josh.cfg's (log 0147).
+## to the first architect (the "first_architect" role) in the first person,
+## with that file's lines; to other admins she talks about him, with
+## imsdow_about_first_architect.cfg's (logs 0147, 0152). She's the second
+## architect.
 ##
 ## Each folder in assets/companion/ is one animation, each file in it one
 ## frame, in name order: text (.txt, ASCII art drawn in the terminal font)
@@ -36,9 +38,10 @@ const MAX_BLUSH_AREAS := 4  # as in companion_pop.gdshader
 const CHAR_SIZE := Vector2(0.6, 1.18)
 const POP := preload("res://scripts/ui/companion_pop.gdshader")
 const SETTINGS := ROOT + "imsdow.cfg"
-## Her lines for admins other than Josh: about him, not to him (log 0147).
+## Her lines for admins other than the first architect: about him, not to
+## him (logs 0147, 0152).
 ## Its [lines] replace imsdow.cfg's; settings stay imsdow.cfg's.
-const ABOUT_JOSH := ROOT + "imsdow_about_josh.cfg"
+const ABOUT_FIRST_ARCHITECT := ROOT + "imsdow_about_first_architect.cfg"
 ## Her settings and lines if imsdow.cfg is missing or leaves one out.
 const DEFAULTS := {
 	"name": "imsdow", "title": "the architect", "asleep_on_open": 0.3, "commands_to_wake": 3,
@@ -373,10 +376,11 @@ func _load_settings() -> void:
 			_settings[key] = value
 
 
-## Her lines for whoever's at the terminal: to Josh, or about him. Reloads
+## Her lines for whoever's at the terminal: to the first architect, or
+## about him. Reloads
 ## only when that changes (the role arrives from the server after login).
 func _load_lines() -> void:
-	var path := SETTINGS if Net.accounts.my_role == "josh" else ABOUT_JOSH
+	var path := SETTINGS if Net.accounts.my_role == "first_architect" else ABOUT_FIRST_ARCHITECT
 	if path == _lines_from:
 		return
 	_lines_from = path
