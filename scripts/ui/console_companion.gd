@@ -39,7 +39,7 @@ const SETTINGS := ROOT + "imsdow.cfg"
 ## Her lines for players who aren't admins (log 0156). Its [lines] replace
 ## imsdow.cfg's; settings stay imsdow.cfg's.
 const NON_ADMIN := ROOT + "imsdow_non_admin.cfg"
-const ADMIN_ROLES: Array[String] = ["admin", "first_architect"]  # as AdminConsole.is_admin
+const ADMIN_ROLES := AdminConsole.ADMIN_ROLES
 ## Her settings and lines if imsdow.cfg is missing or leaves one out.
 const DEFAULTS := {
 	"name": "imsdow", "title": "the second architect", "asleep_on_open": 0.3, "commands_to_wake": 3,

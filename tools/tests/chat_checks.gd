@@ -43,6 +43,23 @@ func run() -> int:
 	_check("no --bogus" in _run_cmd(me, "\\player list --bogus"), "unknown flag refused")
 	_check("no command" in _run_cmd(me, "\\nope"), "unknown noun refused")
 
+	# Tab completion (log 0163) and \players.
+	var done := AdminConsole.complete("\\pl", true)
+	_check(done.line == "\\player" and done.options.is_empty(), "\\pl -> \\player (players too): %s" % done)
+	_check(str(AdminConsole.complete("\\enem", true).options) == str(["enemies", "enemy"]),
+			"enem lists enemies, enemy: %s" % AdminConsole.complete("\\enem", true))
+	_check(AdminConsole.complete("\\enemy", true).line == "\\enemy ", "a whole word gets its space")
+	_check(AdminConsole.complete("\\player le", true).line == "\\player levelup ", "verb completes")
+	_check(AdminConsole.complete("\\player set l", true).line == "\\player set level ", "set field completes")
+	_check(AdminConsole.complete("\\player set level 3 --i", true).line == "\\player set level 3 --id ", "flag completes")
+	_check(AdminConsole.complete("\\diag l", false).line == "\\diag live ", "diag live for players")
+	_check(AdminConsole.complete("\\pl", false).line == "\\pl", "players don't get admin nouns")
+	_check(AdminConsole.complete("\\h", false).line == "\\hel", "h -> hel, the shared start")
+	_check(str(AdminConsole.complete("\\hel", false).options) == str(["hello", "help"]),
+			"hel lists hello, help: %s" % AdminConsole.complete("\\hel", false))
+	_check(AdminConsole.complete("hi there", true).line == "hi there", "chat lines left alone")
+	_check("2 online" in _run_cmd(me, "\\players"), "\\players lists players")
+
 	# Short ids and finding players.
 	var my_id := AdminConsole.short_id(1)
 	var their_id := AdminConsole.short_id(2)

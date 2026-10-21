@@ -120,9 +120,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	Diagnostics.note_frame(delta)  # hitches, for \diagnostics (log 0160)
 	var me := _local_player()
 	if me != null:
-		_camera.position = me.position
+		_camera.position = me.drawn_position()
 		_hud.update(me)
 		_update_prompts(me)
 		_announce_place(me)

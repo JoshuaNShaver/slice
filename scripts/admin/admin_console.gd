@@ -25,6 +25,18 @@ const NOUNS := {
 ## Short forms: the first word becomes these words.
 const ALIASES := {
 	"enemies": ["enemy", "list"],
+	"players": ["player", "list"],
+}
+## Roles that may run admin commands (Accounts.role_of).
+const ADMIN_ROLES: Array[String] = ["admin", "first_architect"]
+## The terminal's own commands (ChatBox) and Diagnostics', which anyone may
+## type; for Tab to complete (log 0163).
+const PLAYER_WORDS: Array[String] = ["help", "hello", "bye", "diagnostics", "diag", "simulate", "predict"]
+## What can follow these first words: {word: [next words]}, then for
+## deeper words "word1 word2": [...].
+const FOLLOWERS := {
+	"diagnostics": ["live"], "diag": ["live"], "simulate": ["lag"], "simulate lag": ["off"],
+	"predict": ["on", "off"],
 }
 
 ## Peer id -> short id, the small number `\player list` shows. Handed out
@@ -34,7 +46,7 @@ static var _next_short_id := 1
 
 
 static func is_admin(peer_id: int) -> bool:
-	return Net.accounts.role_of(peer_id) in ["admin", "first_architect"]
+	return Net.accounts.role_of(peer_id) in ADMIN_ROLES
 
 
 ## A small number for this peer, the same for as long as the server runs.
@@ -83,6 +95,73 @@ static func run(caller: PlayerShape, line: String) -> String:
 	var rest: Array[String] = []
 	rest.assign(words.slice(2))
 	return noun.new().call("run_" + words[1], caller, rest, flags)
+
+
+## Tab in the terminal (log 0163): completes the last word of `line`
+## ("\\pl" -> "\\player "). Returns {"line": the new line, "options": the
+## words it could be, when there's more than one}. `admin`: whether the
+## nouns are offered, as only admins may use them.
+static func complete(line: String, admin: bool) -> Dictionary:
+	if not line.begins_with(ESCAPE):
+		return {"line": line, "options": []}
+	var body := line.substr(ESCAPE.length())
+	var words := body.split(" ")  # the last one is what's being typed, maybe ""
+	var typed := words[-1]
+	var before: Array[String] = []
+	for w in words.slice(0, words.size() - 1):
+		if w != "":
+			before.append(w.to_lower())
+	var choices := _choices(before, admin)
+	var matches: Array[String] = []
+	for c in choices:
+		if c.begins_with(typed.to_lower()):
+			matches.append(c)
+	if matches.is_empty():
+		return {"line": line, "options": []}
+	var head := line.substr(0, line.length() - typed.length())
+	if matches.size() == 1:
+		return {"line": head + matches[0] + " ", "options": []}
+	var common := matches[0]
+	for m in matches:
+		while not m.begins_with(common):
+			common = common.left(common.length() - 1)
+	if common.length() > typed.length():
+		return {"line": head + common, "options": []}
+	return {"line": line, "options": matches}
+
+
+## The words that can come after `before` (already typed, lowercase).
+static func _choices(before: Array[String], admin: bool) -> Array[String]:
+	var out: Array[String] = []
+	if before.is_empty():
+		out.assign(PLAYER_WORDS)
+		if admin:
+			for noun: String in NOUNS:
+				out.append(noun)
+			for alias: String in ALIASES:
+				out.append(alias)
+		out.sort()
+		return out
+	var key := " ".join(before)
+	if FOLLOWERS.has(key):
+		out.assign(FOLLOWERS[key])
+		return out
+	if not admin or not NOUNS.has(before[0]):
+		return out
+	var verbs: Dictionary = NOUNS[before[0]].VERBS
+	if before.size() == 1:
+		out.assign(verbs.keys())
+		out.append("help")
+		return out
+	if not verbs.has(before[1]):
+		return out
+	for flag: String in verbs[before[1]].flags:
+		out.append("--" + flag)
+	out.append("--help")
+	if before.size() == 2 and before[0] == "player" and before[1] == "set":
+		for field in PlayerCommands.FIELDS:
+			out.append(field)
+	return out
 
 
 ## Splits "set level 11 --id 3" into {"words": ["set", "level", "11"],
@@ -138,6 +217,7 @@ static func help() -> String:
 		lines.append("  %s%s: short for %s%s" % [ESCAPE, alias, ESCAPE, " ".join(ALIASES[alias])])
 	lines.append("  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP])
 	lines.append("  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP])
+	lines.append("  %s %s" % [Diagnostics.PREDICT, Diagnostics.PREDICT_HELP])
 	return "\n".join(lines)
 
 
@@ -150,6 +230,7 @@ static func player_help() -> String:
 		"  %sbye: say goodbye and close the terminal" % ESCAPE,
 		"  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP],
 		"  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP],
+		"  %s %s" % [Diagnostics.PREDICT, Diagnostics.PREDICT_HELP],
 	])
 
 

@@ -114,6 +114,15 @@ func stats() -> Dictionary:
 			"late": late / count, "late_max": Array(_late).max()}
 
 
+## Starts drawing from `at` (x, y, rotation) and fades into the updates
+## from there: your predicted shape handing over to the server's (log 0161).
+func hold(at: Vector3) -> void:
+	if _poses.is_empty():
+		return
+	var target := _target(_server_now())
+	_offset = Vector3(at.x - target.x, at.y - target.y, angle_difference(target.z, at.z))
+
+
 func is_empty() -> bool:
 	return _poses.is_empty()
 

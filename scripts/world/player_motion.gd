@@ -1,7 +1,8 @@
 class_name PlayerMotion
 extends Node
 ## A player's movement (PlayerShape's "Motion"). Server only, but for the
-## owner's input RPCs.
+## owner's input RPCs, and an online owner's own shape runs integrate() too
+## (PlayerPrediction, log 0161).
 ##
 ## Left/right spin the shape so it tumbles over its corners, and Space jumps
 ## (design log 0004). Movement is momentum-based. Holding a roll key raises
@@ -40,6 +41,7 @@ const FACE_TILT := 0.14
 const TELEPORT_GHOST_STEPS := 3
 const FALL_LIMIT := 4500.0  # fall below this and you go back to the spawn point
 const RIDE_SPEED := 650.0  # px/s, elevators
+const STAMP_DRIFT := 0.05  # how fast the stamp shift gives in to slower inputs
 
 ## What integrate() did: HALT ends the step (a ride or a teleport), THROWN
 ## means you're helpless in the air, JUMPED that you jumped this step.
@@ -63,6 +65,9 @@ var _ride := {}  # an elevator ride, {"from", "to", "time", "length"}
 var _launch: Variant = null  # Vector2 velocity to take next step (a boss's spike up)
 var _thrown := 0.0  # s left helpless in the air after a launch
 var _thrown_onto: Node2D = null
+## Server: server clock minus the owner's physics clock, on the quickest
+## recent inputs (log 0161); INF until the first stamp.
+var _stamp_shift := INF
 
 
 ## Owner -> server.
@@ -76,7 +81,38 @@ func _submit_move(value: float) -> void:
 @rpc("any_peer", "call_local", "reliable")
 func _submit_jump() -> void:
 	if player.from_owner():
-		_jump_timer = JUMP_BUFFER
+		press_jump()
+
+
+## A jump pressed: on the server, and on your own predicted shape.
+func press_jump() -> void:
+	_jump_timer = JUMP_BUFFER
+
+
+## Owner -> server: the owner's physics clock (PlayerPrediction.clock), sent
+## with inputs and a few times a second, so each update can say which moment
+## of the owner's it matches (log 0161).
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _submit_stamp(stamp: Variant) -> void:
+	if not player.from_owner() or not stamp is float:
+		return
+	var shift := Time.get_ticks_usec() / 1000000.0 - float(stamp)
+	_stamp_shift = shift if shift < _stamp_shift else _stamp_shift + (shift - _stamp_shift) * STAMP_DRIFT
+
+
+## Server only: the owner's clock at this moment, or -1 before any stamp.
+func client_time() -> float:
+	if _stamp_shift == INF:
+		return -1.0
+	return maxf(Time.get_ticks_usec() / 1000000.0 - _stamp_shift, 0.0)
+
+
+## Server only: true while only the server should move you (a ride, a
+## teleport, thrown, dead). The owner's shape then follows the server's
+## updates instead of predicting.
+func server_driven() -> bool:
+	return not _ride.is_empty() or _teleport_to != null or _ghost_steps > 0 or _launch != null \
+			or _thrown > 0.0 or player.dead
 
 
 ## Owner -> server: teleport home, from anywhere, any time (logs 0034, 0059).
@@ -154,7 +190,7 @@ func integrate(state: PhysicsDirectBodyState2D) -> int:
 		_ghost_steps -= 1
 		if _ghost_steps == 0:
 			player.set_deferred("collision_mask", PlayerShape.LAYER_TERRAIN | Enemy.LAYER)
-	if _teleport_to == null and state.transform.origin.y > FALL_LIMIT:
+	if _teleport_to == null and state.transform.origin.y > FALL_LIMIT and multiplayer.is_server():
 		teleport(player.spawn_point)
 	if _teleport_to != null:
 		state.transform = Transform2D(0.0, _teleport_to)

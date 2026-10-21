@@ -93,7 +93,7 @@ func _ready() -> void:
 		Net.last_message = ""
 	var login_problem := ""
 	if OS.has_feature("web"):
-		WebApp.use_new_build()
+		WebApp.check_build()  # a newer build on the host: switch now (log 0166)
 		login_problem = await _login.finish_web_login()  # back from the login page
 	if _online_mode:
 		_connect()
@@ -188,7 +188,8 @@ func _build() -> void:
 
 	# Players compare this with a server's "please update" message (log 0109).
 	var version := Label.new()
-	version.text = "Version %s" % Net.version
+	version.text = "Version %s\n%s" % [Net.version, BuildInfo.describe(BuildInfo.id())]  # build under it (log 0166)
+	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	version.add_theme_font_size_override("font_size", 13)
 	version.add_theme_color_override("font_color", Palette.INK_FADED)
 	add_child(version)

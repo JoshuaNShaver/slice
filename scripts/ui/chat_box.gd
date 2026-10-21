@@ -231,8 +231,8 @@ func _build() -> void:
 	_panel_box.set_content_margin_all(8)
 	_panel.add_theme_stylebox_override("panel", _panel_box)
 	_header = Label.new()
-	_header.text = "SLICE admin console v%s   \\help for commands   Esc to close" \
-			% ProjectSettings.get_setting("application/config/version", "?")
+	_header.text = "SLICE admin console v%s (%s)   \\help for commands   Esc to close" \
+			% [ProjectSettings.get_setting("application/config/version", "?"), BuildInfo.id()]
 	_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_header.add_theme_font_override("font", MONO)
 	_header.add_theme_color_override("font_color", TERM_GREEN)
@@ -406,7 +406,7 @@ func _on_field_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			close()
 		KEY_TAB:
-			pass  # keep focus here
+			_complete()  # and keep focus here
 		KEY_UP:
 			_step_history(-1)
 		KEY_DOWN:
@@ -414,6 +414,20 @@ func _on_field_input(event: InputEvent) -> void:
 		_:
 			return
 	_field.accept_event()
+
+
+## Tab on a "\" line (log 0163): finishes the word being typed, or lists
+## what it could be. Admin commands only for admins, as only they can run
+## them.
+func _complete() -> void:
+	var admin := Net.accounts.my_role in AdminConsole.ADMIN_ROLES
+	var done := AdminConsole.complete(_field.text, admin)
+	if done.line != _field.text:
+		_field.text = done.line
+		_field.caret_column = _field.text.length()
+	var options: Array = done.options
+	if not options.is_empty():
+		_add_line("  ".join(options), "notice")
 
 
 ## Focused and editing (Godot 4.4+ needs both to type), which also brings

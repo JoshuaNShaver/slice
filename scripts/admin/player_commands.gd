@@ -1,6 +1,7 @@
 class_name PlayerCommands
 extends RefCounted
 ## `\player ...` admin commands (design log 0125); see AdminConsole.
+## `\players` is short for `\player list` (log 0163).
 ##
 ## `who` is a short id (from `\player list`), a name (a username or a
 ## family's name, or the start of one), or `me`. Left out, it's you.

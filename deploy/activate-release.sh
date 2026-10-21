@@ -16,6 +16,11 @@ if [ -f /etc/default/slice ]; then  # written by setup-server.sh
 fi
 KEEP=5
 
+# The build id (log 0166): this release's commit, for the server (it has no
+# git history here) and the web export.
+export SLICE_BUILD="$(basename "$RELEASE" | cut -c1-7)"
+printf '%s\n' "$SLICE_BUILD" > "$RELEASE/build_id.txt"
+
 echo "Importing $RELEASE"
 timeout 600 "$GODOT" --headless --path "$RELEASE" --import
 

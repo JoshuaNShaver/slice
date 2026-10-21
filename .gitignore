@@ -8,3 +8,6 @@ build/*
 .env
 .env.*
 !.env.example
+
+# Written into a release by deploy/activate-release.sh (log 0166)
+/build_id.txt

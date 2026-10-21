@@ -39,7 +39,8 @@ Mark your own suggestions `Proposed` until the user agrees.
   chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
   (server -> owner HUD messages), `PlayerChat` (chat lines and admin
   commands, log 0124; `Diagnostics` writes up `\diagnostics` and `\diag live`, and parses `\simulate lag`, logs 0155, 0159),
-  `PlayerInput` (owner's keys);
+  `PlayerInput` (owner's keys), `PlayerPrediction` (online, your own
+  shape moved at once and checked against the server, logs 0161, 0162);
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
@@ -76,7 +77,10 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/web_app.gd`: the
-  web build's update-and-reload (log 0122). `scripts/ui/`: palette, item slot,
+  web build's update-and-reload (log 0122; switches to a new build id on
+  launch, log 0166). `scripts/build_info.gd`: the build id (commit, plus a
+  hash of uncommitted changes), baked into exports by
+  `addons/server_address`. `scripts/ui/`: palette, item slot,
   theme, HUD, touch controls, chat box (and its admin terminal's
   `ConsoleCompanion`, imsdow, whose lines are in `imsdow.cfg` and animations are folders of text or picture
   frames in `assets/companion/<animation>/`, colored by

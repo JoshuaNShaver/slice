@@ -463,19 +463,34 @@ As in the book, women are straight lines.
   player is just a local server with one peer.
 - **Smoothing (logs 0093, 0095, 0158):** the server sends each body's state
   60 times a second. Clients draw other players and enemies a little behind
-  (60 ms), blended between server updates; your own shape uses the newest
-  update. When updates run late, bodies keep moving at their last velocity
-  (up to 250 ms), stopping at and sliding along terrain (only terrain), and
-  corrections fade in rather than snap. No client-side prediction yet.
+  (60 ms), blended between server updates. When updates run late, bodies
+  keep moving at their last velocity (up to 250 ms), stopping at and
+  sliding along terrain (only terrain), and corrections fade in rather than
+  snap.
+- **Prediction (logs 0161, 0162, 0164, 0165):** off by default; `\predict on`
+  turns it on, to test. When on, your own shape rolls, jumps
+  and uses abilities on your machine as you press keys (Spike Up throws
+  enemies only on the server), colliding with terrain and enemies, and is
+  pulled toward the server's updates (matched to the moment of yours each
+  one reflects; a fix stops where the shape would touch something and turns
+  it only in the air; errors under 3 px are left alone; the drawing,
+  and the camera, go between physics ticks and catch up a correction over
+  ~0.1 s; 160 px+ off snaps; log 0164). While only the server moves you (rides, teleports, thrown, dead)
+  it follows the server's updates instead. Getting hit still shows a round
+  trip late.
 - **Clients (log 0099):** the web build is the main online client,
   installable on phones as an app (PWA, any orientation; logs 0122, 0134).
   It uses our own page (`web/shell.html`, log 0132): the phone keyboard
   covers the game instead of resizing or scrolling it, the menu lifts the
   field being typed in above the keyboard, and the page is parchment, not
   black, and re-measures after launch. Turned away
-  for its version, it loads the newest build and reloads. Otherwise a new
-  build downloads in the background and is used from the next launch
-  (log 0127, proposed).
+  for its version, it loads the newest build and reloads. On launch it
+  also checks the host's `build_id.txt` and switches at once if that names
+  another build (log 0166); otherwise a new build downloads in the
+  background and is used from the next launch (log 0127, proposed).
+- **Build ids (log 0166):** a build is named by its short commit, plus
+  `-dirty.<hash>` for uncommitted changes. The menu shows the version with
+  the build under it; `\diagnostics` shows yours and the server's.
 - **Transport (log 0110, proposed, built; changes 0099):** WebSocket for
   every client, desktop and web, on TCP 24680; ENet dropped. A browser
   can't host. A server address may be a host, a host:port, or a full
@@ -519,11 +534,15 @@ As in the book, women are straight lines.
   dedicated server with `--dev-admins` makes everyone one (tests, dev).
   `\enemies` (short for `\enemy list [--away] [--type]`) and
   `\enemy get E3` show each enemy's place, hp and distance from home,
-  marking ones away from home (log 0137).
+  marking ones away from home (log 0137). `\players` is short for
+  `\player list`, and Tab completes commands, verbs, fields and flags
+  (log 0163).
 - **Diagnostics (logs 0155, 0159):** anyone can type `\diagnostics` (`\diag`):
   5 pings to the server, then your fps and frame time, ping, how steadily
   your shape's updates arrive, and the server's fps, physics load, players,
-  enemies, memory and uptime. Only you see it.
+  enemies, memory and uptime, the longest frame on each side (log 0160),
+  and how far your predicted shape is from the server's (log 0161). Only
+  you see it.
   `\diag live` keeps a short version on screen, top right, while you
   play, until you type it again. `\simulate lag 150` (optionally a
   jitter, `\simulate lag 150 30`) adds that much lag to your own
