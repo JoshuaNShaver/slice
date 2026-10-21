@@ -1,28 +1,34 @@
 class_name PlayerCommands
 extends RefCounted
-## `\player ...` admin commands (design log 0125); see AdminConsole.
-## `\players` is short for `\player list` (log 0163).
+## `players ...` admin commands (design logs 0125, 0196); see AdminConsole.
+## `players` alone lists them.
 ##
-## `who` is a short id (from `\player list`), a name (a username or a
+## `who` is a short id (from `players`), a name (a username or a
 ## family's name, or the start of one), or `me`. Left out, it's you.
 
 const HELP := "find and change players"
 const VERBS := {
-	"list": {"usage": "player list [--online]", "flags": ["online"],
+	"list": {"usage": "players list", "flags": ["online"],
 			"help": "Players online now: short id, name, family and level."},
-	"get": {"usage": "player get [who]", "flags": ["id"],
+	"get": {"usage": "players get [who]", "flags": ["id"],
 			"help": "One player's details."},
-	"set": {"usage": "player set <field> <value> [--id who]", "flags": ["id"],
+	"set": {"usage": "players set <field> <value> [--id who]", "flags": ["id"],
 			"help": "Sets level, xp, pay or hp. A new level rolls its stat gains, as leveling does."},
-	"levelup": {"usage": "player levelup [count] [--id who]", "flags": ["id"],
+	"levelup": {"usage": "players levelup [count] [--id who]", "flags": ["id"],
 			"help": "Levels up count times (default 1), rolling stat gains."},
+	"quests": {"noun": preload("res://scripts/admin/player_quest_commands.gd"),
+			"help": "a player's quests: list, get, start, set, delete"},
 }
 const FIELDS: Array[String] = ["level", "xp", "pay", "hp"]
 
 
+func words_for(verb: String) -> Array[String]:
+	return FIELDS if verb == "set" else ([] as Array[String])
+
+
 func run_list(caller: PlayerShape, words: Array[String], _flags: Dictionary) -> String:
 	if not words.is_empty():
-		return "Usage: \\" + VERBS.list.usage
+		return "Usage: " + VERBS.list.usage
 	var shapes := _players(caller)
 	if shapes.is_empty():
 		return "No one is playing."
@@ -36,8 +42,8 @@ func run_list(caller: PlayerShape, words: Array[String], _flags: Dictionary) -> 
 
 func run_get(caller: PlayerShape, words: Array[String], flags: Dictionary) -> String:
 	if words.size() > 1 or (words.size() == 1 and flags.has("id")):
-		return "Usage: \\" + VERBS.get.usage
-	var found := _find(caller, words[0] if words.size() == 1 else str(flags.get("id", "")))
+		return "Usage: " + VERBS.get.usage
+	var found := find(caller, words[0] if words.size() == 1 else str(flags.get("id", "")))
 	if found.has("error"):
 		return found.error
 	var p: PlayerShape = found.player
@@ -60,13 +66,13 @@ func run_get(caller: PlayerShape, words: Array[String], flags: Dictionary) -> St
 
 func run_set(caller: PlayerShape, words: Array[String], flags: Dictionary) -> String:
 	if words.size() != 2:
-		return "Usage: \\%s\nFields: %s" % [VERBS.set.usage, ", ".join(FIELDS)]
+		return "Usage: %s\nFields: %s" % [VERBS.set.usage, ", ".join(FIELDS)]
 	var field := words[0].to_lower()
 	if field not in FIELDS:
 		return "Can't set \"%s\". Fields: %s" % [field, ", ".join(FIELDS)]
 	if not words[1].is_valid_int():
 		return "\"%s\" isn't a whole number." % words[1]
-	var found := _find(caller, str(flags.get("id", "")))
+	var found := find(caller, str(flags.get("id", "")))
 	if found.has("error"):
 		return found.error
 	var p: PlayerShape = found.player
@@ -94,8 +100,8 @@ func run_set(caller: PlayerShape, words: Array[String], flags: Dictionary) -> St
 
 func run_levelup(caller: PlayerShape, words: Array[String], flags: Dictionary) -> String:
 	if words.size() > 1 or (words.size() == 1 and not words[0].is_valid_int()):
-		return "Usage: \\" + VERBS.levelup.usage
-	var found := _find(caller, str(flags.get("id", "")))
+		return "Usage: " + VERBS.levelup.usage
+	var found := find(caller, str(flags.get("id", "")))
 	if found.has("error"):
 		return found.error
 	var p: PlayerShape = found.player
@@ -108,7 +114,7 @@ func run_levelup(caller: PlayerShape, words: Array[String], flags: Dictionary) -
 
 
 ## Everyone in the world, by short id.
-func _players(caller: PlayerShape) -> Array[PlayerShape]:
+static func _players(caller: PlayerShape) -> Array[PlayerShape]:
 	var list: Array[PlayerShape] = []
 	for node in caller.get_tree().get_nodes_in_group(PlayerShape.GROUP):
 		list.append(node as PlayerShape)
@@ -118,7 +124,8 @@ func _players(caller: PlayerShape) -> Array[PlayerShape]:
 
 
 ## {"player": PlayerShape} or {"error": String}. "" or "me" is the caller.
-func _find(caller: PlayerShape, who: String) -> Dictionary:
+## `who` as `players` explains.
+static func find(caller: PlayerShape, who: String) -> Dictionary:
 	who = who.strip_edges()
 	if who == "" or who.to_lower() in ["me", "self"]:
 		return {"player": caller}
@@ -127,7 +134,7 @@ func _find(caller: PlayerShape, who: String) -> Dictionary:
 		for p in shapes:
 			if AdminConsole.short_id(p.peer_id) == who.to_int():
 				return {"player": p}
-		return {"error": "No one online has id %s. Try \\player list." % who}
+		return {"error": "No one online has id %s. Try players." % who}
 	var wanted := who.to_lower()
 	var starts: Array[PlayerShape] = []
 	for p in shapes:
@@ -141,7 +148,7 @@ func _find(caller: PlayerShape, who: String) -> Dictionary:
 	if starts.size() == 1:
 		return {"player": starts[0]}
 	if starts.is_empty():
-		return {"error": "No one online is called \"%s\". Try \\player list." % who}
+		return {"error": "No one online is called \"%s\". Try players." % who}
 	return {"error": "\"%s\" could be %d players; use a short id." % [who, starts.size()]}
 
 

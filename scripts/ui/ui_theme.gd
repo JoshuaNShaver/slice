@@ -64,6 +64,87 @@ static func build() -> Theme:
 	return t
 
 
+## The main menu's theme (log 0185), also the HUD's (log 0189): the shared
+## one with hand-drawn buttons, fields, panels, item slots and tooltips,
+## lettered in IM Fell English. The type variations "PrimaryButton" (a
+## darker paper, for Play) and "Card" (a family card inside the panel) go
+## with it.
+static func build_menu() -> Theme:
+	var t := build()
+	t.default_font = menu_font()
+	t.default_font_size = 20
+	var faded_ink := Color(Palette.INK, 0.4)
+	for type: String in ["Button", "PrimaryButton", "OptionButton"]:
+		var base := Color("e3d2b0") if type == "PrimaryButton" else Palette.PARCHMENT_LIGHT
+		t.set_stylebox("normal", type, SketchBox.make(base, Palette.INK))
+		t.set_stylebox("hover", type, SketchBox.make(base.darkened(0.05), Palette.INK))
+		var pressed := SketchBox.make(Color("cdb894"), Palette.INK)
+		pressed.inset = 1.0
+		t.set_stylebox("pressed", type, pressed)
+		t.set_stylebox("hover_pressed", type, pressed)
+		var disabled := SketchBox.make(Color(Palette.PARCHMENT_DARK, 0.5), faded_ink)
+		disabled.shaded = false
+		t.set_stylebox("disabled", type, disabled)
+		t.set_stylebox("focus", type, StyleBoxEmpty.new())
+	t.set_type_variation("PrimaryButton", "Button")
+	t.set_font_size("font_size", "PrimaryButton", 22)
+
+	t.set_stylebox("normal", "LineEdit", SketchBox.make(Palette.PARCHMENT_LIGHT, Palette.INK))
+	var focus := SketchBox.make(Color.TRANSPARENT, Palette.INK)
+	focus.line_width = 2.2
+	focus.shaded = false
+	t.set_stylebox("focus", "LineEdit", focus)
+	t.set_stylebox("read_only", "LineEdit", SketchBox.make(Color(Palette.PARCHMENT_DARK, 0.5), faded_ink))
+
+	var panel := SketchBox.make(Color(Palette.PARCHMENT_LIGHT, 0.94), Palette.INK, 22.0)
+	panel.torn = true
+	panel.line_width = 2.0
+	t.set_stylebox("panel", "PanelContainer", panel)
+	t.set_type_variation("Card", "PanelContainer")
+	var card := SketchBox.make(Color(Palette.PARCHMENT, 0.7), Color(Palette.INK, 0.85), 12.0)
+	card.seed = 7
+	t.set_stylebox("panel", "Card", card)
+
+	# Item slots: a pencilled square on plain paper.
+	var slot := SketchBox.make(Palette.PARCHMENT, Color(Palette.INK, 0.55), 0.0)
+	slot.line_width = 1.3
+	slot.overshoot = 2.5
+	slot.shaded = false
+	t.set_stylebox("panel", "Panel", slot)
+
+	# Tooltips and dropdowns: a scrap of paper.
+	var tip := SketchBox.make(Color(Palette.PARCHMENT_LIGHT, 0.95), Color(Palette.INK, 0.8), 8.0)
+	tip.shaded = false
+	t.set_stylebox("panel", "TooltipPanel", tip)
+	t.set_stylebox("panel", "PopupMenu", tip)
+	var hover := SketchBox.make(Color(Palette.PARCHMENT_DARK, 0.6), Color.TRANSPARENT, 0.0)
+	hover.shaded = false
+	t.set_stylebox("hover", "PopupMenu", hover)
+
+	# A card's scroll bar: a thin pencil stroke.
+	var grabber := StyleBoxFlat.new()
+	grabber.bg_color = Color(Palette.INK, 0.35)
+	grabber.set_corner_radius_all(2)
+	grabber.content_margin_left = 2
+	grabber.content_margin_right = 2
+	t.set_stylebox("grabber", "VScrollBar", grabber)
+	var held := grabber.duplicate() as StyleBoxFlat
+	held.bg_color = Color(Palette.INK, 0.6)
+	t.set_stylebox("grabber_highlight", "VScrollBar", held)
+	t.set_stylebox("grabber_pressed", "VScrollBar", held)
+	t.set_stylebox("scroll", "VScrollBar", StyleBoxEmpty.new())
+	return t
+
+
+## IM Fell English (log 0185), falling back to the symbols font and
+## Godot's own for anything it lacks. Italic with `italic`.
+static func menu_font(italic := false) -> Font:
+	var font: FontFile = load("res://assets/fonts/fell_italic.ttf" if italic else "res://assets/fonts/fell.ttf")
+	if font.fallbacks.is_empty():
+		font.fallbacks = [Graphics.SYMBOLS_FONT, ThemeDB.fallback_font]
+	return font
+
+
 static func _tab(bg: Color, border: Color) -> StyleBoxFlat:
 	var box := _box(bg, border)
 	box.border_width_bottom = 0

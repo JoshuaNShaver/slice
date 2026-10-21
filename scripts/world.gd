@@ -33,6 +33,7 @@ var _camera: Camera2D
 var _background: ParchmentBackground
 var _hud: Hud
 var _atmosphere: Atmosphere
+var _ink: InkPass
 var _place_id := ""
 var _enemies_root: Node2D
 var _enemy_spawner: MultiplayerSpawner
@@ -58,6 +59,8 @@ func _ready() -> void:
 	var front := CanvasLayer.new()
 	front.layer = 1
 	add_child(front)
+	_ink = InkPass.new()  # first: over the world, under the dust and the HUD (log 0191)
+	front.add_child(_ink)
 	_atmosphere = Atmosphere.new()
 	front.add_child(_atmosphere)
 
@@ -73,7 +76,7 @@ func _ready() -> void:
 	for data: Dictionary in CenterTerrain.NPCS + Barracks.NPCS + UpperEast.NPCS + Underworld.NPCS:
 		add_child(Npc.create(data))
 	var door := HouseDoor.new()
-	door.position = Buildings.east_door(UpperEast.HOME, UpperEast.HOME_WIDTH)
+	door.position = Buildings.men_door(UpperEast.HOME, UpperEast.HOME_WIDTH)
 	add_child(door)
 
 	_enemies_root = _add_spawned_root("Enemies", Enemy.create)
@@ -142,7 +145,11 @@ func _process(delta: float) -> void:
 	var view := _camera.get_screen_center_position()
 	_background.view_offset = view
 	_background.depth = Regions.underworld_blend(view.y)
+	_background.place = str(Regions.at(view).get("id", ""))
 	_atmosphere.view = view
+	_ink.origin = view - get_viewport().get_visible_rect().size / 2.0
+	_ink.under = _background.depth
+	_ink.focus = get_viewport().get_canvas_transform() * me.global_position if me != null else Vector2(NAN, NAN)
 
 
 func _local_player() -> PlayerShape:
@@ -195,7 +202,7 @@ func _sync_player_shapes() -> void:
 			# Spread arrivals a little so shapes don't land in one heap.
 			var n := _players_root.get_child_count()
 			var offset := Vector2((n % 5) * 50.0 * (1 if n % 2 == 0 else -1), 0.0)
-			_spawner.spawn({
+			var shape: PlayerShape = _spawner.spawn({
 				"id": id,
 				"family": info.family,
 				"sides": info.sides,
@@ -205,11 +212,13 @@ func _sync_player_shapes() -> void:
 				"generation": info.generation,
 				"progress": Net.progress.get(id, {}),
 				"chest": Net.chests.get(id, PackedStringArray()),
+				"quests": Net.quests.get(id, {}),
 				"pos": Regions.spawn_for(info.kind) + offset,
 			})
-			# A new family's first heir, never played: born (design log 0168).
+			# A new family's first heir, never played: born (design log 0168),
+			# and any quest that starts at a birth begins (log 0179).
 			if int(info.generation) == 1 and (Net.progress.get(id, {}) as Dictionary).is_empty():
-				Net.play_cutscene(id, Cutscenes.founding(info))
+				Net.play_cutscene(id, shape.quests.after_birth(Cutscenes.founding(info), info))
 	for shape: PlayerShape in _players_root.get_children():
 		if not Net.players.has(shape.peer_id):
 			_players_root.remove_child(shape)
@@ -246,11 +255,15 @@ func _nearest_interactable(pos: Vector2) -> Node2D:
 	return best
 
 
-## Local player: only the nearest interactable shows its prompt.
+## Local player: only the nearest interactable shows its prompt. An NPC
+## a quest sends you to shows a mark (log 0179).
 func _update_prompts(me: PlayerShape) -> void:
 	var nearest := _nearest_interactable(me.position)
+	var talk_to := str(me.quests.tracker.get("talk_to", ""))
 	for node in get_tree().get_nodes_in_group(Npc.GROUP):
 		node.prompt = node.prompt_for(me) if node == nearest else ""
+		if node is Npc:
+			(node as Npc).quest_mark = talk_to != "" and (node as Npc).display_name == talk_to
 
 
 ## Server only (PlayerActions._submit_interact).
@@ -341,6 +354,7 @@ func reward_kill(enemy: Enemy, drops := true) -> void:
 		if who == null:
 			continue
 		who.stats.add_xp(info.xp)
+		who.quests.notify("kill", enemy.type)
 		if not drops:
 			continue
 		if info.tier > 0 and _rng.randf() < Stats.lucky_chance(info.get("drop", 0.0), who.stats.luck):

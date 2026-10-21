@@ -5,7 +5,8 @@ extends RefCounted
 ## came from outside. The one place that knows the save format.
 ##
 ## progress(): {"level", "xp", "pay", "abilities", "stats" (without gear),
-## "bag", "equipped"}. The chest is saved apart, as a plain item list.
+## "bag", "equipped"}. The chest is saved apart, as a plain item list, and
+## quests with the account (PlayerQuests, log 0183).
 
 
 ## What the family save keeps of this heir. Stats are stored without gear,

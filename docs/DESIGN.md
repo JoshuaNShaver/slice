@@ -42,9 +42,13 @@ Dungeons and mazes are **procedurally generated**.
 per NPC (never a dice roll). Overworld NPCs serve regulars; most underworld
 NPCs refuse them. Press interact (E) by an NPC, elevator or door to use it.
 
-**Houses (logs 0053, 0060, 0059):** every overworld house is a regular
-pentagon, as the book's law requires: roof to the north, men's door on the
-east, women's smaller door on the west, no windows. They are NPC homes and
+**Houses (logs 0053, 0060, 0059, 0187, 0188):** every overworld house is a regular
+pentagon, as the book's law requires: roof to the north, men's large door
+on the west, women's small door on the east (log 0187), no windows.
+Every house is drawn open, its rooms showing (unlabelled), after the
+book's plan of the narrator's house with level floors (log 0188); both
+doors reach the ground. Still scenery: shapes pass in front, and the
+rooms are empty in the game (residents would overlap passers-by). They are NPC homes and
 scenery. Underworld houses break the law: crooked, lopsided, even
 triangles and squares.
 
@@ -106,9 +110,10 @@ Enemies chase players inside their own room only, and respawn after 12 s
 
 **The barracks (logs 0061, 0067–0072, 0077):** west of the Center through
 an open gate (`scripts/world/barracks.gd`). East to west:
-- **The drill yard (log 0072):** straw dummies and sparring partners for
-  levels 1–5 (spar until about 3–5). Partners can't bring you below 1
-  health. It drops **leather** gear.
+- **The drill yard (log 0072):** straw dummies and sparring partners
+  (**recruits**, log 0182) for levels 1–5 (spar until about 3–5). Recruits
+  can't bring you below 1 health. It drops **leather** gear. **The Drill
+  Sergeant**, at its gate, runs bootcamp, the first quest (§5c).
 - **The Quartermaster** (equilateral) sells bronze, iron and steel,
   provisions (§2b) and ability drills (§2c), for combatant pay. **The Surgeon** heals on request.
 - **The General** (a pentagon, proposed) gives missions; squads muster
@@ -349,7 +354,8 @@ Values marked * are proposed tuning.
   (equipment, stats); **Esc** the menu (players here, Controls, Leave). Every
   panel has an ✕ top right; the use key closes the chests, orders or shop it
   opened (log 0129). Top right is
-  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed). **Energy** is 2 pips over your own shape, one per
+  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed);
+  under it, the quest you're on (§5c). **Energy** is 2 pips over your own shape, one per
   ability use, faded while full. Other players show a small health bar under their
   name.
 - **Speech and thoughts (log 0082):** NPC lines appear in a bubble above the
@@ -367,10 +373,10 @@ Values marked * are proposed tuning.
 - **Redeeming a certificate** at a priest (press E nearby) produces an heir
   with **+1 side** (log 0030). The heir takes over at once and starts fresh:
   level 1, no gear. Only the family carries on, plus spare certificates,
-  potions and provisions.
+  potions and provisions (and the player's quests, §5c).
   - **House (logs 0041, 0054, 0064):** once a family reaches a square, it
     gets a house with chests for storage, in the Noble Quarter. Press E at
-    its east door to open your chests and drag items between them and the
+    its men's (west) door to open your chests and drag items between them and the
     bag. *Proposed:* 20 slots; everyone uses the same door, each sees their
     own chests; saved by the server with the account (log 0112). Stored gear carries over to later heirs, so
     only square-or-better runs benefit from past runs' gear; triangle runs
@@ -414,10 +420,68 @@ Values marked * are proposed tuning.
   only (§6). Below, the Hedge Priest does both, with no Board. A cutscene
   is a full-screen overlay (the world runs on; the server keeps you safe
   until it ends), played in full the first time and skippable after. The
-  officials are sincerely pompous, never cruel on purpose.
+  officials are sincerely pompous, never cruel on purpose. A birth ends
+  with a page in the book's voice, "Some years pass. You are grown." (log
+  0180): you start play grown.
+- **Cutscenes are data (log 0179):** a cast of actors (shape, place, size;
+  a shape, a woman's line or a straw dummy) and beats whose cues act on an
+  actor: move, fade, hop, jump onto another, fall, calipers, bells, a halo,
+  an arc joining two, dark. Settings: the Board, the temple, the drill
+  yard, below, and a page of text. Any server code (births, quests) can
+  write one and run something once it ends. The format is in
+  `scripts/ui/cutscene_player.gd`.
+
+## 5c. Quests (logs 0179, 0183)
+
+- **A quest is work critical to the plot, and it's the player's** (log
+  0183): progress is kept with the account, not the family, so it outlives
+  families. A new family carries on where the last left off, and a
+  finished quest stays finished. A quest may be for some shapes only
+  (bootcamp: regulars); with any other family it waits. Progress that
+  belongs to one family (tasks, missions) is a separate thing. Quest
+  characters never act as if a new family were the one they knew.
+- A quest is an ordered list of steps. Each step has an objective, goals to
+  check off (talk to an NPC, kill so many of an enemy, wear an item, open a
+  panel, win or lose a bout), and actions when it starts or ends (a
+  cutscene, a line, an item, a bout, healing). One script per quest in
+  `scripts/quests/`, with its cutscenes. *Proposed (log 0182):* the HUD
+  shows the current quest top right, and an NPC a quest sends you to shows
+  a "!". **A word first (log 0192):** talking to someone never cuts
+  straight to a cutscene; the person says something in the world, then
+  the cutscene fades in over it.
+- **Bootcamp (log 0181)**, the first quest, starts at a regular birth: the
+  Priest sends you to the Drill Sergeant. He explains combat in a
+  cutscene and shows it on a dummy (jumping surprisingly high and landing
+  point first, for 9001; he wears full steel, log 0193), then: 5
+  dummies, 5 recruits, leather plating (open the character sheet and wear
+  it), and a bout with your senior, **Darren of the family Heroldt** (spike
+  up, full leather), the start of a long friendship and rivalry. His first
+  hit leaves you at 2 health. Win and he sees your potential; lose and he
+  gives you pointers, glad to be working with you. Either way the Sergeant
+  says you're only getting started: train until you feel ready for real
+  combat, then see the General for deployment (log 0193). Darren has 1000
+  health, so he's hard to beat (log 0193). *Proposed (log 0182):* only you
+  fight him; his second landed hit loses the bout.
+- **Darren's line (log 0184, not built past bootcamp):** the Heroldts are
+  your rivals and friends across the game, like Red in Pokémon: always a
+  step ahead. Darren is your friend in the first mission, and is later
+  kidnapped by the Colour Revolt. His line rises in rank, and since your
+  families may die between quests, you mostly deal with his descendants.
+  They reach every secret first: they meet the Architect before you, and
+  find the Third Dimension before you.
 
 ## 5b. Main menu and saves
 
+- **Layout (logs 0185, 0186, 0187, 0188):** a torn-parchment sidebar (Offline / Online,
+  Play, Quit on desktop, who's signed in, version) beside a drawn picture
+  under the title banner. Play opens "Select a Family" over the picture;
+  online sign-in steps show in the same panel. Buttons and panels are
+  drawn by hand; lettering is IM Fell English. The picture is one street
+  (no hills or anything "behind"): two big lawful houses, your first
+  family's heir between them drawn as in the game. The right house's
+  family is home in its rooms (logs 0187, 0188); neighbours tumble out of the men's (west) doors and back
+  in, each on his own stretch so no one passes anyone. Fog drifts behind and in front with a little
+  mouse parallax (none on Low graphics).
 - **Offline or Online (log 0119):** two modes, remembered. Offline is a
   local server with no network; Online joins the game's server
   (`online/server_address` in `project.godot`; on desktop
@@ -426,8 +490,8 @@ Values marked * are proposed tuning.
 - **Sign-in screen (log 0120, proposed, built):** Online connects at once
   and shows one card per step: reaching the server, can't reach it (Try
   again), "Sign in with Google" (Google's white button and G), finish in
-  the browser. Signed in: "Signed in as <username> · Sign out" above the
-  slots.
+  the browser. Signed in: "Signed in as <username>" and Sign out in the
+  sidebar (log 0185).
 - **Usernames (log 0123):** a first online sign-in picks a username (3–16
   letters, numbers or `_`, unique ignoring case, set once) before the
   slots. The server keeps it in `profiles`; players never see an email.
@@ -444,7 +508,7 @@ Values marked * are proposed tuning.
   machine's files (`user://families/`, `user://chests.json`), as before.
   LAN joiners and a dev server's players log in with a device id; their
   saves live on that server. An online server uses Supabase (log 0114):
-  tables `families`, `chests`, `unlocks` (log 0174) and `profiles` keyed by the Supabase user, readable and
+  tables `families`, `chests`, `unlocks` (log 0174), `quests` (log 0183) and `profiles` keyed by the Supabase user, readable and
   writable only with the server's secret key.
   A dedicated server's `SAVES` setting picks `local` or `supabase` (log
   0117); unset, it uses Supabase when its settings are there.
@@ -480,12 +544,13 @@ As in the book, women are straight lines.
   multiplayer (WebSocket, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
-- **Smoothing (logs 0093, 0095, 0158, 0169):** the server sends each
+- **Smoothing (logs 0093, 0095, 0158, 0169, 0178):** the server sends each
   body's state 60 times a second. Clients draw other players and enemies a
   little behind (60 ms), blended between server updates; your own shape
   uses the newest update. No client-side prediction (tried and removed,
-  log 0169). When updates stop, shapes coast for up to 1.5 s (recent
-  velocity and spin, slowing gently, falling under gravity, stopped by and
+  log 0169). Between updates, a shape is carried on at the newest
+  update's own velocity and spin (log 0178). When updates stop, shapes
+  coast for up to 1.5 s (blending into their recent velocity and spin, slowing gently, falling under gravity, stopped by and
   sliding along terrain) instead of freezing, and when updates return the
   difference fades out (up to 0.25 s for big ones). Your own shape plays on
   instead (log 0173): after 0.12 s without an update it runs its own
@@ -540,16 +605,18 @@ As in the book, women are straight lines.
   the typing line on top, clear of the phone's keyboard.
 - **Admins (logs 0125, 0147, 0152, 0156):** `profiles.role` is `player`,
   `admin` or `first_architect` (an admin like any other), set only by a
-  database update. Admins type commands into chat:
-  `\<noun> <verb> [words] [--flags]`, e.g. `\player list`,
-  `\player get 3`, `\player set level 11 --id 3`, `\player levelup 2`;
-  `\help` lists them. Offline and a host's own player are admins; a
+  database update. Admins type commands after a `\` (log 0196):
+  `<noun> <verb> [words] [--flags]`, with nouns plural, each the root of
+  the commands on that kind of thing. A noun alone lists them: `players`,
+  `players get 3`, `players set level 11 --id 3`, `players levelup 2`;
+  `help` lists them. Offline and a host's own player are admins; a
   dedicated server with `--dev-admins` makes everyone one (tests, dev).
-  `\enemies` (short for `\enemy list [--away] [--type]`) and
-  `\enemy get E3` show each enemy's place, hp and distance from home,
-  marking ones away from home (log 0137). `\players` is short for
-  `\player list`, and Tab completes commands, verbs, fields and flags
-  (log 0163).
+  `enemies [--away] [--type]` and `enemies get E3` show each enemy's place,
+  hp and distance from home, marking ones away from home (log 0137).
+  `players quests` is a player's place in each quest: `get`, `start`,
+  `set <quest> <step|done>`, `delete`, all with `--id who`; `quests` and
+  `quests get <quest>` show the quests themselves (log 0196). Tab
+  completes commands, verbs, fields, quests and flags (log 0163).
 - **Diagnostics (logs 0155, 0159):** anyone can type `\diagnostics` (`\diag`):
   5 pings to the server, then your fps and frame time, ping, how steadily
   your shape's updates arrive, and the server's fps, physics load, players,
@@ -563,7 +630,8 @@ As in the book, women are straight lines.
   then a burst), `\simulate prod` is the live server's profile (+35 ms,
   160 ms stalls ~every 5 s), and `\simulate off` stops it all (log 0167).
 - **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153, 0156):** a chat line starting with `\` turns the
-  chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
+  chat into a full-screen terminal until Esc (or ✕) closes it; in it a line
+  needs no `\` (every line is a command, log 0196); Enter never
   leaves, `\hello` has imsdow wave and say hi, and `\bye` says goodbye to
   her first. Players who aren't admins can open it too; their `\help`
   lists just `\hello`, `\bye` and `\diagnostics` (logs 0153, 0155). It's 25% see-through
@@ -582,11 +650,11 @@ As in the book, women are straight lines.
   pink/violet with a cyan shimmer; `tools/companion_ink.py` cleans a
   picture that has a background).
 - **Graphics settings (log 0094):** in the in-game menu: max framerate and
-  High / Low. Low drops the atmosphere and background stains and renders at
+  High / Low. Low drops the atmosphere, background stains and ink pass and renders at
   1280x720, scaled up. Saved per machine.
 - **Window shape (logs 0126, 0134):** the game fills the window; 1280x720
   is the smallest view (720x1280 when the window is taller than wide), and
-  a bigger window shows more world, never black bars. Loading screens show the game icon on parchment.
+  a bigger window shows more world, never black bars. Loading screens show the title card over the Priest, his aura filling as the download's progress (log 0197).
 
 ## 8. Art direction
 
@@ -595,7 +663,18 @@ As in the book, women are straight lines.
   underworld and loudly on the Colour Revolt.
 - **Outlines:** dark sepia ink, so pastels stay readable on parchment.
 - **Background:** parchment with ink stains in parallax layers moving at
-  different speeds, giving depth as you roll left and right.
+  different speeds, giving depth as you roll left and right. Only the poor
+  quarters are stained (log 0190): the Center, the Barracks, the
+  Undercroft; the rest is clean parchment.
+- **Menus and lettering (logs 0185, 0189):** every panel, in-game too, is
+  torn parchment with pencilled buttons, fields and item slots; speech
+  bubbles and the quest tracker are pencilled. All text is IM Fell English
+  (the admin terminal keeps monospace).
+- **Ink on paper and fog (logs 0191, 0194, proposed):** a shader over the
+  world and the menu's picture, under the UI: ink bleed and paper grain,
+  and Flatland's fog as depth: the farther from your shape, the paler the
+  world and the more it's crosshatched (chalk strokes underground). Off on
+  Low graphics.
 - **Underworld (log 0056, proposed, built):** chalk on slate. Dark ground, pale
   chalk outlines, the same pastel fills, fading in down the hatch shaft.
 - **Foreground atmosphere (log 0057):** a subtle layer of dust, light or
@@ -603,11 +682,13 @@ As in the book, women are straight lines.
   *Proposed:* faster than the camera, client-only, under the HUD. Turned
   off by Low graphics (log 0094). Center: paper
   dust in slanting light. Upper east: nearly clean. Priestly hill: light
-  shafts, incense. Underworld: ash or spores, low fog in pits.
+  shafts, incense. Underworld: ash or spores, low fog in pits. The front (logs 0195, 0198): ash rising.
 - **Plain shapes (log 0069):** players and overworld NPCs have an
   uncoloured fill. Military armor shows as crosshatching: leather single
   diagonal, bronze cross-diagonal, iron square grid, steel triple. Cave
-  gear keeps its chalk colours (contraband from below).
+  gear keeps its chalk colours (contraband from below). NPCs can wear
+  gear too: the Drill Sergeant wears full steel in the world, as in his
+  cutscenes (log 0199).
 - **Hatching:** 2–3 crosshatch styles combined with palette colors as a
   learnable identity system (originally for dimensions; reuse for armor and
   factions).

@@ -6,16 +6,26 @@ extends Control
 ## Underground it turns to slate with chalk dust (design log 0056): set `depth`
 ## (Regions.underworld_blend) from 0, parchment, to 1, slate.
 ## Low graphics (design log 0094) draws the plain color, without stains.
+## In the world, only the poor quarters are stained (log 0190): set `place`
+## (a Regions id) and the stains fade in or out as you go.
 
 const LAYER_SPEEDS: Array[float] = [6.0, 14.0, 26.0]
 const STAINS_PER_LAYER := 7
 
 const PARALLAX_PER_SPEED := 1.0 / 40.0  # world: layer moves speed/40 of the camera's motion
+## Where the poor live (log 0190): the Center, the Barracks, the Undercroft,
+## and the shafts and earth between them ("").
+const STAINED_PLACES: Array[String] = ["center", "barracks", "undercroft", ""]
+const STAIN_FADE := 0.8  # per second
 
 ## Drift over time (menus). Turn off and set view_offset to follow a camera.
 var auto_drift := true
 var view_offset := Vector2.ZERO
 var depth := 0.0
+## World: the Regions id under the camera. Menus leave it "menu": stained.
+var place := "menu"
+
+var _stain := 1.0  # how stained, 0 to 1, eased toward the place's
 
 var _stains: Array[Dictionary] = []
 var _scroll := 0.0
@@ -43,12 +53,14 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if auto_drift:
 		_scroll += delta
+	var target := 1.0 if place == "menu" or place in STAINED_PLACES else 0.0
+	_stain = move_toward(_stain, target, delta * STAIN_FADE)
 	queue_redraw()
 
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Palette.PARCHMENT.lerp(Palette.SLATE, depth))
-	if Graphics.low:
+	if Graphics.low or _stain <= 0.0:
 		return
 	var wrap := size + Vector2(200.0, 200.0)
 	for s in _stains:
@@ -59,6 +71,6 @@ func _draw() -> void:
 		var x := fposmod(s.x * wrap.x - travel.x, wrap.x) - 100.0
 		var y := fposmod(s.y * wrap.y - travel.y, wrap.y) - 100.0
 		var color := Palette.INK_STAIN.lerp(Palette.CHALK_DUST, depth)
-		color.a *= 0.6 + 0.4 * layer
+		color.a *= (0.6 + 0.4 * layer) * _stain
 		for blob: Vector3 in s.blobs:
 			draw_circle(Vector2(x + blob.x * s.scale, y + blob.y * s.scale), blob.z * s.scale, color)

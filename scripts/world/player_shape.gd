@@ -20,6 +20,7 @@ extends RigidBody2D
 ## - screen (PlayerScreen): server -> owner HUD messages and panels.
 ## - chat (PlayerChat): chat lines and admin commands (logs 0124, 0125).
 ## - input (PlayerInput): the owner's keys, sent to the server.
+## - quests (PlayerQuests): where you are in each quest (log 0179).
 ## Saved progress (log 0038) is PlayerSave: progress() is what the family
 ## save keeps of this heir; create() restores it.
 
@@ -69,6 +70,7 @@ var actions: PlayerActions
 var screen: PlayerScreen
 var chat: PlayerChat
 var input: PlayerInput
+var quests: PlayerQuests
 
 var points: PackedVector2Array  # the drawn outline
 var corners: PackedVector2Array  # collision outline
@@ -105,8 +107,10 @@ static func create(data: Dictionary) -> PlayerShape:
 	p.screen = p._part(PlayerScreen.new(), "Screen")
 	p.chat = p._part(PlayerChat.new(), "Chat")
 	p.input = p._part(PlayerInput.new(), "Input")
+	p.quests = p._part(PlayerQuests.new(), "Quests")
 	p.stats.luck = data.get("luck", 0)
 	PlayerSave.apply(p, data.get("progress", {}), data.get("chest", []))
+	p.quests.load_data(data.get("quests", {}))  # the account's, not the family's (log 0183)
 
 	# Players pass through each other for now; they hit terrain and enemies.
 	p.collision_layer = LAYER_PLAYERS
@@ -142,6 +146,7 @@ static func create(data: Dictionary) -> PlayerShape:
 		on_change.append("Stats:" + stat)
 	for items: String in ["bag", "equipped", "chest"]:
 		on_change.append("Inventory:" + items)
+	on_change.append("Quests:tracker")
 	for prop: String in ["sides", "kind", "apex", "generation"]:
 		on_change.append(".:" + prop)
 	for prop in on_change:
@@ -308,6 +313,7 @@ func become_heir(heir: Dictionary) -> void:
 	_rebuild_outline()
 	stats.reset_for_heir()
 	teleport(spawn_point)
+	quests.shape_changed()
 
 
 func _draw() -> void:

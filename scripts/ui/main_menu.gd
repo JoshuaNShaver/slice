@@ -1,6 +1,7 @@
 extends Control
 ## Main menu: Offline or Online, then one of 3 family slots (design logs
-## 0018, 0119).
+## 0018, 0119). A sidebar beside a drawn picture; Play opens the families
+## (log 0185).
 ##
 ## Offline lists this machine's own families (FamilyStore). Online connects
 ## to the game's server (Net.online_address), which asks for a login
@@ -22,8 +23,21 @@ const CARD_HEIGHT := 400
 ## picking a family, starting.
 enum Online { OFF, CONNECTING, LOGIN, USERNAME, SLOTS, STARTING }
 
+## The sidebar (log 0185).
+const SIDEBAR_WIDTH := 250
+const MARGIN := 24
+
 var _offline_tab: Button
 var _online_tab: Button
+var _mode_note: Label
+var _play_button: Button
+var _account_box: VBoxContainer
+var _scene: MenuScene
+var _banner: Control
+## The family panel Play opens; online steps show in it too.
+var _panel: PanelContainer
+var _panel_title: Label
+var _panel_note: Label
 var _body: VBoxContainer
 var _status: Label
 var _busy := false
@@ -63,7 +77,7 @@ func _ready() -> void:
 	Net.session_started.connect(_on_session_started)
 	if _start_dedicated_server_if_requested():
 		return
-	theme = UiTheme.build()
+	theme = UiTheme.build_menu()
 	_build()
 	Net.session_failed.connect(_on_session_failed)
 	Net.accounts.login_needed.connect(_on_login_needed)
@@ -78,7 +92,8 @@ func _ready() -> void:
 	_login.needs_button.connect(func() -> void:
 		_needs_login_button = true
 		_in_browser = false
-		_refresh())
+		_refresh()
+		_show_panel(true))  # signing in happens in the panel
 	_login.login_failed.connect(func(reason: String) -> void:
 		_sign_in_problem = reason)
 	_login.signing_in.connect(func() -> void:
@@ -151,66 +166,95 @@ func _start_dedicated_server_if_requested() -> bool:
 
 # --- Layout ---------------------------------------------------------------
 
+## The sidebar on the left with the modes and Play, the picture filling the
+## rest under the title banner; Play opens the family panel over the
+## picture (log 0185).
 func _build() -> void:
 	add_child(ParchmentBackground.new())
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-	_page = center
+	_scene = MenuScene.new()
+	add_child(_scene)
+	_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scene.offset_left = SIDEBAR_WIDTH + MARGIN
+	var ink := InkPass.new()  # the picture in ink on paper; the menu over it stays crisp (log 0191)
+	ink.fog = 0.0  # the picture has its own fog
+	add_child(ink)
 
+	_page = Control.new()
+	_page.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_page)
+	_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_page.add_child(_build_sidebar())
+
+	var stage := Control.new()
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_page.add_child(stage)
+	stage.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	stage.offset_left = SIDEBAR_WIDTH + MARGIN * 2
+	stage.offset_right = -MARGIN
+	stage.offset_top = MARGIN
+	stage.offset_bottom = -MARGIN
+
+	_banner = _build_banner()
+	stage.add_child(_banner)
+	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE)
+
+	var holder := CenterContainer.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(holder)
+	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(_build_panel())
+	_panel.visible = false
+
+
+func _build_sidebar() -> Control:
+	var sidebar := PanelContainer.new()
+	sidebar.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	sidebar.offset_left = MARGIN
+	sidebar.offset_right = MARGIN + SIDEBAR_WIDTH
+	sidebar.offset_top = MARGIN
+	sidebar.offset_bottom = -MARGIN
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 20)
-	center.add_child(column)
+	column.add_theme_constant_override("separation", 12)
+	sidebar.add_child(column)
 
-	var title := Label.new()
-	title.text = "FLATLAND"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 64)
-	column.add_child(title)
-
-	var subtitle := Label.new()
-	subtitle.text = "A Romance of Many Dimensions"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override("font_color", Palette.INK_FADED)
-	column.add_child(subtitle)
-
-	column.add_child(_build_mode_tabs())
-
-	_body = VBoxContainer.new()
-	_body.add_theme_constant_override("separation", 14)
-	_body.custom_minimum_size = Vector2(0, CARD_HEIGHT)  # keeps the title still
-	column.add_child(_body)
-
-	_status = Label.new()
-	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(_status)
-
-	# Players compare this with a server's "please update" message (log 0109).
-	var version := Label.new()
-	version.text = "Version %s\n%s" % [Net.version, BuildInfo.describe(BuildInfo.id())]  # build under it (log 0166)
-	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	version.add_theme_font_size_override("font_size", 13)
-	version.add_theme_color_override("font_color", Palette.INK_FADED)
-	add_child(version)
-	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
-
-
-## Offline | Online, side by side.
-func _build_mode_tabs() -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 0)
 	var group := ButtonGroup.new()
 	_offline_tab = _mode_tab("Offline", group)
-	_offline_tab.tooltip_text = "Play families kept on this computer."
 	_offline_tab.pressed.connect(_set_online_mode.bind(false))
-	row.add_child(_offline_tab)
+	column.add_child(_offline_tab)
 	_online_tab = _mode_tab("Online", group)
-	_online_tab.tooltip_text = "Play with others. Your families are kept with your account."
 	_online_tab.pressed.connect(_set_online_mode.bind(true))
-	row.add_child(_online_tab)
-	return row
+	column.add_child(_online_tab)
+	_mode_note = _note("")
+	column.add_child(_mode_note)
+
+	column.add_child(_rule())
+	_play_button = Button.new()
+	_play_button.text = "Play"
+	_play_button.theme_type_variation = "PrimaryButton"
+	_play_button.custom_minimum_size = Vector2(0, 56)
+	_play_button.pressed.connect(_show_panel.bind(true))
+	column.add_child(_play_button)
+	if not OS.has_feature("web"):  # a browser tab is closed, not quit
+		var quit := Button.new()
+		quit.text = "Quit"
+		quit.pressed.connect(get_tree().quit)
+		column.add_child(quit)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(spacer)
+	_status = _note("")
+	column.add_child(_status)
+	_account_box = VBoxContainer.new()
+	_account_box.add_theme_constant_override("separation", 6)
+	column.add_child(_account_box)
+	column.add_child(_rule())
+	# Players compare this with a server's "please update" message (log 0109).
+	var version := _note("Version %s\n%s" % [Net.version, BuildInfo.describe(BuildInfo.id())])  # build under it (log 0166)
+	version.add_theme_font_size_override("font_size", 14)
+	column.add_child(version)
+	return sidebar
 
 
 func _mode_tab(text: String, group: ButtonGroup) -> Button:
@@ -218,8 +262,95 @@ func _mode_tab(text: String, group: ButtonGroup) -> Button:
 	button.text = text
 	button.toggle_mode = true
 	button.button_group = group
-	button.custom_minimum_size = Vector2(150, 40)
+	button.custom_minimum_size = Vector2(0, 44)
 	return button
+
+
+## The title on a torn strip of parchment, tilted a little.
+func _build_banner() -> Control:
+	var banner := PanelContainer.new()
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", -6)
+	banner.add_child(column)
+	var title := Label.new()
+	title.text = "FLATLAND"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 76)
+	column.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "A Romance of Many Dimensions"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_override("font", UiTheme.menu_font(true))
+	subtitle.add_theme_font_size_override("font_size", 26)
+	column.add_child(subtitle)
+	banner.rotation = deg_to_rad(-1.5)
+	banner.resized.connect(func() -> void: banner.pivot_offset = banner.size / 2.0)
+	return banner
+
+
+## The panel Play opens: its title and a close mark, then the family
+## cards, or the online step that comes before them.
+func _build_panel() -> Control:
+	_panel = PanelContainer.new()
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	_panel.add_child(column)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 16)
+	column.add_child(header)
+	_panel_title = Label.new()
+	_panel_title.add_theme_font_size_override("font_size", 36)
+	header.add_child(_panel_title)
+	_panel_note = _note("")
+	_panel_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_panel_note.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_panel_note.add_theme_font_override("font", UiTheme.menu_font(true))
+	header.add_child(_panel_note)
+	var close := Button.new()
+	close.text = "✕"
+	close.flat = true
+	close.tooltip_text = "Back"
+	close.add_theme_font_override("font", Graphics.SYMBOLS_FONT)
+	close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	close.pressed.connect(_show_panel.bind(false))
+	header.add_child(close)
+	column.add_child(_rule())
+	_body = VBoxContainer.new()
+	_body.add_theme_constant_override("separation", 14)
+	column.add_child(_body)
+	return _panel
+
+
+## A pencil line across, between groups.
+func _rule() -> Control:
+	var rule := Control.new()
+	rule.custom_minimum_size = Vector2(0, 10)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rule.draw.connect(func() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = roundi(rule.size.x)
+		var y := rule.size.y / 2.0
+		Sketch.line(rule.get_canvas_item(), Vector2(4, y), Vector2(rule.size.x - 4, y),
+				Color(Palette.INK, 0.6), 1.3, rng, 2, 6.0, 0.8))
+	return rule
+
+
+## Opens or closes the family panel; the title banner gives it the room.
+func _show_panel(open: bool) -> void:
+	if _panel.visible == open:
+		return
+	_panel.visible = open
+	_banner.visible = not open
+	if open:
+		_panel.modulate.a = 0.0
+		create_tween().tween_property(_panel, "modulate:a", 1.0, 0.18)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _panel != null and _panel.visible and event.is_action_pressed("ui_cancel"):
+		_show_panel(false)
+		get_viewport().set_input_as_handled()
 
 
 func _refresh() -> void:
@@ -230,12 +361,17 @@ func _refresh() -> void:
 		child.queue_free()
 	_offline_tab.disabled = _busy and _online_mode
 	_online_tab.disabled = _offline_tab.disabled
+	_mode_note.text = ("Play with others. Your families are kept with your account." if _online_mode
+			else "Families kept on this computer.")
+	_refresh_account()
+	_scene.family = _first_family()
+	_panel_title.text = "Select a Family"
+	_panel_note.text = "Each family is a line of heirs, one shape after another."
 	if not _online_mode:
 		_body.add_child(_slots_row(FamilyStore.SLOT_COUNT, FamilyStore.get_family))
 		return
 	match _online:
 		Online.SLOTS:
-			_body.add_child(_build_account_bar())
 			_body.add_child(_slots_row(_server_families.size(), func(slot: int) -> Family:
 				return _server_families[slot]))
 		Online.OFF:
@@ -250,6 +386,16 @@ func _refresh() -> void:
 			_body.add_child(_centered(_build_wait_card("Entering the world…", false)))
 		_:
 			_body.add_child(_centered(_build_wait_card(_online_note, true)))
+
+
+## The first family in the slots shown, for the picture; null if none.
+func _first_family() -> Family:
+	var count := _server_families.size() if _online_mode else FamilyStore.SLOT_COUNT
+	for slot in count:
+		var family := _family(slot)
+		if family != null and not family.extinct:
+			return family
+	return null
 
 
 func _slots_row(count: int, family_at: Callable) -> Control:
@@ -271,24 +417,19 @@ func _family(slot: int) -> Family:
 	return _server_families[slot] if _online_mode else FamilyStore.get_family(slot)
 
 
-## Online, signed in: who, and a way out.
-func _build_account_bar() -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
-	var who := _note("")
-	who.autowrap_mode = TextServer.AUTOWRAP_OFF  # a wrapping label in a row has no width
+## Online, in the sidebar: who's signed in, and a way out.
+func _refresh_account() -> void:
+	for child in _account_box.get_children():
+		child.queue_free()
+	if not _online_mode or _online != Online.SLOTS:
+		return
+	var who := _note("Signed in as %s" % _username if _username != "" else "Connected to %s" % _server_name())
+	_account_box.add_child(who)
 	if _username != "":
-		who.text = "Signed in as %s" % _username
-		row.add_child(who)
 		var sign_out := _small_button("Sign out")
 		sign_out.disabled = _busy
 		sign_out.pressed.connect(_sign_out)
-		row.add_child(sign_out)
-	else:
-		who.text = "Connected to %s" % _server_name()
-		row.add_child(who)
-	return row
+		_account_box.add_child(sign_out)
 
 
 ## Online, waiting on the server or the login.
@@ -299,7 +440,7 @@ func _build_wait_card(text: String, can_cancel: bool) -> Control:
 		var cancel := _small_button("Cancel")
 		cancel.pressed.connect(_cancel)
 		box.add_child(_centered(cancel))
-	return box.get_parent() as Control
+	return box
 
 
 ## Online, not connected: why, and try again.
@@ -317,7 +458,7 @@ func _build_retry_card() -> Control:
 	again.pressed.connect(_connect)
 	box.add_child(_centered(again))
 	box.add_child(_server_line())
-	return box.get_parent() as Control
+	return box
 
 
 func _build_sign_in_card() -> Control:
@@ -336,7 +477,7 @@ func _build_sign_in_card() -> Control:
 		_login.log_in_with_google())
 	box.add_child(_centered(google))
 	box.add_child(_server_line())
-	return box.get_parent() as Control
+	return box
 
 
 ## Online, first sign-in: the name other players will see.
@@ -373,7 +514,7 @@ func _build_username_card() -> Control:
 	box.add_child(row)
 	if not _busy:
 		edit.grab_focus.call_deferred()
-	return box.get_parent() as Control
+	return box
 
 
 func _build_browser_card() -> Control:
@@ -383,7 +524,7 @@ func _build_browser_card() -> Control:
 	cancel.pressed.connect(func() -> void:
 		_login.cancel_google())
 	box.add_child(_centered(cancel))
-	return box.get_parent() as Control
+	return box
 
 
 func _server_line() -> Label:
@@ -392,16 +533,13 @@ func _server_line() -> Label:
 	return line
 
 
-## The online card: one centred panel; returns the column to fill.
+## An online step: its title heads the panel; returns the column to fill.
 func _online_card(title: String) -> VBoxContainer:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(CARD_WIDTH, 0)
+	_panel_title.text = title
+	_panel_note.text = ""
 	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(CARD_WIDTH, 0)
 	box.add_theme_constant_override("separation", 16)
-	panel.add_child(box)
-	var heading := _heading(title)
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(heading)
 	return box
 
 
@@ -414,6 +552,7 @@ class SlotCard:
 
 	func _init(heading: Label) -> void:
 		panel.custom_minimum_size = Vector2(CARD_WIDTH_SLOT, CARD_HEIGHT)
+		panel.theme_type_variation = "Card"
 		var column := VBoxContainer.new()
 		column.add_theme_constant_override("separation", 8)
 		panel.add_child(column)
@@ -447,12 +586,13 @@ func _build_slot_card(slot: int, family: Family) -> Control:
 		box.add_child(_build_start_picker(slot))
 		var found := Button.new()
 		found.text = "Found family"
+		found.theme_type_variation = "PrimaryButton"
 		found.disabled = _busy
 		found.pressed.connect(_found_family.bind(slot, name_edit))
 		card.buttons.add_child(found)
 		return card.panel
 
-	var icon := ShapeIcon.new(family.sides, family.kind, 96, family.apex, family.worn_gear())
+	var icon := ShapeIcon.new(family.sides, family.kind, 76, family.apex, family.worn_gear())
 	box.add_child(icon)
 	var name_label := Label.new()
 	name_label.text = "The %s family" % family.family_name
@@ -471,6 +611,7 @@ func _build_slot_card(slot: int, family: Family) -> Control:
 
 	var play := Button.new()
 	play.text = "Play"
+	play.theme_type_variation = "PrimaryButton"
 	play.disabled = _busy or family.extinct
 	play.pressed.connect(_play.bind(slot))
 	card.buttons.add_child(play)
@@ -653,6 +794,7 @@ func _on_username_needed(problem: String) -> void:
 	_username_problem = problem
 	_in_browser = false
 	_set_busy(false)
+	_show_panel(true)
 
 
 func _disconnect() -> void:

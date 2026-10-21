@@ -14,6 +14,8 @@ extends RigidBody2D
 ## The world (or a mission) spawns them and gives out XP and loot when they die.
 
 signal died(enemy: Enemy)
+## A hit of its corner landed on `player` (Darren's bout counts these).
+signal struck(enemy: Enemy, player: PlayerShape)
 
 ## tier: gear tier this enemy drops. level: about where it's comfortable.
 ## Optional: "team" ("hostile" or "army"), "kind" (outline: "irregular",
@@ -21,7 +23,13 @@ signal died(enemy: Enemy)
 ## chances, before luck), "lethal" (false: can't bring a player below 1
 ## health), "still" (never moves), "paint" (the Revolt's colour), "gear" (a
 ## boss fights as if wearing a full set of this tier, log 0068), "boss",
-## "moves" (uses rush, nose dive and spike up every few seconds, log 0089).
+## "moves" (uses rush, nose dive and spike up every few seconds, log 0089;
+## or a list of the ones it uses: "spike", "dive", "rush"), "taunts" (its
+## own lines for TAUNTS), "wear" (drawn wearing a full set of this tier),
+## "named" (its name shows over it), "opening_hp" (its first hit on a
+## player leaves them at this much health, if they had more; log 0181).
+## Spawn data may give "owner", a peer id: it then fights only that player,
+## and only they can hurt it (a quest's bout, log 0181).
 const TYPES := {
 	"bandit": {
 		"name": "Bandit", "sides": 4, "radius": 22.0, "hp": 140, "damage": 22,
@@ -50,9 +58,22 @@ const TYPES := {
 		"drop": 0.05, "still": true,
 	},
 	"sparring": {
-		"name": "Sparring partner", "sides": 3, "kind": "isosceles", "apex": 40.0, "radius": 26.0,
+		"name": "Recruit", "sides": 3, "kind": "isosceles", "apex": 40.0, "radius": 26.0,
 		"hp": 170, "damage": 14, "xp": 10, "spin": 4.5, "hop": 150.0, "tier": Gear.LEATHER,
 		"level": "1-5", "drop": 0.15, "lethal": false,
+	},
+	# Your senior at the drill yard (the bootcamp quest, design log 0181):
+	# a recruit a year ahead, with spike up and a full set of leather.
+	"darren": {
+		"name": "Darren Heroldt", "sides": 3, "kind": "isosceles", "apex": 35.0, "radius": 27.0,
+		"hp": 1000, "damage": 18, "xp": 30, "spin": 5.5, "hop": 175.0, "tier": 0, "level": "3-5",
+		"lethal": false, "moves": ["spike"], "gear": Gear.LEATHER, "wear": Gear.LEATHER, "named": true,
+		"opening_hp": 2,
+		"taunts": {"spike": [
+			"Spike up! Mind your landing!",
+			"Here it comes, recruit. Get clear!",
+			"Plant, point, and... up you go!",
+		]},
 	},
 	# The Colour Revolt (design log 0068). *Proposed* numbers.
 	"rebel": {
@@ -162,6 +183,8 @@ const AIR_ACCEL := 150.0
 const SOLDIER_WEAR := ["", "plating_6", "", "", ""]
 
 var type := "bandit"
+## 0, or the one player it fights (a quest's bout, log 0181).
+var owner_peer := 0
 ## Server -> clients each frame: x, y, rotation, vx, vy, spin, time, smoothed
 ## on clients (logs 0093, 0095).
 var net_state := PackedFloat32Array():
@@ -210,6 +233,7 @@ var _pending_move := ""  # "spike", "dive" or "rush" while winding up
 var uses_moves := false
 var _corner_angles := PackedFloat32Array()
 var _ground_normal := Vector2.UP
+var hits_landed := 0  # server: corner hits that landed on a player this life
 
 
 static func create(data: Dictionary) -> Enemy:
@@ -217,13 +241,16 @@ static func create(data: Dictionary) -> Enemy:
 	e.name = data.name
 	e.type = data.type
 	e.room = data.room
+	e.owner_peer = data.get("owner", 0)
 	e.home = data.pos
 	e.position = data.pos
 	e._color = Palette.REVOLT if TYPES[e.type].get("paint", false) else data.get("color", Palette.PLAIN)
 	var info: Dictionary = TYPES[e.type]
 	e.max_hp = info.hp
 	e.damage = info.damage
-	e.uses_moves = data.get("moves", false) or info.get("moves", false)
+	var moves: Variant = info.get("moves", false)
+	e.uses_moves = bool(data.get("moves", false)) or (moves is Array and not (moves as Array).is_empty()) \
+			or (moves is bool and moves)
 	_apply_gear(e, info.get("gear", 0))
 	# A weakened boss (recon's Captain, design log 0088): health, damage and armor scaled.
 	var strength: float = data.get("strength", 1.0)
@@ -287,7 +314,8 @@ static func _apply_gear(e: Enemy, tier: int) -> void:
 		return
 	var worn := PackedStringArray()
 	for slot in Gear.SLOTS:
-		worn.append(Gear.item(slot, tier))
+		var military := Gear.is_military_tier(tier)
+		worn.append(Gear.item(slot, tier) if not military or slot in Gear.MILITARY_SLOTS else "")
 	var gains := Gear.total_bonus(worn)
 	e.max_hp += gains.get("vigor", 0) * Stats.HP_PER_VIGOR
 	e.damage *= 1.0 + Stats.DAMAGE_PER_FORCE * gains.get("force", 0)
@@ -319,9 +347,9 @@ func is_army() -> bool:
 	return info().get("team", "hostile") == "army"
 
 
-## Players' corners hurt hostiles only.
-func players_can_hit() -> bool:
-	return not is_army()
+## Players' corners hurt hostiles only; one fighting a bout, only its owner.
+func players_can_hit(peer := 0) -> bool:
+	return not is_army() and (owner_peer == 0 or peer == owner_peer)
 
 
 ## Server only. `from_peer` is the player who hit it, or 0 for a soldier.
@@ -440,7 +468,11 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		var dealt := damage * (MOVE_DAMAGE if _moves.active() else 1.0)
 		for hit in Combat.find_hits(state, _corners, _prev_linear, _prev_angular, _is_foe, _cooldowns):
 			if hit.target is PlayerShape:
-				(hit.target as PlayerShape).combat.take_hit(dealt, hit.push, info().get("lethal", true))
+				var p: PlayerShape = hit.target
+				var leave_at: int = info().get("opening_hp", -1) if hits_landed == 0 else -1
+				if p.combat.take_hit(dealt, hit.push, info().get("lethal", true), leave_at):
+					hits_landed += 1
+					struck.emit(self, p)
 			else:
 				var foe: Enemy = hit.target
 				foe.apply_central_impulse(hit.push * Combat.KNOCKBACK * foe.mass)
@@ -478,17 +510,19 @@ func _boss_move(state: PhysicsDirectBodyState2D, target: Node2D, grounded: bool)
 		return
 	var d := target.position - position
 	var move := ""
+	var known: Array = info().moves if info().get("moves") is Array else ["spike", "dive", "rush"]
 	if grounded and d.length() < SpikeUpAbility.RANGE + info().radius - 40.0:
 		move = "spike"
 	elif grounded and d.length() < 520.0:
 		move = "dive"
 	elif d.length() < BOSS_RUSH_RANGE:
 		move = "rush"
-	else:
+	if move not in known:
 		return
 	_pending_move = move
 	_windup = MOVE_WINDUP
-	_taunt((TAUNTS[move] as Array).pick_random())
+	var taunts: Dictionary = info().get("taunts", TAUNTS)
+	_taunt((taunts.get(move, TAUNTS[move]) as Array).pick_random())
 
 
 func _do_move(state: PhysicsDirectBodyState2D, target: Node2D, move: String) -> void:
@@ -497,7 +531,7 @@ func _do_move(state: PhysicsDirectBodyState2D, target: Node2D, move: String) -> 
 	var radius: float = info().radius
 	var d := target.position - position
 	if move == "spike":
-		var foes: Array = get_tree().get_nodes_in_group(PlayerShape.GROUP)
+		var foes: Array = get_tree().get_nodes_in_group(PlayerShape.GROUP).filter(_is_foe)
 		foes += get_tree().get_nodes_in_group(GROUP).filter(func(e: Node) -> bool:
 			return e != self and _is_foe(e) and not (e as Enemy).freeze)
 		(_moves.get_ability("spike_up") as SpikeUpAbility).start(self, state, _corners, _corner_angles, radius, foes)
@@ -509,6 +543,12 @@ func _do_move(state: PhysicsDirectBodyState2D, target: Node2D, move: String) -> 
 		(_moves.get_ability("nose_dive") as NoseDiveAbility).start(state, _ground_normal, speed, d.x / flight)
 	else:
 		(_moves.get_ability("rush") as RushAbility).start(state, signf(d.x) if d.x != 0.0 else 1.0, radius)
+
+
+## Server only. Says `line` in a bubble over it, to the players in its room
+## (a quest's bout, log 0181).
+func shout(line: String) -> void:
+	_taunt(line)
 
 
 ## Server: shout `line` in a speech bubble over this fighter, to the players
@@ -556,8 +596,11 @@ func _orbit_dir(player_x: float) -> float:
 	return signf(goal - position.x)
 
 
-## Hostiles fight players and soldiers; soldiers fight hostiles.
+## Hostiles fight players and soldiers; soldiers fight hostiles. One
+## fighting a bout fights only its owner.
 func _is_foe(o: Object) -> bool:
+	if owner_peer != 0:
+		return o is PlayerShape and (o as PlayerShape).peer_id == owner_peer
 	if o is PlayerShape:
 		return not is_army()
 	return o is Enemy and (o as Enemy).is_army() != is_army() and (o as Enemy).hp > 0
@@ -617,6 +660,12 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, 0.0)
 	if is_army():
 		Gear.draw_shape(self, _points, stats.sides, PackedStringArray(SOLDIER_WEAR))
+	elif stats.has("wear"):
+		var tier: int = stats.wear
+		var worn := PackedStringArray()
+		for slot in Gear.SLOTS:
+			worn.append(Gear.item(slot, tier) if slot in Gear.MILITARY_SLOTS or not Gear.is_military_tier(tier) else "")
+		Gear.draw_shape(self, _points, stats.sides, worn)
 	else:
 		draw_colored_polygon(_points, _color)
 		if stats.get("still", false):
@@ -634,6 +683,6 @@ func _draw() -> void:
 		draw_rect(bar, Palette.PARCHMENT)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * hp / maxf(max_hp, 1), bar.size.y)), Palette.HEALTH)
 		draw_rect(bar, Palette.INK, false, 1.0)
-	if is_boss():
+	if is_boss() or stats.get("named", false):
 		draw_string(font, Vector2(-150, -radius - 22), info().name, HORIZONTAL_ALIGNMENT_CENTER, 300, 18,
 				Palette.ink_at(position))

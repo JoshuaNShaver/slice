@@ -5,7 +5,8 @@ extends SaveStore
 ##
 ## The "local" account (the player at this machine: offline, or a LAN host
 ## playing) keeps today's paths: <base>families/slot_N.json and
-## <base>chests.json (and <base>unlocks.json, log 0174). Any other account (a LAN guest, a dev server's
+## <base>chests.json (and <base>unlocks.json, log 0174; <base>quests.json,
+## log 0183). Any other account (a LAN guest, a dev server's
 ## players) lives in <base>accounts/<id>/.
 
 const LOCAL := "local"
@@ -34,12 +35,16 @@ static func valid_account(account: String) -> bool:
 func load_account(account: String) -> Dictionary:
 	if not valid_account(account):
 		push_error("LocalFileStore: bad account id %s" % account)
-		return {"ok": false, "families": [], "chest": [], "unlocks": []}
+		return {"ok": false, "families": [], "chest": [], "unlocks": [], "quests": {}}
 	var out := SaveStore.empty_account()
 	for slot in SLOT_COUNT:
 		out.families[slot] = _read_family(_family_path(account, slot))
 	out.chest = _read_chest(_chest_path(account))
 	out.unlocks = _read_unlocks(_dir(account) + "unlocks.json")
+	var quests: Variant = _read_quests(_dir(account) + "quests.json")
+	if quests == null:
+		return {"ok": false, "families": [], "chest": [], "unlocks": [], "quests": {}}
+	out.quests = quests
 	return out
 
 
@@ -64,6 +69,11 @@ func save_chest(account: String, items: Array) -> void:
 func save_unlocks(account: String, names: Array) -> void:
 	if valid_account(account):
 		_write(_dir(account) + "unlocks.json", JSON.stringify({"names": names}, "\t"))
+
+
+func save_quests(account: String, progress: Dictionary) -> void:
+	if valid_account(account):
+		_write(_dir(account) + "quests.json", JSON.stringify({"progress": progress}, "\t"))
 
 
 func _dir(account: String) -> String:
@@ -100,6 +110,19 @@ func _read_family(path: String) -> Variant:
 		return data
 	DirAccess.rename_absolute(path, path + ".corrupt")
 	push_warning("Unreadable family save moved to %s.corrupt" % path)
+	return null
+
+
+## The quest progress, {} if there's none yet, or null if the file can't be
+## read: the plot's progress is worth keeping, so the account doesn't load
+## (and overwrite it) until someone looks.
+func _read_quests(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return {}
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if data is Dictionary and data.get("progress") is Dictionary:
+		return data.progress
+	push_error("Unreadable quest progress in %s" % path)
 	return null
 
 

@@ -29,15 +29,20 @@ func tick(step: float) -> void:
 	_area_heal()
 
 
-## A hit from an enemy's corner; `push` points from it to you.
+## A hit from an enemy's corner; `push` points from it to you. False if it
+## didn't land (just hit, dead, or watching a cutscene).
 ## A sparring partner's hits aren't `lethal`: they stop at 1 health (log 0072).
-func take_hit(raw: float, push: Vector2, lethal := true) -> void:
+## `leave_at` >= 0: the hit leaves you at that much health instead, if you
+## had more (Darren's opening hit, log 0181).
+func take_hit(raw: float, push: Vector2, lethal := true, leave_at := -1) -> bool:
 	if player.dead or _invulnerable > 0.0 or Time.get_ticks_msec() < _safe_until:
-		return
+		return false
 	var stats := player.stats
 	_invulnerable = INVULNERABLE_TIME
 	_since_combat = 0.0
 	var damage := roundi(Stats.damage_taken(raw, stats.rigidity))
+	if leave_at >= 0 and stats.hp > leave_at:
+		damage = stats.hp - leave_at
 	stats.hp = maxi(stats.hp - damage, 0 if lethal else 1)
 	player.get_tree().call_group(World.GROUP, "show_damage", player.position + Vector2(0, -24), damage, "player")
 	player.apply_central_impulse(push * Combat.KNOCKBACK * player.mass)
@@ -45,6 +50,7 @@ func take_hit(raw: float, push: Vector2, lethal := true) -> void:
 		player.dead = true
 		# Deferred: this runs inside a physics callback.
 		Net.player_died.call_deferred(player.peer_id)
+	return true
 
 
 ## Server only. Can't be hurt for `seconds` (0 ends it): a cutscene is
@@ -63,7 +69,7 @@ func corner_damage(corner: int) -> float:
 func hit_check(state: PhysicsDirectBodyState2D) -> void:
 	if not player.dead:
 		for hit in Combat.find_hits(state, player.corners, _prev_linear, _prev_angular,
-				func(o: Object) -> bool: return o is Enemy and (o as Enemy).players_can_hit(), _hit_cooldowns):
+				func(o: Object) -> bool: return o is Enemy and (o as Enemy).players_can_hit(player.peer_id), _hit_cooldowns):
 			var enemy: Enemy = hit.target
 			enemy.apply_central_impulse(hit.push * Combat.KNOCKBACK * enemy.mass)
 			var crit := randf() < Stats.lucky_chance(Stats.CRIT_CHANCE, player.stats.luck)

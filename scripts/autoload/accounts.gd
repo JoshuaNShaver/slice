@@ -50,6 +50,7 @@ var find_player := Callable()
 ## always "" for guests), "role" ("player", "admin" or "first_architect";
 ## logs 0125, 0147, 0152),
 ## "families" (Family or null), "chest", "unlocks" (names, log 0174),
+## "quests" (PlayerQuests.save_data, the player's across families, log 0183),
 ## "slot" (-1 until playing), "saved_at"}.
 var sessions: Dictionary = {}
 ## Server only. Every login is an admin (--dev-admins, for tests and dev
@@ -138,6 +139,11 @@ func family_of(id: int) -> Family:
 
 func chest_of(id: int) -> Array:
 	return sessions[id].chest if sessions.has(id) else []
+
+
+## Server only. The account's quest progress (log 0183), already checked.
+func quests_of(id: int) -> Dictionary:
+	return sessions[id].quests if sessions.has(id) else {}
 
 
 ## "player", "admin" or "first_architect" (logs 0125, 0147, 0152): admins
@@ -402,7 +408,8 @@ func _new_session(account: String, data: Dictionary) -> Dictionary:
 	if unlocks.size() != (data.get("unlocks", []) as Array).size():
 		store.save_unlocks(account, unlocks)  # keep what older saves showed
 	return {"account": account, "username": "", "role": "player", "families": families, "chest": data.chest,
-			"unlocks": unlocks, "slot": -1, "saved_at": SaveKeeper._now()}
+			"unlocks": unlocks, "quests": Quests.sanitize(data.get("quests", {})), "slot": -1,
+			"saved_at": SaveKeeper._now()}
 
 
 # --- Slots (server) --------------------------------------------------------

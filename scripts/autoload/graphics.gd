@@ -31,6 +31,9 @@ func _ready() -> void:
 	var default_font := ThemeDB.fallback_font
 	if SYMBOLS_FONT not in default_font.fallbacks:
 		default_font.fallbacks = default_font.fallbacks + [SYMBOLS_FONT]
+	# Everything is lettered as the menus are, in IM Fell English (log 0189).
+	# menu_font() takes the old default as its fallback, so call it first.
+	ThemeDB.fallback_font = UiTheme.menu_font()
 	var config := ConfigFile.new()
 	config.load(SAVE_PATH)  # missing file just leaves the defaults
 	max_fps = config.get_value("graphics", "max_fps", 0)

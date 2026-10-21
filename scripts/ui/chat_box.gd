@@ -18,6 +18,8 @@ extends Control
 ## 0138) until it closes: the whole screen, dark and see-through, in a
 ## fixed-width font, with imsdow, the companion. In the terminal Enter never
 ## leaves; Esc (or ✕) does, and \bye says goodbye to her first (log 0148).
+## In the terminal a line needs no "\": every line is a command, sent with
+## one (log 0196), so there's no chatting from it.
 
 signal line_entered(text: String)
 signal closed
@@ -266,9 +268,13 @@ func _build() -> void:
 	_field.placeholder_text = "Say something"
 	_field.context_menu_enabled = false
 	_field.keep_editing_on_text_submit = true
-	var focus_box: StyleBoxFlat = (get_theme_stylebox("normal", "LineEdit") as StyleBoxFlat).duplicate() \
-			if get_theme_stylebox("normal", "LineEdit") is StyleBoxFlat else StyleBoxFlat.new()
-	focus_box.bg_color = Palette.PARCHMENT_LIGHT  # the theme's see-through focus is unreadable over the world
+	# The theme's see-through focus is unreadable over the world: solid paper.
+	var focus_box := get_theme_stylebox("normal", "LineEdit").duplicate() as StyleBox
+	if focus_box is SketchBox:
+		(focus_box as SketchBox).fill_color = Palette.PARCHMENT_LIGHT
+		(focus_box as SketchBox).line_width = 2.2
+	elif focus_box is StyleBoxFlat:
+		(focus_box as StyleBoxFlat).bg_color = Palette.PARCHMENT_LIGHT
 	_field.add_theme_stylebox_override("focus", focus_box)
 	_focus_box = focus_box
 	_field.text_submitted.connect(_on_submitted)
@@ -374,6 +380,7 @@ func _on_submitted(text: String) -> void:
 		return
 	if terminal:
 		_add_line("%s %s" % [TERM_PROMPT, line], "echo")
+		line = as_command(line)
 		if line.to_lower() == BYE:
 			_say_bye()
 			return
@@ -416,12 +423,21 @@ func _on_field_input(event: InputEvent) -> void:
 	_field.accept_event()
 
 
-## Tab on a "\" line (log 0163): finishes the word being typed, or lists
-## what it could be. Admin commands only for admins, as only they can run
-## them.
+## In the terminal every line is a command, "\" or not (log 0196):
+## "players" is sent as "\players".
+static func as_command(line: String) -> String:
+	return line if line.begins_with(AdminConsole.ESCAPE) else AdminConsole.ESCAPE + line
+
+
+## Tab on a "\" line, or any line in the terminal (log 0163): finishes the
+## word being typed, or lists what it could be. Admin commands only for
+## admins, as only they can run them.
 func _complete() -> void:
 	var admin := Net.accounts.my_role in AdminConsole.ADMIN_ROLES
-	var done := AdminConsole.complete(_field.text, admin)
+	var bare := terminal and not _field.text.begins_with(AdminConsole.ESCAPE)
+	var done := AdminConsole.complete(as_command(_field.text) if bare else _field.text, admin)
+	if bare:
+		done.line = (done.line as String).trim_prefix(AdminConsole.ESCAPE)
 	if done.line != _field.text:
 		_field.text = done.line
 		_field.caret_column = _field.text.length()

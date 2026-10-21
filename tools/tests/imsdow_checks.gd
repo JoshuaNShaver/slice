@@ -28,8 +28,18 @@ func run() -> int:
 	_check(_chat.is_open and _chat.terminal, "Enter on an empty line stays in the terminal")
 	_chat.toggle()
 	_check(_chat.is_open, "the chat key doesn't close the terminal")
-	_enter("hello everyone")
-	_check(_chat.is_open and _chat.terminal, "plain chat from the terminal stays in it")
+	# In the terminal a line needs no \ (log 0196): it's sent with one.
+	var sent: Array[String] = []
+	_chat.line_entered.connect(func(line: String) -> void: sent.append(line))
+	_enter("players quests")
+	_enter("\\enemies")
+	_check(str(sent) == str(["\\players quests", "\\enemies"]), "terminal lines are sent as commands: %s" % str(sent))
+	_check(_chat.is_open and _chat.terminal, "a bare command stays in the terminal")
+	var field: LineEdit = _chat.get("_field")
+	field.text = "players qu"
+	_chat.call("_complete")
+	_check(field.text == "players quests ", "Tab completes without a \\: %s" % field.text)
+	field.text = ""
 
 	# Reactions to answers.
 	_command("\\nope", "There's no command \"nope\". Try \\help.")
@@ -38,7 +48,7 @@ func run() -> int:
 	_check(_said_from("repeat"), "the same command twice: %s" % _speech())
 	_command("\\enemies", "1 of 1 enemies:\n  E3  sparring  hp 170/170  at (0, 0)  4000 px from home  AWAY")
 	_check(_said_from("stuck"), "a lost enemy: %s" % _speech())
-	_command("\\player set level 3", "Admin_Al: level is now 3.")
+	_command("players set level 3", "Admin_Al: level is now 3.")
 	_check(_said_from("power"), "a player changed: %s" % _speech())
 
 	# Asleep: commands get mumbles, the third wakes her.
@@ -46,7 +56,7 @@ func run() -> int:
 	_check(_her.is_asleep(), "asleep")
 	_command("\\help", "Commands...")
 	_check(_said_from("mumbles") and _her.is_asleep(), "first command mumbled: %s" % _speech())
-	_command("\\player list", "1 online:")
+	_command("players", "1 online:")
 	_check(_her.is_asleep(), "still asleep after two")
 	_command("\\enemies", "0 of 0 enemies")
 	_check(not _her.is_asleep() and _said_from("waking"), "the third wakes her: %s" % _speech())
@@ -133,7 +143,7 @@ func run() -> int:
 	await tree.process_frame
 	_check(_her.get("_lines_from") == ConsoleCompanion.NON_ADMIN, "a player gets the non-admin lines")
 	_check(_said_from("hello") or _said_from("asleep"), "she greets a player: %s" % _speech())
-	_command("\\player list", "Only admins can use \\ commands. Try \\help.")
+	_command("players", "Only admins can use these commands. Try help.")
 	_check(_said_from("not_admin"), "an admin command from a player: %s" % _speech())
 	_chat.close()
 	Net.accounts.my_role = role_before

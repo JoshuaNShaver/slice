@@ -30,8 +30,10 @@ func marry(priest := "The Priest") -> bool:
 	var heir := Family.roll_heir(player.sides, player.kind, player.apex, rng,
 			certificate == Gear.BLESSED_CERTIFICATE)
 	var parent := {"sides": player.sides, "kind": player.kind, "apex": player.apex}
-	Net.play_cutscene(player.peer_id, Cutscenes.marriage(player.family_name, parent, heir, priest))
+	var scene := Cutscenes.marriage(player.family_name, parent, heir, priest)
 	player.become_heir(heir)
+	# A quest that starts at a birth begins, if this family hasn't had it (log 0179).
+	Net.play_cutscene(player.peer_id, player.quests.after_birth(scene, heir))
 	Net.heir_born_on_server(player.peer_id, heir)
 	return true
 

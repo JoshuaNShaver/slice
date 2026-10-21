@@ -126,7 +126,7 @@ const NPCS: Array[Dictionary] = [
 		"name": "A Shopkeeper", "at": Vector2(1660, -285), "sides": 3, "kind": "equilateral",
 		"radius": 26.0,
 		"lines": [
-			"Women's door on the west, men's on the east. Every house, by law.",
+			"Men's door on the west, the women's little one on the east. Every house, by law.",
 			"I sell to the Quarter's servants. Squares never come down themselves.",
 			"No windows? Why would we want windows? The light is the same indoors and out.",
 		],

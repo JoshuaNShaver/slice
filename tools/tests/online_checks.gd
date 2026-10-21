@@ -72,11 +72,11 @@ func run() -> int:
 	# An admin command in chat (log 0125): the server needs --dev-admins.
 	var hud: Node = _NoticeCatcher.new()
 	tree.root.add_child(hud)
-	me.chat.send_line("\\player levelup %d" % LEVEL_UPS)
+	me.chat.send_line("\\players levelup %d" % LEVEL_UPS)
 	for i in 30:
 		await tree.process_frame
 	var level := me.stats.level
-	_check(level == start_level + LEVEL_UPS, "leveled up to %d by \\player levelup (server answered: %s)"
+	_check(level == start_level + LEVEL_UPS, "leveled up to %d by \\players levelup (server answered: %s)"
 			% [level, " / ".join(hud.notices)])
 	# \diagnostics (log 0155): pings over the real connection.
 	hud.notices.clear()

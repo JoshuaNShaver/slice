@@ -150,7 +150,10 @@ func run() -> int:
 	Net.accounts.find_player = func(id: int) -> PlayerShape: return p if id == p.peer_id else null
 	p.inventory.add_to_bag(Gear.CERTIFICATE)
 	_check(p.actions.marry(), "marry")
-	_check(scenes.size() == 1 and (scenes[0].acts as Array).size() == 2, "wedding and birth cutscene sent")
+	# Wedding, birth, and some years passing (log 0180).
+	_check(scenes.size() == 1 and (scenes[0].acts as Array).size() == 3, "wedding and birth cutscene sent")
+	# The heir is irregular 1 time in 10, and irregulars don't get bootcamp.
+	_check(p.quests.has_started("bootcamp") == (p.kind != "irregular"), "a regular heir starts the bootcamp quest")
 	var hp_before := p.stats.hp
 	p.combat.take_hit(50.0, Vector2.UP)
 	_check(p.stats.hp == hp_before, "safe while watching")

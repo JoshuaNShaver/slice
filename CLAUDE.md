@@ -39,7 +39,7 @@ Mark your own suggestions `Proposed` until the user agrees.
   chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
   (server -> owner HUD messages), `PlayerChat` (chat lines and admin
   commands, log 0124; `Diagnostics` writes up `\diagnostics` and `\diag live`, and parses `\simulate lag`, logs 0155, 0159),
-  `PlayerInput` (owner's keys);
+  `PlayerInput` (owner's keys), `PlayerQuests` (quests, log 0179);
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
@@ -47,7 +47,7 @@ Mark your own suggestions `Proposed` until the user agrees.
   `Mission` (one squad's instanced battlefield) and `Missions` (server-side
   musters, pay, discharge). `Npc` (talkers, priests, healers; built from each
   terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
-  (house drawing), `Enemy`, `Pickup` (per-player loot), `NetSmoother`
+  (house drawing: open, with rooms, log 0188), `Enemy`, `Pickup` (per-player loot), `NetSmoother`
   (client-side smoothing of server-simulated bodies).
 - `scripts/abilities/`: one script per ability (`RushAbility`,
   `NoseDiveAbility`, `SpikeUpAbility`) extending `Ability`; `Abilities`
@@ -55,7 +55,7 @@ Mark your own suggestions `Proposed` until the user agrees.
   players and Revolt bosses). Log 0107.
 - `scripts/admin/`: admin commands typed into chat after `\` (log 0125):
   `AdminConsole` (parsing, help, who's an admin, short player ids) and one
-  script per noun (`PlayerCommands`, `EnemyCommands`). Roles: `profiles.role`, set only in
+  script per noun (`PlayerCommands` with its `players quests` sub-noun `PlayerQuestCommands`, `EnemyCommands`, `QuestCommands`; plural nouns, log 0196). Roles: `profiles.role`, set only in
   the database.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
@@ -76,9 +76,19 @@ Mark your own suggestions `Proposed` until the user agrees.
 - `scripts/family.gd`: family data, starting-triangle choices, save format.
 - `scripts/stats.gd`: stat formulas (health, energy, damage, torque, luck).
 - `scripts/cutscenes.gd`: the birth and wedding cutscenes' lines (server
-  content, logs 0168, 0171, 0172), sent by `Net.play_cutscene` and drawn by
-  `scripts/ui/cutscene_player.gd`. Read them all with
+  content, logs 0168, 0171, 0172, 0180) and helpers for writing any
+  cutscene, sent by `Net.play_cutscene` (which can run code once it ends)
+  and drawn by `scripts/ui/cutscene_player.gd`, whose header has the
+  format (log 0179). Read them all, quests' too, with
   `-s tools/tests/dump_cutscenes.gd`.
+- `scripts/quests/`: `Quests` (the registry and step format, log 0179) and
+  one script per quest, steps as data beside its cutscenes
+  (`BootcampQuest`, log 0181). `scripts/world/player_quests.gd`
+  (`PlayerQuests`, a PlayerShape part) keeps each player's progress (the
+  account's, not the family's: saved by `SaveKeeper` to the `quests` table
+  or `quests.json`, log 0183), counts goals, runs actions and syncs the
+  HUD's tracker. Test:
+  `-s tools/tests/test_quests.gd`.
 - `scripts/shape_geometry.gd`: polygon outlines. `scripts/web_app.gd`: the
   web build's update-and-reload (log 0122; switches to a new build id on
   launch, log 0166). `scripts/build_info.gd`: the build id (commit, plus a
@@ -88,11 +98,16 @@ Mark your own suggestions `Proposed` until the user agrees.
   `ConsoleCompanion`, imsdow, whose lines are in `imsdow.cfg` and animations are folders of text or picture
   frames in `assets/companion/<animation>/`, colored by
   `companion_pop.gdshader`; `tools/companion_ink.py` cleans pictures into
-  ink; logs 0138, 0141, 0143-0146), shape icon, stat bar, parchment background, atmosphere
-  (foreground dust/light/fog), menu (Offline / Online, log 0119), online
-  login, Google sign-in button.
+  ink; `tools/loading_screen.py` draws the web page's loading screen (the
+  Priest, log 0197) into `web/shell.html`; logs 0138, 0141, 0143-0146), shape icon, stat bar, parchment background (stained only in the poor
+  quarters, log 0190), atmosphere (foreground dust/light/fog), ink pass
+  (the hand-drawn shader over the world: crosshatched fog, logs 0191, 0194), menu (Offline / Online, log 0119; sidebar,
+  picture and family panel, log 0185), the menu's hand-drawn look
+  (`Sketch` line helpers, `SketchBox` style, `MenuScene` picture,
+  `UiTheme.build_menu`), online login, Google sign-in button.
 - UI is built in code from a bare root node; scenes stay minimal.
-- Fonts: `assets/fonts/` (DejaVu subsets, log 0136). The web build has no
+- Fonts: `assets/fonts/` (DejaVu subsets, log 0136; IM Fell English for
+  the main menu, log 0185). The web build has no
   system fonts, so a symbol must be in one of them to show there.
 
 ## Running

@@ -158,6 +158,7 @@ func _submit_equip(bag_index: int) -> void:
 	bag = new_bag
 	equipped = new_equipped
 	stats.apply_gains(Gear.set_bonus(equipped), 1)
+	player.quests.notify("equip", item)
 
 
 ## Take gear off, into a bag slot (-1: the first free one). Dropped on gear

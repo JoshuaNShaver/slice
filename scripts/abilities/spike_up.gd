@@ -30,7 +30,7 @@ func use_by_player(player: PlayerShape, state: PhysicsDirectBodyState2D) -> void
 		return
 	var foes: Array = player.get_tree().get_nodes_in_group(Enemy.GROUP).filter(func(e: Node) -> bool:
 		var enemy := e as Enemy
-		return enemy != null and enemy.players_can_hit() and not enemy.freeze and enemy.hp > 0 \
+		return enemy != null and enemy.players_can_hit(player.peer_id) and not enemy.freeze and enemy.hp > 0 \
 				and not enemy.is_boss())
 	start(player, state, player.corners, player.corner_angles, PlayerShape.RADIUS, foes)
 

@@ -26,7 +26,10 @@ const REACH := 140.0
 var display_name := ""
 var sides := 4
 var kind := "regular"
+var apex := 45.0  # an isosceles one's apex angle
 var radius := 30.0
+## Gear worn, indexed like Gear.SLOTS, drawn as a player's is (Gear.draw_shape).
+var wear := PackedStringArray()
 var color := Color.WHITE
 var role := "talk"
 var serves := "anyone"
@@ -37,20 +40,25 @@ var heal_area := Rect2()
 var heal_lines: Array = []
 ## Set by the world each frame, for the local player.
 var prompt := ""
+## Set by the world: a quest of the local player's sends them to talk to
+## this NPC (PlayerQuests.tracker), so it shows a mark.
+var quest_mark := false
 
 var _points: PackedVector2Array
 
 
 ## data: {"name", "at" (the floor point it stands on), "sides", "kind",
-## "radius", "color", "role", "serves", "lines", "refusals", "heal_area",
-## "heal_lines"}. Only "name" and "at" are required.
+## "apex", "radius", "color", "role", "serves", "lines", "refusals",
+## "heal_area", "heal_lines", "wear"}. Only "name" and "at" are required.
 static func create(data: Dictionary) -> Npc:
 	var n := Npc.new()
 	n.display_name = data.name
 	n.name = String(data.name).validate_node_name()
 	n.sides = data.get("sides", 4)
 	n.kind = data.get("kind", "regular")
+	n.apex = data.get("apex", 45.0)
 	n.radius = data.get("radius", 30.0)
+	n.wear = PackedStringArray(data.get("wear", []))
 	# Plain above ground (design log 0069); colour creeps back below.
 	var plain := Palette.chalk_for_sides(n.sides) if Regions.is_underworld(data.at) else Palette.PLAIN
 	n.color = data.get("color", plain)
@@ -60,7 +68,7 @@ static func create(data: Dictionary) -> Npc:
 	n.refusals = data.get("refusals", [])
 	n.heal_area = data.get("heal_area", Rect2())
 	n.heal_lines = data.get("heal_lines", n.lines)
-	n._points = _outline(n.sides, n.kind, n.radius, n.display_name)
+	n._points = _outline(n.sides, n.kind, n.radius, n.display_name, n.apex)
 	var lowest := 0.0
 	for p in n._points:
 		lowest = maxf(lowest, p.y)
@@ -69,9 +77,10 @@ static func create(data: Dictionary) -> Npc:
 
 
 ## Irregular NPCs each get their own lopsided outline, seeded by name.
-static func _outline(n_sides: int, n_kind: String, r: float, seed_name: String) -> PackedVector2Array:
+static func _outline(n_sides: int, n_kind: String, r: float, seed_name: String,
+		n_apex := 45.0) -> PackedVector2Array:
 	if n_kind != "irregular":
-		return ShapeGeometry.points(n_sides, n_kind, r)
+		return ShapeGeometry.points(n_sides, n_kind, r, n_apex)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(seed_name)
 	var pts := ShapeGeometry.points(n_sides, "regular", r)
@@ -119,6 +128,8 @@ func reach_distance(pos: Vector2) -> float:
 
 func prompt_for(p: PlayerShape) -> String:
 	var key := Controls.describe("interact")
+	if str(p.quests.tracker.get("talk_to", "")) == display_name and serves_player(p):
+		return "%s: report" % key
 	if role == "priest" and serves_player(p):
 		var certificate := p.actions.marriage_certificate()
 		if certificate == "":
@@ -140,6 +151,8 @@ func interact(p: PlayerShape) -> void:
 	if not serves_player(p):
 		_say(p, refusals)
 		return
+	if p.quests.talk(display_name):
+		return  # a quest had something to say (log 0179)
 	match role:
 		"priest":
 			if not p.actions.marry(display_name):
@@ -169,10 +182,13 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_colored_polygon(_points, color)
-	var outline := _points.duplicate()
-	outline.append(_points[0])
-	draw_polyline(outline, Palette.INK, 2.5, true)
+	if not wear.is_empty():
+		Gear.draw_shape(self, _points, sides, wear)  # armored, as on stage
+	else:
+		draw_colored_polygon(_points, color)
+		var outline := _points.duplicate()
+		outline.append(_points[0])
+		draw_polyline(outline, Palette.INK, 2.5, true)
 	if role == "priest" and kind != "irregular":
 		draw_arc(Vector2.ZERO, radius + 8, 0, TAU, 48, Color(Palette.CHALK[5], 0.9), 3.0, true)
 	var font := ThemeDB.fallback_font
@@ -180,3 +196,6 @@ func _draw() -> void:
 	draw_string(font, Vector2(-150, -radius - 18), display_name, HORIZONTAL_ALIGNMENT_CENTER, 300, 16, ink)
 	if prompt != "":
 		draw_string(font, Vector2(-220, -radius - 40), prompt, HORIZONTAL_ALIGNMENT_CENTER, 440, 16, ink)
+	elif quest_mark:
+		var bob := sin(Time.get_ticks_msec() / 250.0) * 3.0
+		draw_string(font, Vector2(-20, -radius - 40 + bob), "!", HORIZONTAL_ALIGNMENT_CENTER, 40, 30, Palette.XP.darkened(0.3))

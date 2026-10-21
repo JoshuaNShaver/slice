@@ -22,6 +22,8 @@ signal cutscene_started(scene: Dictionary)
 
 ## Server only: how long a player watching a cutscene is kept safe at most.
 const CUTSCENE_SAFE_TIME := 180.0  # s
+## Server only: peer id -> what runs once their cutscene ends (play_cutscene).
+var _after_cutscene: Dictionary = {}
 
 enum Mode { OFFLINE, HOST, JOIN }
 
@@ -48,6 +50,8 @@ var players: Dictionary = {}
 var progress: Dictionary = {}
 ## Server only. Peer id -> their house chests (design log 0064), checked too.
 var chests: Dictionary = {}
+## Server only. Peer id -> their account's quest progress (log 0183), checked.
+var quests: Dictionary = {}
 var mode := Mode.OFFLINE
 var port := DEFAULT_PORT
 var in_session := false
@@ -199,6 +203,7 @@ func _reset() -> void:
 	players.clear()
 	progress.clear()
 	chests.clear()
+	quests.clear()
 	in_session = false
 	_verified.clear()
 
@@ -318,6 +323,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_verified.erase(id)
 	progress.erase(id)
 	chests.erase(id)
+	quests.erase(id)
 	if multiplayer.is_server() and players.erase(id):
 		print("Peer %d left" % id)
 		_broadcast_players()
@@ -348,6 +354,7 @@ func _admit(id: int) -> void:
 	progress[id] = PlayerSave.sanitize(family.progress)
 	family.progress = progress[id]
 	chests[id] = PlayerSave.clean_items(accounts.chest_of(id), PlayerInventory.CHEST_SLOTS)
+	quests[id] = Quests.sanitize(accounts.quests_of(id))
 
 
 ## Server -> clients: the full player list.
@@ -372,6 +379,7 @@ func player_died(id: int) -> void:
 	var reason := accounts.on_died(id)
 	progress.erase(id)
 	chests.erase(id)
+	quests.erase(id)
 	_you_died.rpc_id(id, reason)
 	if players.erase(id):
 		_broadcast_players()
@@ -390,12 +398,18 @@ func heir_born_on_server(id: int, heir: Dictionary) -> void:
 	_heir_born.rpc_id(id, heir)
 
 
-## Server only. Plays a cutscene (Cutscenes) on one player's screen. They
-## can't be hurt until it ends (cutscene_done) or for CUTSCENE_SAFE_TIME.
-func play_cutscene(id: int, scene: Dictionary) -> void:
+## Server only. Plays a cutscene (CutscenePlayer's format) on one player's
+## screen. They can't be hurt until it ends (cutscene_done) or for
+## CUTSCENE_SAFE_TIME. `then` runs on the server once it has ended (watched
+## or skipped), e.g. a quest's next step (log 0179); not if they leave first.
+func play_cutscene(id: int, scene: Dictionary, then := Callable()) -> void:
 	var shape := _shape_of(id)
 	if shape != null:
 		shape.combat.keep_safe(CUTSCENE_SAFE_TIME)
+	var waiting: Array = _after_cutscene.get(id, [])
+	if then.is_valid():
+		waiting.append(then)
+	_after_cutscene[id] = waiting
 	_cutscene.rpc_id(id, scene)
 
 
@@ -415,9 +429,17 @@ func _cutscene_done() -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
-	var shape := _shape_of(id if id != 0 else multiplayer.get_unique_id())
+	if id == 0:
+		id = multiplayer.get_unique_id()
+	var shape := _shape_of(id)
 	if shape != null:
 		shape.combat.keep_safe(0.0)
+	# It ended: run what waited for it (and for any it replaced on screen).
+	var waiting: Array = _after_cutscene.get(id, [])
+	_after_cutscene.erase(id)
+	for then: Callable in waiting:
+		if then.is_valid() and shape != null:
+			then.call()
 
 
 ## Server only. The world's shape for a player (the world sets

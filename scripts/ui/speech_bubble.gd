@@ -17,6 +17,7 @@ const TOP_MARGIN := 150.0  # keep clear of the vitals and the pay counter
 const BASE_TIME := 3.0  # s on screen, plus a little per character
 const TIME_PER_CHAR := 0.04
 
+static var _speech_style: SketchBox
 var thought := false
 ## Where the tail points, relative to the target's position.
 var anchor_offset := Vector2.ZERO
@@ -37,6 +38,9 @@ func _init(target: Node2D, is_thought: bool, offset: Vector2) -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label = Label.new()
+	# Set here, not left to the theme: lines are measured before the
+	# bubble is in the tree.
+	_label.add_theme_font_override("font", UiTheme.menu_font())
 	_label.add_theme_font_size_override("font_size", 17)
 	_label.add_theme_color_override("font_color", Palette.INK)
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -129,12 +133,10 @@ func _draw_speech() -> void:
 	if _anchor.y < _box.end.y:  # the speaker is above (the box was pushed down)
 		from.y = _box.position.y
 	draw_dashed_line(from, _anchor, _tail_color, 2.0, 6.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(Palette.PARCHMENT_LIGHT, 0.94)
-	style.border_color = Palette.INK
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	draw_style_box(style, _box)
+	if _speech_style == null:  # drawn in pencil, like the menus (log 0189)
+		_speech_style = SketchBox.make(Color(Palette.PARCHMENT_LIGHT, 0.94), Palette.INK)
+		_speech_style.shaded = false
+	draw_style_box(_speech_style, _box)
 
 
 ## Bumps around the edge, then the body over their inner halves, so only

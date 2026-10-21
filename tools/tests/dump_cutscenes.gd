@@ -1,9 +1,11 @@
 extends SceneTree
-## Prints every birth and wedding cutscene's text (Cutscenes), to read them.
+## Prints every cutscene's text (Cutscenes, and each quest's scenes), to
+## read them.
 ## Godot --headless --path . -s tools/tests/dump_cutscenes.gd
 
 
-func _init() -> void:
+func _initialize() -> void:
+	await process_frame  # autoloads (quests reach the world's scripts)
 	_print("Founding, isosceles", Cutscenes.founding({"family": "Smith", "sides": 3, "kind": "isosceles", "apex": 40}))
 	_print("Founding, irregular", Cutscenes.founding({"family": "Smith", "sides": 3, "kind": "irregular", "apex": 40}))
 	var cases := [
@@ -19,6 +21,14 @@ func _init() -> void:
 	]
 	for c: Array in cases:
 		_print(c[0], Cutscenes.marriage("Smith", c[1], c[2], c[3]))
+	var you := {"family": "Smith", "sides": 3, "kind": "isosceles", "apex": 40, "equipped": []}
+	# Loaded now, not compiled with this script: quests reach the world's
+	# scripts, which need the autoloads.
+	var all: Dictionary = load("res://scripts/quests/quests.gd").get("ALL")
+	for quest_id: String in all:
+		var quest: Script = all[quest_id]
+		for scene_id: String in quest.SCENES:
+			_print("Quest %s: %s" % [quest_id, scene_id], quest.scene(scene_id, you))
 	quit()
 
 
@@ -26,9 +36,15 @@ func _print(title: String, scene: Dictionary) -> void:
 	print("\n=== %s ===" % title)
 	for act: Dictionary in scene.acts:
 		print("-- %s (%s, %s)" % [act.id, act.setting, act.place])
-		for beat: Dictionary in act.beats:
-			var who: String = act.cast[beat.who].name if act.cast.has(beat.who) else ""
-			print("  %s%s%s" % [(who + ": ") if who != "" else "", beat.text, "  [%s]" % beat.cue if beat.cue != "" else ""])
+		var names := {}
+		for a: Dictionary in act.cast:
+			names[a.id] = a.get("name", a.id)
+		for b: Dictionary in act.beats:
+			var who: String = names.get(b.who, "")
+			var cues := []
+			for c: Dictionary in b.get("cues", []):
+				cues.append("%s %s" % [c.do, c.get("who", "")])
+			print("  %s%s%s" % [(who + ": ") if who != "" else "", b.text, "  [%s]" % ", ".join(cues) if not cues.is_empty() else ""])
 	if scene.has("wake"):
 		print("-- wake (%s)" % scene.wake_speaker)
 		for line: String in scene.wake:

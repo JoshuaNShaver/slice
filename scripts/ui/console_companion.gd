@@ -57,8 +57,8 @@ const DEFAULTS := {
 ##   unknown      the server didn't know the command
 ##   not_admin    a player who isn't an admin tried an admin command
 ##   repeat       the same command twice in a row
-##   stuck        \enemies found one AWAY
-##   power        \player set or levelup changed someone
+##   stuck        enemies found one AWAY
+##   power        players set or levelup changed someone
 ##   hello        the terminal opening, or \hello
 ##   goodbye      \bye, or the terminal closing
 const DEFAULT_LINES := {
@@ -226,9 +226,9 @@ func reply(line: String, text: String) -> void:
 		list = "unknown"
 	elif text.begins_with("Only admins can use"):
 		list = "not_admin"
-	elif (asked.begins_with("\\enemies") or asked.begins_with("\\enemy list")) and "AWAY" in text:
+	elif asked.begins_with("\\enemies") and "AWAY" in text:
 		list = "stuck"
-	elif (asked.begins_with("\\player set") or asked.begins_with("\\player levelup")) \
+	elif (asked.begins_with("\\players set") or asked.begins_with("\\players levelup")) \
 			and (" is now " in text or " -> " in text):
 		list = "power"
 	if list != "" and _lines.has(list):

@@ -47,12 +47,15 @@ const SIGNS: Array[Dictionary] = [
 ## The barracks' people (World builds them as Npc).
 const NPCS: Array[Dictionary] = [
 	{
-		"name": "A Drill Sergeant", "at": Vector2(-2490, FLOOR_Y), "sides": 3, "kind": "isosceles",
+		# Gives the bootcamp quest's orders (BootcampQuest, design log 0181).
+		# Dressed as on stage: full steel (BootcampQuest.SERGEANT_LOOK).
+		"name": BootcampQuest.SERGEANT, "at": Vector2(-2490, FLOOR_Y), "sides": 3, "kind": "isosceles",
+		"apex": BootcampQuest.SERGEANT_LOOK.apex, "wear": BootcampQuest.SERGEANT_LOOK.wear,
 		"radius": 28.0, "serves": "regulars",
 		"lines": [
 			"Corners first, recruit! A face never hurt anybody.",
 			"Hit the straw till you're level three or so. Then go see the General.",
-			"The partners pull their punches. The Revolt won't.",
+			"The recruits pull their punches. The Revolt won't.",
 			"Jump again as you land. Off a corner you'll fly. Use it.",
 		],
 	},

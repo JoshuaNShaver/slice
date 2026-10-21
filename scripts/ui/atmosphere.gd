@@ -6,32 +6,36 @@ extends Control
 ## moving between regions blends them. Drawn on each client only, under the
 ## HUD. Hidden on Low graphics (design log 0094).
 
-const SPECKS := 56
+const SPECKS := 120  # the most any mood shows
+const SPECKS_PER_MOTE := 56  # shown at motes 1.0
 const SHAFTS := 3
 const FOG_BANKS := 5
 const BLEND_RATE := 0.8  # how fast moods change, per second
 
 ## Per place (Regions ids; "" is between places, e.g. a shaft):
 ## motes: how many specks show (0-1). shafts: light beams. fog: low fog.
-## rise: specks drift up (ash, incense) instead of settling.
+## rise: specks drift up (ash, incense) instead of settling; above 1 they
+## rise faster. bold: how big and bright the specks are (1 is faint).
 const MOODS := {
-	"center": {"motes": 0.55, "shafts": 1.0, "fog": 0.0, "rise": 0.0},
-	"barracks": {"motes": 0.7, "shafts": 0.6, "fog": 0.0, "rise": 0.0},
-	"mission": {"motes": 0.6, "shafts": 0.3, "fog": 0.5, "rise": 0.4},
-	"noble": {"motes": 0.15, "shafts": 0.35, "fog": 0.0, "rise": 0.0},
-	"hill": {"motes": 0.4, "shafts": 1.0, "fog": 0.0, "rise": 0.3},
-	"temple": {"motes": 0.7, "shafts": 1.5, "fog": 0.0, "rise": 1.0},
-	"undercroft": {"motes": 0.7, "shafts": 0.0, "fog": 1.0, "rise": 1.0},
-	"cave": {"motes": 0.5, "shafts": 0.0, "fog": 0.7, "rise": 0.6},
-	"": {"motes": 0.3, "shafts": 0.0, "fog": 0.3, "rise": 0.5},
+	"center": {"motes": 0.55, "shafts": 1.0, "fog": 0.0, "rise": 0.0, "bold": 1.0},
+	"barracks": {"motes": 0.7, "shafts": 0.6, "fog": 0.0, "rise": 0.0, "bold": 1.0},
+	# The front (logs 0195, 0198): ash rising off the battlefield.
+	"mission": {"motes": 1.1, "shafts": 0.3, "fog": 0.5, "rise": 1.2, "bold": 1.3},
+	"noble": {"motes": 0.15, "shafts": 0.35, "fog": 0.0, "rise": 0.0, "bold": 1.0},
+	"hill": {"motes": 0.4, "shafts": 1.0, "fog": 0.0, "rise": 0.3, "bold": 1.0},
+	"temple": {"motes": 0.7, "shafts": 1.5, "fog": 0.0, "rise": 1.0, "bold": 1.0},
+	"undercroft": {"motes": 0.7, "shafts": 0.0, "fog": 1.0, "rise": 1.0, "bold": 1.0},
+	"cave": {"motes": 0.5, "shafts": 0.0, "fog": 0.7, "rise": 0.6, "bold": 1.0},
+	"": {"motes": 0.3, "shafts": 0.0, "fog": 0.3, "rise": 0.5, "bold": 1.0},
 }
 
 ## The camera's view center, set by the world each frame.
 var view := Vector2.ZERO
 
 var _specks: Array[Dictionary] = []
-var _mood := {"motes": 0.0, "shafts": 0.0, "fog": 0.0, "rise": 0.0}
+var _mood := {"motes": 0.0, "shafts": 0.0, "fog": 0.0, "rise": 0.0, "bold": 1.0}
 var _time := 0.0
+var _fall := 0.0  # how far the specks have settled (or, negative, risen), per unit of speed
 
 
 func _ready() -> void:
@@ -59,6 +63,7 @@ func _process(delta: float) -> void:
 	var k := clampf(delta * BLEND_RATE, 0.0, 1.0)
 	for key: String in _mood:
 		_mood[key] = lerpf(_mood[key], target[key], k)
+	_fall += delta * lerpf(0.4, -1.0, _mood.rise)  # summed, so a mood change doesn't jump them
 	queue_redraw()
 
 
@@ -97,19 +102,21 @@ func _draw_fog(strength: float) -> void:
 
 
 func _draw_specks(under: float) -> void:
-	var count := int(SPECKS * _mood.motes)
+	var count := mini(int(SPECKS_PER_MOTE * _mood.motes), SPECKS)
 	var wrap := size + Vector2(100, 100)
 	var light := Palette.PARCHMENT_LIGHT.lerp(Palette.CHALK_LINE, under)
 	for i in count:
 		var s: Dictionary = _specks[i]
 		var drift := Vector2(sin(_time * 0.4 + s.phase) * 14.0,
-				_time * s.speed * lerpf(0.4, -1.0, _mood.rise))
+				_fall * s.speed)
+		var bold: float = _mood.bold
 		var near: float = s.near
 		var pos: Vector2 = Vector2(s.x, s.y) * wrap - view * near + drift
 		pos = Vector2(fposmod(pos.x, wrap.x), fposmod(pos.y, wrap.y)) - Vector2(50, 50)
 		var twinkle := 0.6 + 0.4 * sin(_time * 1.3 + s.phase * 3.0)
-		var color: Color = Color(Palette.INK, 0.16) if s.dark and under < 0.5 else Color(light, 0.5 * twinkle)
-		draw_circle(pos, s.size * (near - 0.6), color)
+		var color: Color = Color(Palette.INK, 0.16 * bold) if s.dark and under < 0.5 \
+				else Color(light, minf(0.5 * twinkle * bold, 0.95))
+		draw_circle(pos, s.size * (near - 0.6) * bold, color)
 
 
 static func _ellipse(center: Vector2, radii: Vector2) -> PackedVector2Array:

@@ -26,6 +26,8 @@ extends CanvasLayer
 ##   the key hints, the quick slots at the bottom center, and the bag only
 ##   while a panel is open. Drag a bag item onto the drop zone beside the
 ##   bag to drop it (design log 0131).
+## - Top right, under the pay: the quest you're on and its goals (design
+##   log 0179, PlayerQuests.tracker).
 ## - Chat (ChatBox, design log 0124): Enter, or Chat on a touch screen.
 ##   What players nearby say also shows in a bubble over them.
 ## Energy is drawn by PlayerShape, as pips over your own shape.
@@ -94,7 +96,12 @@ var _countdown_ready: Button
 var _countdown_left := 0.0
 var _underground := false  # chalk text, over the underworld's slate
 var _cutscene: CutscenePlayer
-var _after_cutscene: Array[String] = []  # thoughts held back while one plays
+var _after_cutscene: Array[Callable] = []  # lines and thoughts held back while one plays
+var _tracker: PanelContainer  # the quest you're on (log 0179)
+var _tracker_quest: Label
+var _tracker_text: Label
+var _tracker_goals: Label
+var _tracker_shown: Variant = null  # the tracker last drawn
 # Last values seen, to announce changes.
 var _seen := {}
 
@@ -133,6 +140,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_character.visible = not _character.visible
 		_menu.visible = false
 		_controls.visible = false
+		if _character.visible and _me != null and is_instance_valid(_me):
+			_me.quests.report("open", "character")  # a quest may wait for it (log 0179)
 	elif event.is_action_pressed("menu"):
 		if _storage.visible or _orders.visible or _shop.visible:
 			_storage.visible = false
@@ -230,6 +239,7 @@ func update(me: PlayerShape) -> void:
 	_set_text(_pay_label, "Pay: %d" % me.stats.pay)
 	_set_text(_shop_pay, "Your pay: %d" % me.stats.pay)
 	_update_abilities(me)
+	_update_tracker(me.quests.tracker)
 	_health_bar.set_values(me.stats.hp, me.stats.max_hp)
 	if me.stats.level >= Stats.MAX_LEVEL:
 		_xp_bar.set_values(1.0, 1.0)
@@ -334,6 +344,9 @@ func show_message(text: String) -> void:
 ## over them; a far one (the General, from the front) or no one ("") is
 ## heard as a thought.
 func say(speaker: String, text: String) -> void:
+	if cutscene_playing():
+		_after_cutscene.append(say.bind(speaker, text))
+		return
 	if speaker == "":
 		think(text)
 		return
@@ -375,25 +388,30 @@ func cutscene_playing() -> bool:
 	return _cutscene != null and _cutscene.playing()
 
 
-## The overlay closed: tell the server, then say what waited for it, and
-## the wake lines (the Gleaner, log 0171), one every few seconds.
+## The overlay closed: tell the server, then the wake lines (the Gleaner,
+## log 0171; a quest's intro, log 0179), one every few seconds, then what
+## waited for it. A wake line is a string (said by wake_speaker) or
+## [speaker, line].
 func _on_cutscene_finished(scene: Dictionary) -> void:
 	Net.cutscene_done()
 	var speaker := str(scene.get("wake_speaker", ""))
 	var wake: Array = scene.get("wake", [])
 	for i in wake.size():
-		get_tree().create_timer(WAKE_FIRST + i * WAKE_EVERY).timeout.connect(say.bind(speaker, str(wake[i])))
+		var line: Variant = wake[i]
+		var by := str(line[0]) if line is Array else speaker
+		var text := str(line[1]) if line is Array else str(line)
+		get_tree().create_timer(WAKE_FIRST + i * WAKE_EVERY).timeout.connect(say.bind(by, text))
 	var waiting := _after_cutscene.duplicate()
 	_after_cutscene.clear()
 	var after := WAKE_FIRST + wake.size() * WAKE_EVERY if not wake.is_empty() else WAKE_FIRST
-	for text: String in waiting:
-		get_tree().create_timer(after).timeout.connect(think.bind(text))
+	for i in waiting.size():
+		get_tree().create_timer(after + i * 0.3).timeout.connect(waiting[i])
 
 
 ## Your own news, in a thought cloud beside you (after any cutscene).
 func think(text: String) -> void:
 	if cutscene_playing():
-		_after_cutscene.append(text)
+		_after_cutscene.append(think.bind(text))
 		return
 	if _me == null or not is_instance_valid(_me):
 		show_message(text)
@@ -535,7 +553,7 @@ func _build() -> void:
 	_root = Control.new()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.theme = UiTheme.build()
+	_root.theme = UiTheme.build_menu()  # the main menu's look (log 0189)
 	add_child(_root)
 
 	_bubble_layer = Control.new()
@@ -589,19 +607,83 @@ func _build() -> void:
 	_message.modulate.a = 0.0
 	_root.add_child(_message)
 	_root.add_child(_build_countdown())
-	_root.add_child(_build_diagnostics())
+	# Top right, under the pay: the quest tracker, then \diag live.
+	var right := VBoxContainer.new()
+	right.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
+	right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	right.offset_top = MARGIN + 32
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	right.add_theme_constant_override("separation", 8)
+	_root.add_child(right)
+	right.add_child(_build_tracker())
+	right.add_child(_build_diagnostics())
 	_cutscene = CutscenePlayer.new()
 	_cutscene.finished.connect(_on_cutscene_finished)
 	_root.add_child(_cutscene)  # last: over everything
 
 
-## Top right, under your pay: \diag live's numbers, light on dark so they
+## The quest you're on (log 0179): its name, the objective, and each goal
+## with how far along it is. See-through parchment, like tooltips.
+func _build_tracker() -> Control:
+	_tracker = PanelContainer.new()
+	_tracker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := SketchBox.make(Color(Palette.PARCHMENT_LIGHT, 0.82), Color(Palette.INK, 0.5), 10.0)
+	box.line_width = 1.2
+	box.shaded = false
+	_tracker.add_theme_stylebox_override("panel", box)
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", 4)
+	_tracker.add_child(column)
+	_tracker_quest = Label.new()
+	_tracker_quest.add_theme_font_size_override("font_size", 13)
+	_tracker_quest.add_theme_color_override("font_color", Palette.INK_FADED)
+	column.add_child(_tracker_quest)
+	_tracker_text = Label.new()
+	_tracker_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tracker_text.custom_minimum_size.x = 280
+	_tracker_text.add_theme_font_size_override("font_size", 16)
+	_tracker_text.add_theme_color_override("font_color", Palette.INK)
+	column.add_child(_tracker_text)
+	_tracker_goals = Label.new()
+	_tracker_goals.add_theme_font_size_override("font_size", 15)
+	_tracker_goals.add_theme_color_override("font_color", Palette.INK)
+	column.add_child(_tracker_goals)
+	_tracker.visible = false
+	return _tracker
+
+
+func _update_tracker(shown: Dictionary) -> void:
+	if _tracker == null or shown == _tracker_shown:
+		return
+	_tracker_shown = shown.duplicate(true)
+	_tracker.visible = not shown.is_empty()
+	if shown.is_empty():
+		return
+	_tracker_quest.text = str(shown.get("quest", "")).to_upper()
+	_tracker_text.text = str(shown.get("text", ""))
+	var lines: Array[String] = []
+	for goal: Array in shown.get("goals", []):
+		var label := _with_keys(str(goal[0]))
+		var have := int(goal[1])
+		var need := int(goal[2])
+		var count := " %d/%d" % [have, need] if need > 1 else ""
+		lines.append(("✓ " if have >= need else "· ") + label + count)
+	_tracker_goals.text = "\n".join(lines)
+
+
+## "{character_sheet}" in a quest's text becomes that control's key.
+static func _with_keys(text: String) -> String:
+	for entry: Dictionary in Controls.ACTIONS:
+		var action := str(entry.action)
+		text = text.replace("{%s}" % action, Controls.describe(action))
+	return text
+
+
+## Under the quest tracker: \diag live's numbers, light on dark so they
 ## read over any ground.
 func _build_diagnostics() -> Control:
 	_diag = PanelContainer.new()
-	_diag.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
-	_diag.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_diag.offset_top = MARGIN + 32
 	_diag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var box := StyleBoxFlat.new()
 	box.bg_color = Color(0, 0, 0, 0.55)
@@ -756,9 +838,14 @@ func _build_character() -> Control:
 	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
 
+	var title_row := HBoxContainer.new()
+	column.add_child(title_row)
 	_character_title = Label.new()
-	_character_title.add_theme_font_size_override("font_size", 22)
-	column.add_child(_character_title)
+	_character_title.add_theme_font_size_override("font_size", 28)
+	title_row.add_child(_character_title)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	title_row.add_child(clear_of_close)
 
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 32)
@@ -885,9 +972,7 @@ func _build_countdown() -> Control:
 	panel.offset_bottom += 40
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	panel.visible = false
-	var box: StyleBoxFlat = _root.theme.get_stylebox("panel", "PanelContainer").duplicate()
-	box.bg_color.a = 1.0
-	panel.add_theme_stylebox_override("panel", box)
+	panel.add_theme_stylebox_override("panel", _solid_panel_box())
 	_countdown = panel
 	var column := VBoxContainer.new()
 	column.custom_minimum_size.x = 240
@@ -1167,16 +1252,28 @@ func _centered_panel() -> PanelContainer:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	panel.visible = false
-	var box: StyleBoxFlat = _root.theme.get_stylebox("panel", "PanelContainer").duplicate()
-	box.bg_color.a = 1.0  # the HUD's usual see-through panel is too busy over the world
-	panel.add_theme_stylebox_override("panel", box)
+	panel.add_theme_stylebox_override("panel", _solid_panel_box())
 	return panel
+
+
+## The theme's torn parchment panel, made opaque: see-through is too busy
+## over the world.
+func _solid_panel_box() -> StyleBox:
+	var box := _root.theme.get_stylebox("panel", "PanelContainer").duplicate() as StyleBox
+	if box is SketchBox:
+		(box as SketchBox).fill_color.a = 1.0
+	elif box is StyleBoxFlat:
+		(box as StyleBoxFlat).bg_color.a = 1.0
+	return box
 
 
 ## An ✕ in the panel's top right corner that runs `on_close`.
 func _add_close_button(panel: PanelContainer, on_close: Callable) -> void:
 	var close := Button.new()
 	close.text = "✕"
+	close.flat = true
+	close.add_theme_font_override("font", Graphics.SYMBOLS_FONT)
+	close.add_theme_font_size_override("font_size", 22)
 	close.tooltip_text = "Close"
 	close.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
 	close.custom_minimum_size = Vector2(CLOSE_SIZE, CLOSE_SIZE)
@@ -1208,7 +1305,7 @@ func _row(label_text: String, value: Control) -> HBoxContainer:
 func _heading(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_font_size_override("font_size", 26)
 	return label
 
 

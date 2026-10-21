@@ -2,7 +2,8 @@ class_name SaveKeeper
 extends RefCounted
 ## Server only. When to write a playing account's family and chests to the
 ## store (design log 0113). The world calls checkpoint() every few
-## seconds; a meaningful change (level, bag, gear, abilities, chests) is
+## seconds; a meaningful change (level, bag, gear, abilities, chests,
+## quests) is
 ## saved at once, but no more often than MIN_GAP; anything else (XP, pay)
 ## waits for SAVE_EVERY. Leaving, dying and marrying save at once.
 
@@ -12,9 +13,12 @@ const SAVE_EVERY := 45.0  # s, for changes that aren't meaningful
 var store: SaveStore
 
 
-## `session` is an Accounts session: {"account", "families", "chest",
+## Quest progress is the account's (log 0183): saved with any family, or
+## none (a family that just ended).
+## `session` is an Accounts session: {"account", "families", "chest", "quests",
 ## "slot", "saved_at"}. `force` saves any change now.
 func checkpoint(session: Dictionary, p: PlayerShape, force := false) -> void:
+	_checkpoint_quests(session, p, force)
 	var family: Family = _family(session)
 	if family == null or p == null or p.generation != family.generation:
 		return
@@ -35,6 +39,22 @@ func checkpoint(session: Dictionary, p: PlayerShape, force := false) -> void:
 	if chest_changed:
 		session.chest = chest
 		store.save_chest(session.account, chest)
+
+
+## A quest step is as meaningful as a level: saved at once, at most every
+## MIN_GAP (or now, when forced).
+func _checkpoint_quests(session: Dictionary, p: PlayerShape, force: bool) -> void:
+	if p == null or not session.has("quests"):
+		return
+	var quests := p.quests.save_data()
+	if quests == session.quests:
+		return
+	var since := _now() - float(session.get("quests_saved_at", -INF))
+	if not force and since < MIN_GAP:
+		return
+	session.quests = quests
+	session.quests_saved_at = _now()
+	store.save_quests(session.account, quests)
 
 
 func save_family(session: Dictionary) -> void:

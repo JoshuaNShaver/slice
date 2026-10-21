@@ -37,6 +37,9 @@ func run() -> int:
 	p.inventory.chest = chest
 	var level: int = p.stats.level
 	_check(level > 1, "gained levels")
+	# A new family's birth starts bootcamp; report to the Sergeant (log 0181).
+	_check(p.quests.has_started("bootcamp"), "bootcamp started at the founding")
+	p.quests.talk(BootcampQuest.SERGEANT)
 	var bag := p.inventory.bag
 	net.leave()
 	world.free()
@@ -51,6 +54,7 @@ func run() -> int:
 	_check(p.stats.level == level, "level restored")
 	_check(p.inventory.bag == bag, "bag restored")
 	_check(p.inventory.chest[3] == "voice_7", "chest restored")
+	_check(FileAccess.file_exists(_base + "quests.json") and _bootcamp_step(p) == 1, "quest progress restored")
 	# An heir born irregular unlocks it, for good, even once that family is gone.
 	net.accounts.on_heir(1, {"sides": 3, "kind": "irregular", "apex": 50, "luck": 20})
 	net.leave()
@@ -60,11 +64,22 @@ func run() -> int:
 	_check(Family.UNLOCK_IRREGULAR in fam_store.unlocks, "irregular birth unlocks irregular starts")
 	var crooked: Family = fam_store.found_family(1, "Crooked", "irregular")
 	_check(crooked.kind == "irregular", "irregular family founded once unlocked")
+	# Quests are the player's (log 0183): the new family carries on.
+	net.start_offline(1)
+	world = await _open_world()
+	p = world.player(1)
+	_check(_bootcamp_step(p) == 1 and p.quests.tracker.is_empty(), "a new family keeps the quest; irregular, it waits")
+	net.leave()
+	world.free()
 
 	_check_cadence()
 	_remove_dir(ProjectSettings.globalize_path(_base))
 	print("DONE fails=%d" % _fails)
 	return _fails
+
+
+func _bootcamp_step(p: PlayerShape) -> int:
+	return int(p.quests.save_data().get("bootcamp", {}).get("step", -1))
 
 
 func _open_world() -> World:
@@ -112,6 +127,9 @@ class CountingStore extends SaveStore:
 		writes += 1
 
 	func save_chest(_account: String, _items: Array) -> void:
+		writes += 1
+
+	func save_quests(_account: String, _progress: Dictionary) -> void:
 		writes += 1
 
 

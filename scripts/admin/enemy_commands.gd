@@ -1,7 +1,7 @@
 class_name EnemyCommands
 extends RefCounted
-## `\enemy ...` admin commands (design log 0137); see AdminConsole.
-## `\enemies` is short for `\enemy list`.
+## `enemies ...` admin commands (design logs 0137, 0196); see AdminConsole.
+## `enemies` alone lists them.
 ##
 ## For finding enemies that went missing: each one's place, health, and how
 ## far it is from home. "AWAY" marks one outside the area it guards and far
@@ -9,10 +9,10 @@ extends RefCounted
 
 const HELP := "find enemies (and ones that are stuck)"
 const VERBS := {
-	"list": {"usage": "enemy list [--away] [--type name]", "flags": ["away", "type"],
+	"list": {"usage": "enemies list [--away] [--type name]", "flags": ["away", "type"],
 			"help": "Every enemy: name, type, hp, where it is, how far from home. --away: only ones away from home."},
-	"get": {"usage": "enemy get <name>", "flags": [],
-			"help": "One enemy's details, by the name \\enemy list shows (E3, Mission1_4)."},
+	"get": {"usage": "enemies get <name>", "flags": [],
+			"help": "One enemy's details, by the name enemies shows (E3, Mission1_4)."},
 }
 ## px from home that counts as away, if it's outside its area too.
 const AWAY := 300.0
@@ -20,7 +20,7 @@ const AWAY := 300.0
 
 func run_list(caller: PlayerShape, words: Array[String], flags: Dictionary) -> String:
 	if not words.is_empty():
-		return "Usage: \\" + VERBS.list.usage
+		return "Usage: " + VERBS.list.usage
 	var all := _enemies(caller)
 	var shown: Array[Enemy] = []
 	for e in all:
@@ -39,7 +39,7 @@ func run_list(caller: PlayerShape, words: Array[String], flags: Dictionary) -> S
 
 func run_get(caller: PlayerShape, words: Array[String], _flags: Dictionary) -> String:
 	if words.size() != 1:
-		return "Usage: \\" + VERBS.get.usage
+		return "Usage: " + VERBS.get.usage
 	for e in _enemies(caller):
 		if String(e.name).to_lower() == words[0].to_lower():
 			var place: Dictionary = Regions.at(e.position)
@@ -51,7 +51,7 @@ func run_get(caller: PlayerShape, words: Array[String], _flags: Dictionary) -> S
 						int(e.linear_velocity.y), e.angular_velocity],
 				"  %s" % ("frozen" if e.freeze else ("asleep" if e.sleeping else "awake")),
 			])
-	return "No enemy is called \"%s\". Try \\enemy list." % words[0]
+	return "No enemy is called \"%s\". Try enemies." % words[0]
 
 
 ## Outside the area it guards and far from home.

@@ -32,6 +32,10 @@ const SETTLE := 0.08  # seconds: how fast a correction fades (time constant)
 const SETTLE_BIG := 0.25  # ... for a correction of BIG_OFF or more
 const BIG_OFF := 150.0  # px
 const AVERAGE := 0.2  # seconds of updates a coasting body's velocity is taken over
+## Seconds ahead: a guess this short uses the update's own velocity and
+## spin, which keep a tumbling shape's corner on the ground; it blends into
+## the AVERAGE by the time it's this long ahead again (log 0178).
+const OWN_VELOCITY := 0.05
 const KEEP := 0.5  # seconds of updates to hold on to
 const TELEPORT := 300.0  # px moved in one update that means a jump cut, not motion
 const CLOCK_WRAP := 4096.0  # server time is sent as seconds mod this, to fit a float32
@@ -193,15 +197,18 @@ func _target(now: float) -> Vector3:
 	return _poses[last]
 
 
-## Update i carried forward to time t, for at most MAX_GUESS: at its
-## recent velocity and spin, dying away over COAST, and falling under
-## gravity.
+## Update i carried forward to time t, for at most MAX_GUESS: at its own
+## velocity and spin at first, then its recent ones (log 0178), dying away
+## over COAST, and falling under gravity.
 func _guess(i: int, t: float) -> Vector3:
 	if _vels[i] == Vector3.ZERO:
 		return _poses[i]  # moved by script (an elevator ride), not physics: wait for news
 	var ahead := clampf(t - _times[i], 0.0, MAX_GUESS)
 	var coasted := COAST * (1.0 - exp(-ahead / COAST))  # distance per unit speed
-	var vel := _recent_velocity(i)
+	# The averaged velocity moves the center sideways while the spin turns
+	# it, so a shape tipping over a corner would be drawn with that corner
+	# in the ground. Between ordinary updates, use the update's own.
+	var vel := _vels[i].lerp(_recent_velocity(i), smoothstep(OWN_VELOCITY, OWN_VELOCITY + AVERAGE, ahead))
 	var motion := _xy(vel) * coasted
 	var fall := _gravity() * (0.5 * ahead * ahead)
 	var turned := _poses[i].z + vel.z * coasted
