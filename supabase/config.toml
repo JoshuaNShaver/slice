@@ -18,6 +18,8 @@ additional_redirect_urls = [
   "http://127.0.0.1:47615/auth/callback",
   "http://127.0.0.1:8000/",
   "http://127.0.0.1:8000/index.html",
+  "http://localhost:8000/",
+  "http://localhost:8000/index.html",
   "https://flatland-online.duckdns.org/",
   "https://flatland-online.duckdns.org/index.html",
 ]

@@ -40,6 +40,7 @@ const STAT_ROWS: Array[String] = ["vigor", "mettle", "force", "torque", "rigidit
 const MESSAGE_TIME := 3.5  # s
 const SPEAKER_RANGE := 1200.0  # px; farther speakers are heard as thoughts
 const CLOSE_SIZE := 32  # px; each panel's ✕ button
+const DIAG_EVERY := 0.25  # s between rewrites of \diag live's panel
 
 var _root: Control
 var _portrait: ShapeIcon
@@ -77,6 +78,9 @@ var _pay_label: Label
 var _me: PlayerShape
 var _set_label: Label
 var _message: Label
+var _diag: PanelContainer  # \diag live's panel (log 0159)
+var _diag_label: Label
+var _diag_wait := 0.0  # s until it's rewritten
 var _message_time := 0.0
 var _countdown: Control
 var _bubble_layer: Control
@@ -440,6 +444,20 @@ func _process(delta: float) -> void:
 		_update_countdown_time()
 	_message_time -= delta
 	_message.modulate.a = clampf(_message_time, 0.0, 1.0)
+	_update_diagnostics(delta)
+
+
+## \diag live (log 0159): the panel, rewritten a few times a second.
+func _update_diagnostics(delta: float) -> void:
+	var on := PlayerChat.live and _me != null and is_instance_valid(_me)
+	_diag.visible = on
+	if not on:
+		return
+	_diag_wait -= delta
+	if _diag_wait > 0.0:
+		return
+	_diag_wait = DIAG_EVERY
+	_diag_label.text = Diagnostics.live_text(_me.chat.live_rtts, _me.chat.live_server, _me)
 
 
 func _announce_changes(me: PlayerShape) -> void:
@@ -539,6 +557,29 @@ func _build() -> void:
 	_message.modulate.a = 0.0
 	_root.add_child(_message)
 	_root.add_child(_build_countdown())
+	_root.add_child(_build_diagnostics())
+
+
+## Top right, under your pay: \diag live's numbers, light on dark so they
+## read over any ground.
+func _build_diagnostics() -> Control:
+	_diag = PanelContainer.new()
+	_diag.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
+	_diag.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_diag.offset_top = MARGIN + 32
+	_diag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0, 0, 0, 0.55)
+	box.set_corner_radius_all(4)
+	box.set_content_margin_all(8)
+	_diag.add_theme_stylebox_override("panel", box)
+	_diag_label = Label.new()
+	_diag_label.add_theme_font_override("font", ChatBox.MONO)
+	_diag_label.add_theme_font_size_override("font_size", 13)
+	_diag_label.add_theme_color_override("font_color", Color(0.86, 0.93, 0.88))
+	_diag.add_child(_diag_label)
+	_diag.visible = false
+	return _diag
 
 
 ## Top left: portrait, level, health, XP.

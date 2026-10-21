@@ -461,12 +461,12 @@ As in the book, women are straight lines.
   multiplayer (WebSocket, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
-- **Smoothing (logs 0093, 0095, 0154):** the server sends each body's state
-  30 times a second. Clients draw other players and enemies a little behind
-  (100 ms), blended between server updates; your own shape uses the newest
+- **Smoothing (logs 0093, 0095, 0158):** the server sends each body's state
+  60 times a second. Clients draw other players and enemies a little behind
+  (60 ms), blended between server updates; your own shape uses the newest
   update. When updates run late, bodies keep moving at their last velocity
-  (up to 250 ms), stopping at and sliding along terrain, and corrections
-  fade in rather than snap. No client-side prediction yet.
+  (up to 250 ms), stopping at and sliding along terrain (only terrain), and
+  corrections fade in rather than snap. No client-side prediction yet.
 - **Clients (log 0099):** the web build is the main online client,
   installable on phones as an app (PWA, any orientation; logs 0122, 0134).
   It uses our own page (`web/shell.html`, log 0132): the phone keyboard
@@ -520,10 +520,14 @@ As in the book, women are straight lines.
   `\enemies` (short for `\enemy list [--away] [--type]`) and
   `\enemy get E3` show each enemy's place, hp and distance from home,
   marking ones away from home (log 0137).
-- **Diagnostics (log 0155):** anyone can type `\diagnostics` (`\diag`):
+- **Diagnostics (logs 0155, 0159):** anyone can type `\diagnostics` (`\diag`):
   5 pings to the server, then your fps and frame time, ping, how steadily
   your shape's updates arrive, and the server's fps, physics load, players,
   enemies, memory and uptime. Only you see it.
+  `\diag live` keeps a short version on screen, top right, while you
+  play, until you type it again. `\simulate lag 150` (optionally a
+  jitter, `\simulate lag 150 30`) adds that much lag to your own
+  connection, to test; `\simulate lag off` stops it (log 0159).
 - **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153, 0156):** a chat line starting with `\` turns the
   chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
   leaves, `\hello` has imsdow wave and say hi, and `\bye` says goodbye to

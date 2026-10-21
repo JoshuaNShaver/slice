@@ -86,6 +86,23 @@ func run() -> int:
 	print(report)
 	_check("Ping: " in report and not "no answer" in report and "a second" in report
 			and not "didn't answer" in report, "diagnostics over the network")
+	# \simulate lag (log 0159): pings come back that much slower.
+	me.chat.send_line("\\simulate lag 300")
+	hud.notices.clear()
+	me.chat.send_line("\\diagnostics")
+	await tree.create_timer(PlayerChat.PINGS * PlayerChat.PING_GAP + PlayerChat.PING_WAIT + 0.5).timeout
+	report = hud.notices[-1] if not hud.notices.is_empty() else ""
+	var lagged := report.get_slice("Ping: ", 1).get_slice(" ", 0).to_int()
+	_check(lagged >= 280 and "simulated +300 ms" in report, "simulated lag shows in ping (%d ms): %s" % [lagged, report])
+	# \diag live: pings once a second while it's on, even with lag.
+	me.chat.send_line("\\diag live")
+	await tree.create_timer(2.5).timeout
+	_check(me.chat.live_rtts.size() >= 1 and not me.chat.live_server.is_empty(),
+			"live pings: %s" % Diagnostics.live_text(me.chat.live_rtts, me.chat.live_server, me))
+	print(Diagnostics.live_text(me.chat.live_rtts, me.chat.live_server, me))
+	me.chat.send_line("\\diag live")
+	me.chat.send_line("\\simulate lag off")
+	_check(Net.lag_peer.lag_ms == 0.0, "simulated lag off")
 	hud.queue_free()
 	_leave_world()
 	await tree.create_timer(1.0).timeout

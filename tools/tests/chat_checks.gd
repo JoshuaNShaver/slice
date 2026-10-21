@@ -119,6 +119,26 @@ func run() -> int:
 	_check(report.begins_with("Diagnostics") and "fps" in report and "Server: " in report
 			and "enemies" in report and not "didn't answer" in report and _heard.is_empty(),
 			"diagnostics report: %s" % report)
+
+	# \diag live and \simulate lag (log 0159): parsed here, never sent.
+	_check(Diagnostics.parse("\\diag live").get("do") == "live", "\\diag live parses")
+	var lag := Diagnostics.parse("\\simulate lag 150 30")
+	_check(lag.get("do") == "lag" and lag.lag == 150.0 and lag.jitter == 30.0, "\\simulate lag 150 30: %s" % lag)
+	_check(Diagnostics.parse("\\simulate lag 100 90").get("jitter") == 50.0, "jitter at most half the lag")
+	_check(Diagnostics.parse("\\simulate lag off").get("lag") == 0.0, "\\simulate lag off")
+	_check(Diagnostics.parse("\\simulate lag fast").has("error"), "\\simulate lag needs a number")
+	_check(Diagnostics.parse("\\player list").is_empty() and Diagnostics.parse("hi").is_empty(), "others aren't parsed")
+	_check("\\simulate" in their_help, "a player's help lists simulate")
+	_notices.clear()
+	me.chat.send_line("\\simulate lag 200")
+	await tree.process_frame
+	_check(_heard.is_empty() and not _notices.is_empty() and "offline" in _notices[-1],
+			"simulated lag offline: %s" % ("" if _notices.is_empty() else _notices[-1]))
+	me.chat.send_line("\\diag live")
+	_check(PlayerChat.live and "on" in _notices[-1], "\\diag live turns on")
+	_check("no network" in Diagnostics.live_text([], {}, me), "live panel offline: %s" % Diagnostics.live_text([], {}, me))
+	me.chat.send_line("\\diag live")
+	_check(not PlayerChat.live, "\\diag live again turns off")
 	var smoother := NetSmoother.new()
 	for i in 4:
 		smoother.push(PackedFloat32Array([0, 0, 0, 0, 0, 0, fmod(Time.get_ticks_usec() / 1e6, 4096.0)]))

@@ -137,6 +137,7 @@ static func help() -> String:
 	for alias: String in ALIASES:
 		lines.append("  %s%s: short for %s%s" % [ESCAPE, alias, ESCAPE, " ".join(ALIASES[alias])])
 	lines.append("  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP])
+	lines.append("  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP])
 	return "\n".join(lines)
 
 
@@ -148,6 +149,7 @@ static func player_help() -> String:
 		"  %shello: imsdow says hi" % ESCAPE,
 		"  %sbye: say goodbye and close the terminal" % ESCAPE,
 		"  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP],
+		"  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP],
 	])
 
 

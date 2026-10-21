@@ -47,6 +47,9 @@ var port := DEFAULT_PORT
 var in_session := false
 ## A message for the main menu to show after returning to it (e.g. lost connection).
 var last_message := ""
+## Client: the connection, through which \simulate lag adds lag (log 0159);
+## null when not joined.
+var lag_peer: LagPeer
 
 ## Server only. Peer ids whose version matched; only they may log in.
 var _verified: Dictionary = {}
@@ -126,10 +129,13 @@ func join(address: String, on_port: int) -> void:
 		return
 	mode = Mode.JOIN
 	port = on_port
-	multiplayer.multiplayer_peer = peer
+	# Through LagPeer, so \simulate lag can slow it (log 0159); no lag, no delay.
+	lag_peer = LagPeer.new(peer)
+	multiplayer.multiplayer_peer = lag_peer
 
 
 func leave() -> void:
+	lag_peer = null
 	if multiplayer.is_server():
 		accounts.close_all()  # saves everyone still playing
 	if multiplayer.multiplayer_peer != null:

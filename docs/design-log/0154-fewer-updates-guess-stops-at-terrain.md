@@ -1,7 +1,7 @@
 # 0154: 30 updates a second; late guesses stop at terrain
 
 - **Date:** 2026-10-20
-- **Status:** Proposed
+- **Status:** Superseded by 0158
 - **Decision:** The server sends each player's and enemy's state 30 times a
   second, not every frame (120). Clients draw other bodies 100 ms behind
   (was 60), and when updates run late a body keeps moving at its last

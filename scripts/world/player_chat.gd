@@ -7,7 +7,9 @@ extends Node
 ## chat log and in a bubble over the speaker. A line starting with "\" is an
 ## admin command instead (AdminConsole): only the sender sees the answer.
 ## \diagnostics (log 0155) never goes out as a line: the owner pings the
-## server and writes up the answers (Diagnostics).
+## server and writes up the answers (Diagnostics). \diag live keeps
+## pinging, once a second, for the HUD's live panel; \simulate lag slows
+## this game's connection (log 0159). Neither is sent either.
 
 const MAX_LENGTH := 160
 const BURST := 5  # lines...
@@ -16,6 +18,8 @@ const PINGS := 5  # \diagnostics sends this many...
 const PING_GAP := 0.2  # ...this many seconds apart...
 const PING_WAIT := 2.0  # ...and waits this much longer for the last answers
 const PING_MIN_MSEC := 50  # server: answers at most one ping per this long
+const LIVE_EVERY := 1.0  # s between \diag live's pings
+const LIVE_PINGS := 5  # it shows the latest this many
 
 var player: PlayerShape
 var _recent: Array[int] = []  # server: msec of this player's last lines
@@ -26,18 +30,54 @@ var _ping_clock := 0.0
 var _pings_sent := 0
 var _rtts: Array[float] = []  # round trips, ms
 var _server_info := {}
+## \diag live is on: for this game, not one shape (a new family keeps it).
+static var live := false
+# Owner, while it's on:
+var live_rtts: Array[float] = []
+var live_server := {}
+var _live_clock := LIVE_EVERY  # the first ping goes at once
 
 
 func _ready() -> void:
-	set_process(false)  # only while pinging
+	_update_processing()  # only while pinging
 
 
-## Owner. Sends a typed line to the server.
+## Owner. Sends a typed line to the server, or runs it if it's one of
+## Diagnostics' commands.
 func send_line(text: String) -> void:
-	if Diagnostics.is_command(text):
-		run_diagnostics()
+	var asked := Diagnostics.parse(text)
+	if asked.is_empty():
+		_submit_line.rpc_id(1, text)
 		return
-	_submit_line.rpc_id(1, text)
+	match asked.get("do", ""):
+		"report":
+			run_diagnostics()
+		"live":
+			set_live(not live)
+			_notice("Live diagnostics %s." % ("on, top right" if live else "off"))
+		"lag":
+			if Net.lag_peer != null:
+				Net.lag_peer.simulate(asked.lag, asked.jitter)
+			_notice(Diagnostics.lag_answer(asked.lag, asked.jitter))
+		_:
+			_notice(asked.error)
+
+
+## Owner. The HUD's live panel on or off (\diag live).
+func set_live(on: bool) -> void:
+	live = on
+	live_rtts.clear()
+	live_server = {}
+	_live_clock = LIVE_EVERY  # the first ping goes now
+	_update_processing()
+
+
+func _update_processing() -> void:
+	set_process(_pinging or (live and Net.mode == Net.Mode.JOIN and player != null and player.is_local()))
+
+
+func _notice(text: String) -> void:
+	get_tree().call_group(Hud.GROUP, "chat_notice", text)
 
 
 ## Owner. Pings the server PINGS times, then shows Diagnostics.report.
@@ -49,19 +89,25 @@ func run_diagnostics() -> void:
 	_pings_sent = 0
 	_rtts.clear()
 	_server_info = {}
-	set_process(true)
+	_update_processing()
 
 
 func _process(delta: float) -> void:
+	if live and Net.mode == Net.Mode.JOIN and player.is_local():
+		_live_clock += delta
+		if _live_clock >= LIVE_EVERY:
+			_live_clock = 0.0
+			_ping.rpc_id(1, _msec(), true, true)
+	if not _pinging:
+		return
 	_ping_clock += delta
 	if _pings_sent < PINGS and _ping_clock >= _pings_sent * PING_GAP:
 		_pings_sent += 1
-		_ping.rpc_id(1, _msec(), _pings_sent == PINGS)
+		_ping.rpc_id(1, _msec(), _pings_sent == PINGS, false)
 	if _rtts.size() >= PINGS or _ping_clock > PINGS * PING_GAP + PING_WAIT:
 		_pinging = false
-		set_process(false)
-		var text := Diagnostics.report(_rtts, _pings_sent, _server_info, player)
-		get_tree().call_group(Hud.GROUP, "chat_notice", text)
+		_update_processing()
+		_notice(Diagnostics.report(_rtts, _pings_sent, _server_info, player))
 
 
 static func _msec() -> float:
@@ -120,21 +166,30 @@ func _submit_line(text: Variant) -> void:
 			p.chat._heard.rpc_id(p.peer_id, player.peer_id, speaker, line)
 
 
-## Server. Answers a \diagnostics ping; the last one also gets the server's
-## numbers.
+## Server. Answers a \diagnostics ping; the last one (and each live one)
+## also gets the server's numbers. `live`: \diag live's, not the report's.
 @rpc("any_peer", "call_local", "reliable")
-func _ping(sent: Variant, last: Variant) -> void:
+func _ping(sent: Variant, last: Variant, live_ping: Variant) -> void:
 	if not player.from_owner() or not (sent is float or sent is int):
 		return
 	var now := Time.get_ticks_msec()
 	if now - _last_ping < PING_MIN_MSEC:
 		return
 	_last_ping = now
-	_pong.rpc_id(player.peer_id, float(sent), Diagnostics.server_info() if last == true else {})
+	_pong.rpc_id(player.peer_id, float(sent), Diagnostics.server_info() if last == true else {}, live_ping == true)
 
 
 @rpc("authority", "call_local", "reliable")
-func _pong(sent: float, info: Dictionary) -> void:
+func _pong(sent: float, info: Dictionary, live_ping: bool) -> void:
+	if live_ping:
+		if not live:
+			return
+		live_rtts.append(_msec() - sent)
+		if live_rtts.size() > LIVE_PINGS:
+			live_rtts.pop_front()
+		if not info.is_empty():
+			live_server = info
+		return
 	if not _pinging:
 		return  # a late answer from a finished run
 	_rtts.append(_msec() - sent)

@@ -11,21 +11,24 @@ extends RefCounted
 ##   as quick as the round trip allows.
 ## - When updates run late, the body keeps moving at its last velocity for up
 ##   to MAX_GUESS, instead of freezing. The guess stops at terrain and slides
-##   along it (log 0154), so a landing shape isn't drawn sunk into the floor.
+##   along it (logs 0154, 0158), so a landing shape isn't drawn sunk into
+##   the floor.
 ## - When an update disagrees with what's on screen, the difference fades out
 ##   over about SETTLE instead of snapping.
 
-## Seconds between the server's updates of each body (log 0154). Over TCP,
-## fewer, fuller packets stall less than a flood of tiny ones.
-const SEND_INTERVAL := 1.0 / 30.0
-const DELAY := 0.1  # seconds: three server updates' worth
+## Seconds between the server's updates of each body (logs 0154, 0158):
+## half the server's frames, so fewer TCP packets, without the bigger
+## corrections that 30 a second gave.
+const SEND_INTERVAL := 1.0 / 60.0
+const DELAY := 0.06  # seconds: a few server updates' worth
 const MAX_GUESS := 0.25  # seconds to keep moving with no news: rides out a TCP resend
 const SETTLE := 0.08  # seconds: how fast a correction fades (time constant)
 const KEEP := 0.5  # seconds of updates to hold on to
 const TELEPORT := 300.0  # px moved in one update that means a jump cut, not motion
 const CLOCK_WRAP := 4096.0  # server time is sent as seconds mod this, to fit a float32
+const TERRAIN_MASK := 1  # PlayerShape.LAYER_TERRAIN: what a guess stops at
 const STATS_WINDOW := 10.0  # seconds of arrivals that stats() looks back over
-const CLOCK_DRIFT := 0.04  # how fast the clock estimate gives in to slower packets
+const CLOCK_DRIFT := 0.02  # how fast the clock estimate gives in to slower packets
 
 var live := false
 ## The body being drawn, if any: guesses are stopped by what it collides with.
@@ -157,20 +160,27 @@ func _guess(i: int, t: float) -> Vector3:
 
 
 ## How far the body can move by `motion` from `pose` before it hits
-## something, sliding along what it hits.
+## terrain, sliding along what it hits. Only terrain: other bodies are drawn
+## at other moments (enemies DELAY behind), so they'd block in the wrong
+## place. The push out of a slight overlap isn't counted, so it can't pop.
 func _clip(pose: Vector3, motion: Vector2) -> Vector2:
 	if not body.is_inside_tree():
 		return motion
+	var rid := body.get_rid()
+	PhysicsServer2D.body_set_collision_mask(rid, TERRAIN_MASK)
 	var done := Vector2.ZERO
 	for _slide in 2:
 		if motion.length_squared() < 0.01:
 			break
 		_test.from = Transform2D(pose.z, _xy(pose) + done)
 		_test.motion = motion
-		if not PhysicsServer2D.body_test_motion(body.get_rid(), _test, _hit):
-			return done + motion
-		done += _hit.get_travel()
-		motion = _hit.get_remainder().slide(_hit.get_collision_normal())
+		if not PhysicsServer2D.body_test_motion(rid, _test, _hit):
+			done += motion
+			break
+		var safe := _hit.get_collision_safe_fraction()
+		done += motion * safe
+		motion = (motion * (1.0 - safe)).slide(_hit.get_collision_normal())
+	PhysicsServer2D.body_set_collision_mask(rid, body.collision_mask)
 	return done
 
 
