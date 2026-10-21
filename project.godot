@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="slice-game"
-config/version="0.2.10"
+config/version="0.2.11"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.png"
 boot_splash/bg_color=Color(0.937255, 0.890196, 0.784314, 1)

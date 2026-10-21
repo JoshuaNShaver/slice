@@ -1,7 +1,7 @@
 # 0162: Abilities predicted too; gentler corrections
 
 - **Date:** 2026-10-20
-- **Status:** Accepted
+- **Status:** Superseded by 0169
 - **Decision:** Changes 0161. Your own shape also uses its abilities on your
   machine (Spike Up throws enemies only on the server), so starting one no
   longer hands the shape to the server; it follows only for rides,

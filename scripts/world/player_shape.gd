@@ -29,6 +29,10 @@ const LAYER_TERRAIN := 1
 const LAYER_PLAYERS := 2
 const GROUP := "players"
 const CHEST_SLOTS := PlayerInventory.CHEST_SLOTS  # Net checks saved chests with this
+## Playing on (log 0173): starts after this long without an update...
+const GAP_START := 0.12
+## ... and ends once updates are this fresh again.
+const GAP_END := 0.05
 
 var peer_id := 0
 var family_name := ""
@@ -49,17 +53,12 @@ var spawn_point := Vector2.ZERO
 var dead := false  # server only
 var sync: MultiplayerSynchronizer
 ## Server -> clients each frame: x, y, rotation, vx, vy, spin, time (design
-## logs 0093, 0095), then the owner's matching moment and whether the server
-## alone moves you (PlayerPrediction.extras, log 0161). Clients smooth it
-## rather than snapping to each update; the owner's prediction checks itself
-## against it.
+## logs 0093, 0095). Clients smooth it rather than snapping to each update.
 var net_state := PackedFloat32Array():
 	set(value):
 		net_state = value
 		if _smoother != null:
 			_smoother.push(value)
-		if prediction != null:
-			prediction.push(value)
 
 var motion: PlayerMotion
 var moves: PlayerMoves
@@ -77,8 +76,10 @@ var corner_angles: PackedFloat32Array
 var _collision: CollisionPolygon2D
 var _outline_dirty := true
 var _smoother: NetSmoother  # clients only
-## Online, your own shape: moved here as you press keys (log 0161).
-var prediction: PlayerPrediction
+## Online, your own shape: running its own physics with your keys because
+## the server's updates stopped coming (log 0173). Otherwise it's drawn from
+## them, like every other shape.
+var playing_on := false
 
 
 ## Used by the world's MultiplayerSpawner on the server and on every client.
@@ -184,18 +185,13 @@ func _rebuild_outline() -> void:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	# Clients draw the server's position and rotation, but for your own
-	# shape online, which moves here too and checks itself against the
-	# server's (log 0161).
+	# Clients never simulate: the server's position and rotation are copied in.
 	if not multiplayer.is_server():
+		freeze = true
 		freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
-		freeze = not is_local()
 		_smoother = NetSmoother.new()
 		_smoother.body = self
 		_smoother.live = is_local()
-		if is_local():
-			prediction = PlayerPrediction.new()
-			prediction.player = self
 
 
 ## Clients: how the server's updates of this shape have been arriving
@@ -210,12 +206,11 @@ func is_local() -> bool:
 
 func _process(delta: float) -> void:
 	if multiplayer.is_server():
-		net_state = NetSmoother.state_of(self) + PlayerPrediction.extras(motion.client_time(), motion.server_driven())
-	else:
-		if prediction != null:
-			_follow_or_predict()
-			prediction.fade(delta)
-		if (prediction == null or prediction.following) and not _smoother.is_empty():
+		net_state = NetSmoother.state_of(self)
+	elif not _smoother.is_empty():
+		if is_local():
+			_play_on_through_gaps()
+		if not playing_on:
 			var s := _smoother.current(delta)
 			position = Vector2(s.x, s.y)
 			rotation = s.z
@@ -224,49 +219,34 @@ func _process(delta: float) -> void:
 	queue_redraw()  # keeps the name tag upright as the shape turns
 
 
-## Your own shape online: hands it to the server's updates while the server
-## alone moves you, and takes it back after (log 0161).
-func _follow_or_predict() -> void:
-	var follow := not PlayerPrediction.enabled or prediction.server_driven()
-	if follow == prediction.following:
-		return
-	var shown := prediction.drawn_offset()
-	prediction.following = follow
-	if follow:
-		freeze = true
-		# Fade from where it's drawn, no jump.
-		_smoother.hold(Vector3(position.x + shown.x, position.y + shown.y, rotation + shown.z))
-	else:
-		var s := prediction.latest()
+## Your own shape online (log 0173): when the server's updates stop (a
+## Wi-Fi stall), it carries on with its own physics and your keys, from
+## where it's drawn, instead of waiting. When they come back it hands back
+## to them, fading from where it got to into where the server has it. The
+## server had your keys from before the stall, so holding one, the two
+## agree; keys pressed during it reach the server late, and you're pulled
+## to what it made of them.
+func _play_on_through_gaps() -> void:
+	var since := _smoother.since_update()
+	if not playing_on and since > GAP_START and _smoother.can_play_on():
+		var v := _smoother.recent_velocity()
+		playing_on = true
 		freeze = false
-		linear_velocity = Vector2(s[3], s[4])
-		angular_velocity = s[5]
-		prediction.reset()
+		linear_velocity = Vector2(v.x, v.y)
+		angular_velocity = v.z
+	elif playing_on and since < GAP_END:
+		playing_on = false
+		freeze = true
+		_smoother.hold(Vector3(position.x, position.y, rotation))
 
 
-func _physics_process(_delta: float) -> void:
-	if prediction != null and not prediction.following:
-		prediction.tick(transform)
-
-
-## Where the shape is drawn: your predicted shape is drawn between physics
-## ticks and fades out corrections (log 0164), so the camera follows that.
-func drawn_position() -> Vector2:
-	if prediction == null or prediction.following:
-		return position
-	var at := prediction.drawn_offset()
-	return position + Vector2(at.x, at.y)
-
-
-## Server only. One physics step, in this order: energy and healing, then
+## One physics step. The server's, in this order: energy and healing, then
 ## movement (which may end the step), then abilities, then corner hits.
-## Online, your own shape steps here too, rolling and jumping only (log 0161).
+## Your own shape playing on through a gap: movement and abilities only.
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if not multiplayer.is_server():
-		if prediction != null and not prediction.following:
-			prediction.correct(state)
+		if playing_on:
 			_move_step(state)
-			prediction.record(state)
 		return
 	stats.regen_energy(state.step)
 	combat.tick(state.step)
@@ -274,8 +254,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		combat.hit_check(state)
 
 
-## Movement, then abilities: the server's step, and your predicted shape's.
-## False if a ride or a teleport ended the step.
+## Movement, then abilities. False if a ride or a teleport ended the step.
 func _move_step(state: PhysicsDirectBodyState2D) -> bool:
 	var phase := motion.integrate(state)
 	if phase == PlayerMotion.HALT:
@@ -332,18 +311,9 @@ func become_heir(heir: Dictionary) -> void:
 
 
 func _draw() -> void:
-	# Your predicted shape is drawn where it was before a correction, fading
-	# to where the body is (log 0161).
-	var shown := Transform2D.IDENTITY
-	if prediction != null and not prediction.following:
-		var at := prediction.drawn_offset()
-		if at != Vector3.ZERO:
-			var target := Transform2D(rotation + at.z, position + Vector2(at.x, at.y))
-			shown = transform.affine_inverse() * target
-	draw_set_transform_matrix(shown)
 	Gear.draw_shape(self, points, sides, inventory.equipped)
 
-	draw_set_transform_matrix(shown * Transform2D(-(rotation + shown.get_rotation()), Vector2.ZERO))
+	draw_set_transform(Vector2.ZERO, -rotation)
 	var font := ThemeDB.fallback_font
 	var tag := family_name + (" (you)" if is_local() else "")
 	draw_string(font, Vector2(-150, -RADIUS - 12), tag, HORIZONTAL_ALIGNMENT_CENTER, 300, 15, Palette.faded_at(position))

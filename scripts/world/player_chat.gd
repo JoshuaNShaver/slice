@@ -55,14 +55,13 @@ func send_line(text: String) -> void:
 		"live":
 			set_live(not live)
 			_notice("Live diagnostics %s." % ("on, top right" if live else "off"))
-		"predict":
-			PlayerPrediction.enabled = asked.on
-			_notice("Prediction %s." % ("on: your shape moves at once, checked against the server"
-					if asked.on else "off: your shape follows the server's updates"))
-		"lag":
+		"simulate":
 			if Net.lag_peer != null:
-				Net.lag_peer.simulate(asked.lag, asked.jitter)
-			_notice(Diagnostics.lag_answer(asked.lag, asked.jitter))
+				if asked.has("lag"):
+					Net.lag_peer.simulate(asked.lag, asked.jitter)
+				if asked.has("stall"):
+					Net.lag_peer.simulate_stalls(asked.stall, asked.every)
+			_notice(Diagnostics.simulate_answer())
 		_:
 			_notice(asked.error)
 

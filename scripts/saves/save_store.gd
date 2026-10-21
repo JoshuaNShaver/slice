@@ -2,7 +2,8 @@ class_name SaveStore
 extends Node
 ## Where the server keeps each account's data (design logs 0097, 0112):
 ## up to 3 family slots (Family.to_dict(), or null) and the house chests
-## (an item list, kept by the player across families, log 0042).
+## (an item list, kept by the player across families, log 0042), and the
+## account's unlocks (names, also kept across families, log 0174).
 ##
 ## Only the server uses a store. LocalFileStore keeps files (offline, LAN
 ## hosts, a dev server); SupabaseStore keeps Postgres rows (online).
@@ -12,11 +13,12 @@ extends Node
 const SLOT_COUNT := 3
 
 
-## {"ok": bool, "families": [Dictionary or null] x SLOT_COUNT, "chest": Array}.
+## {"ok": bool, "families": [Dictionary or null] x SLOT_COUNT, "chest": Array,
+## "unlocks": Array of names}.
 ## ok is false when the data couldn't be read; the caller must not play on
 ## (and overwrite) an account it couldn't load.
 func load_account(_account: String) -> Dictionary:
-	return {"ok": false, "families": [], "chest": []}
+	return {"ok": false, "families": [], "chest": [], "unlocks": []}
 
 
 func save_family(_account: String, _slot: int, _data: Dictionary) -> void:
@@ -28,6 +30,11 @@ func delete_family(_account: String, _slot: int) -> void:
 
 
 func save_chest(_account: String, _items: Array) -> void:
+	pass
+
+
+## The account's unlocks, all of them (Family.UNLOCKS).
+func save_unlocks(_account: String, _names: Array) -> void:
 	pass
 
 
@@ -56,4 +63,4 @@ func describe() -> String:
 static func empty_account() -> Dictionary:
 	var families := []
 	families.resize(SLOT_COUNT)
-	return {"ok": true, "families": families, "chest": []}
+	return {"ok": true, "families": families, "chest": [], "unlocks": []}

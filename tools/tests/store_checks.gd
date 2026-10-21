@@ -23,10 +23,12 @@ func run() -> int:
 	var family_a := {"version": 1, "family_name": "A", "sides": 3, "kind": "isosceles", "apex": 45}
 	store.save_family(USER, 0, family_a)
 	store.save_chest(USER, ["points_6", ""])
+	store.save_unlocks(USER, [Family.UNLOCK_IRREGULAR])
 	await _drain(store, 5.0)
 	data = await store.load_account(USER)
 	_check(data.families[0] is Dictionary and data.families[0].family_name == "A"
 			and data.chest == ["points_6", ""], "saved and loaded back")
+	_check(data.unlocks == [Family.UNLOCK_IRREGULAR], "unlocks saved and loaded back")
 
 	# The next write fails; a newer one arrives while it's retrying.
 	await HttpJson.request(store, HTTPClient.METHOD_POST, _url + "/_mock/fail?n=1", [])

@@ -1,8 +1,8 @@
 class_name SupabaseStore
 extends SaveStore
 ## Account data in Supabase Postgres, through PostgREST (design logs 0112,
-## 0114): tables `families` (user_id, slot, data) and `chests` (user_id,
-## items) and `profiles` (user_id, username, role; logs 0123, 0125), keyed by the
+## 0114): tables `families` (user_id, slot, data), `chests` (user_id,
+## items), `unlocks` (user_id, names; log 0174) and `profiles` (user_id, username, role; logs 0123, 0125), keyed by the
 ## Supabase user id. Only the server's secret key may
 ## touch them.
 ##
@@ -22,8 +22,9 @@ const GIVE_UP_AFTER := 5
 
 var url := ""
 var _key := ""
-## Key ("families:<account>:<slot>" or "chests:<account>") -> write.
-## A write: {"table", "account", "slot", "data" or "items" or "delete"}.
+## Key ("families:<account>:<slot>", "chests:<account>" or
+## "unlocks:<account>") -> write.
+## A write: {"table", "account", "slot", "data" or "items" or "names" or "delete"}.
 var _pending: Dictionary = {}
 var _in_flight: Dictionary = {}
 var _retry_at: Dictionary = {}
@@ -52,18 +53,20 @@ static func is_uuid(account: String) -> bool:
 func load_account(account: String) -> Dictionary:
 	if not is_uuid(account):
 		push_error("SupabaseStore: %s isn't a user id" % account)
-		return {"ok": false, "families": [], "chest": []}
+		return {"ok": false, "families": [], "chest": [], "unlocks": []}
 	for attempt in LOAD_TRIES:
 		var families := await _rest(HTTPClient.METHOD_GET,
 				"families?select=slot,data&user_id=eq.%s" % account)
 		var chests := await _rest(HTTPClient.METHOD_GET, "chests?select=items&user_id=eq.%s" % account)
-		if families.ok and chests.ok and families.data is Array and chests.data is Array:
-			return _overlay(account, _rows_to_account(families.data, chests.data))
-		push_warning("Supabase: loading %s failed (%s; %s), try %d of %d" % [account,
-				families.error, chests.error, attempt + 1, LOAD_TRIES])
+		var unlocks := await _rest(HTTPClient.METHOD_GET, "unlocks?select=names&user_id=eq.%s" % account)
+		if families.ok and chests.ok and unlocks.ok and families.data is Array and chests.data is Array \
+				and unlocks.data is Array:
+			return _overlay(account, _rows_to_account(families.data, chests.data, unlocks.data))
+		push_warning("Supabase: loading %s failed (%s; %s; %s), try %d of %d" % [account,
+				families.error, chests.error, unlocks.error, attempt + 1, LOAD_TRIES])
 		await get_tree().create_timer(1.0 + attempt * 2.0).timeout
 	push_error("Supabase: couldn't load %s" % account)
-	return {"ok": false, "families": [], "chest": []}
+	return {"ok": false, "families": [], "chest": [], "unlocks": []}
 
 
 func load_profile(account: String) -> Dictionary:
@@ -109,6 +112,10 @@ func save_chest(account: String, items: Array) -> void:
 	_queue({"table": "chests", "account": account, "items": items})
 
 
+func save_unlocks(account: String, names: Array) -> void:
+	_queue({"table": "unlocks", "account": account, "names": names})
+
+
 func _process(delta: float) -> void:
 	_tick += delta
 	if _tick >= 1.0 and not _pending.is_empty():
@@ -116,7 +123,7 @@ func _process(delta: float) -> void:
 		_pump()
 
 
-static func _rows_to_account(family_rows: Array, chest_rows: Array) -> Dictionary:
+static func _rows_to_account(family_rows: Array, chest_rows: Array, unlock_rows: Array = []) -> Dictionary:
 	var out := SaveStore.empty_account()
 	for row: Variant in family_rows:
 		if row is Dictionary and row.get("data") is Dictionary:
@@ -125,6 +132,8 @@ static func _rows_to_account(family_rows: Array, chest_rows: Array) -> Dictionar
 				out.families[slot] = row.data
 	if not chest_rows.is_empty() and chest_rows[0] is Dictionary and chest_rows[0].get("items") is Array:
 		out.chest = chest_rows[0].items
+	if not unlock_rows.is_empty() and unlock_rows[0] is Dictionary and unlock_rows[0].get("names") is Array:
+		out.unlocks = unlock_rows[0].names
 	return out
 
 
@@ -136,14 +145,16 @@ func _overlay(account: String, out: Dictionary) -> Dictionary:
 				continue
 			if write.table == "chests":
 				out.chest = write.items
+			elif write.table == "unlocks":
+				out.unlocks = write.names
 			else:
 				out.families[write.slot] = null if write.has("delete") else write.data
 	return out
 
 
 static func _key_of(write: Dictionary) -> String:
-	if write.table == "chests":
-		return "chests:%s" % write.account
+	if write.table in ["chests", "unlocks"]:
+		return "%s:%s" % [write.table, write.account]
 	return "families:%s:%d" % [write.account, write.slot]
 
 
@@ -195,6 +206,9 @@ func _write(write: Dictionary) -> Dictionary:
 	if write.table == "chests":
 		return await _rest(HTTPClient.METHOD_POST, "chests?on_conflict=user_id",
 				{"user_id": write.account, "items": write.items, "updated_at": stamp}, true)
+	if write.table == "unlocks":
+		return await _rest(HTTPClient.METHOD_POST, "unlocks?on_conflict=user_id",
+				{"user_id": write.account, "names": write.names, "updated_at": stamp}, true)
 	if write.has("delete"):
 		return await _rest(HTTPClient.METHOD_DELETE,
 				"families?user_id=eq.%s&slot=eq.%d" % [write.account, write.slot])

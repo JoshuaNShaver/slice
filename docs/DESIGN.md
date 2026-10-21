@@ -30,8 +30,8 @@ Gravity pulls **south** (screen down), as in the book.
 | South, down an elevator | The underworld: the Undercroft and the training cave | Regulars with 5+ sides may visit (log 0066); irregulars are confined here |
 
 Shape gates access, and each rank keeps every activity below it (log
-0073): triangles go to war (and, near equilateral, trade and gather, log
-0074, proposed), squares gain the college (log 0075), circles the
+0073): triangles go to war; from a 45° apex they also work (woodcutting,
+mining), and from 55° keep a trading booth (log 0177, not built); squares gain the college (log 0075), circles the
 dimension puzzles (log 0076). Exact gates per region are TBD (see Open
 questions).
 Places and spawn points live in `scripts/world/regions.gd`.
@@ -73,7 +73,12 @@ grounds; an acolyte (12-gon) stands by. The sanctum (circles only) is sealed
 for now.
 
 **The underworld (logs 0051, 0052, 0059):** almost self-contained, since
-irregulars can't leave. Its hub is **the Undercroft**, under the Center:
+irregulars can't leave. Its hub is **the Undercroft**, under the Center. It
+is a secret (log 0171): the overworld believes irregulars are destroyed at
+birth, but some are recovered here.
+- **The Gleaner** (logs 0171, 0172) takes the Board's "destroyed" infants
+  from the bottom of its chute, and greets irregulars waking here after
+  their birth cutscene.
 - Irregulars spawn here, and the home key (C) brings them here.
 - **The Bonesetter** heals irregulars anywhere in the Undercroft.
 - **The Hedge Priest** (a circle who failed inspection) marries irregulars.
@@ -373,8 +378,8 @@ Values marked * are proposed tuning.
     family (log 0042): a new family gets them back on reaching a square.
   - **Triangles (log 0031):** only an **equilateral** triangle has a square
     heir (the book's rule). A new family's triangle is isosceles with a
-    **45° apex**; each heir's apex is **5° wider** (50°, 55°, then 60°), so
-    the 3rd heir is equilateral.
+    **40° apex** (log 0176); each heir's apex is **5° wider** (45°, 50°,
+    55°, then 60°), so the 4th heir is equilateral.
   - **Blessed certificate (log 0032):** a rare boss drop (1 in 20). Redeemed
     by a triangle, the heir is born equilateral at once. *Proposed (log
     0039):* it drops alongside the normal certificate, skips the irregular
@@ -384,18 +389,32 @@ Values marked * are proposed tuning.
     are confined to the underworld and cannot enter the overworld. Every
     heir rolls except an equilateral's, which is always a regular square
     (log 0096).
-  - **Irregular triangles (log 0096)** climb the apex too: 45°, +5° each
+  - **Irregular triangles (log 0096)** climb the apex too: 40°, +5° each
     heir, up to 60°, drawn with the top off to one side. The heir's apex
     widens either way; a regular roll at 60° makes it equilateral.
 - **Dying without an heir ends the family.** You must create a new one.
   Since the heir takes over at once, any death ends the family.
 - **New families** pick their starting triangle (logs 0050, 0065):
-  **isosceles (45° apex)** or **irregular**. Equilateral is earned by
-  climbing, not picked.
+  **isosceles (40° apex)** or **irregular**. Equilateral is earned by
+  climbing, not picked. **Irregular is hidden (logs 0174, 0175)** until
+  one of the player's heirs is born irregular; the unlock is the
+  account's and outlives families, like the chests.
 - Past octagon you keep gaining sides. **10+ sides counts as circular: a
   priest.**
 - **Past decagon, marriages don't always produce an heir** (the book's
   highest ranks struggle to have heirs). Rate TBD.
+
+- **Cutscenes (logs 0168, 0171, 0172):** every birth (a new family, each
+  heir) plays a cutscene that follows the book: the Sanitary and Social
+  Board examines the newborn and a priest speaks over it, giving its
+  measurements, regularity, likely occupation, and joy or dread. An
+  irregular newborn is sentenced to be destroyed; the player then wakes in
+  the Undercroft, greeted by the Gleaner (§1). A wedding plays one first:
+  the priest marries you to a bride and congratulates you. Women are NPCs
+  only (§6). Below, the Hedge Priest does both, with no Board. A cutscene
+  is a full-screen overlay (the world runs on; the server keeps you safe
+  until it ends), played in full the first time and skippable after. The
+  officials are sincerely pompous, never cruel on purpose.
 
 ## 5b. Main menu and saves
 
@@ -425,7 +444,7 @@ Values marked * are proposed tuning.
   machine's files (`user://families/`, `user://chests.json`), as before.
   LAN joiners and a dev server's players log in with a device id; their
   saves live on that server. An online server uses Supabase (log 0114):
-  tables `families`, `chests` and `profiles` keyed by the Supabase user, readable and
+  tables `families`, `chests`, `unlocks` (log 0174) and `profiles` keyed by the Supabase user, readable and
   writable only with the server's secret key.
   A dedicated server's `SAVES` setting picks `local` or `supabase` (log
   0117); unset, it uses Supabase when its settings are there.
@@ -461,23 +480,17 @@ As in the book, women are straight lines.
   multiplayer (WebSocket, `MultiplayerSpawner`, `MultiplayerSynchronizer`). Players
   send input; the server runs the simulation. Write gameplay code so a single
   player is just a local server with one peer.
-- **Smoothing (logs 0093, 0095, 0158):** the server sends each body's state
-  60 times a second. Clients draw other players and enemies a little behind
-  (60 ms), blended between server updates. When updates run late, bodies
-  keep moving at their last velocity (up to 250 ms), stopping at and
-  sliding along terrain (only terrain), and corrections fade in rather than
-  snap.
-- **Prediction (logs 0161, 0162, 0164, 0165):** off by default; `\predict on`
-  turns it on, to test. When on, your own shape rolls, jumps
-  and uses abilities on your machine as you press keys (Spike Up throws
-  enemies only on the server), colliding with terrain and enemies, and is
-  pulled toward the server's updates (matched to the moment of yours each
-  one reflects; a fix stops where the shape would touch something and turns
-  it only in the air; errors under 3 px are left alone; the drawing,
-  and the camera, go between physics ticks and catch up a correction over
-  ~0.1 s; 160 px+ off snaps; log 0164). While only the server moves you (rides, teleports, thrown, dead)
-  it follows the server's updates instead. Getting hit still shows a round
-  trip late.
+- **Smoothing (logs 0093, 0095, 0158, 0169):** the server sends each
+  body's state 60 times a second. Clients draw other players and enemies a
+  little behind (60 ms), blended between server updates; your own shape
+  uses the newest update. No client-side prediction (tried and removed,
+  log 0169). When updates stop, shapes coast for up to 1.5 s (recent
+  velocity and spin, slowing gently, falling under gravity, stopped by and
+  sliding along terrain) instead of freezing, and when updates return the
+  difference fades out (up to 0.25 s for big ones). Your own shape plays on
+  instead (log 0173): after 0.12 s without an update it runs its own
+  physics with your keys, and hands back to the server's updates, fading,
+  once they're flowing again.
 - **Clients (log 0099):** the web build is the main online client,
   installable on phones as an app (PWA, any orientation; logs 0122, 0134).
   It uses our own page (`web/shell.html`, log 0132): the phone keyboard
@@ -540,13 +553,15 @@ As in the book, women are straight lines.
 - **Diagnostics (logs 0155, 0159):** anyone can type `\diagnostics` (`\diag`):
   5 pings to the server, then your fps and frame time, ping, how steadily
   your shape's updates arrive, and the server's fps, physics load, players,
-  enemies, memory and uptime, the longest frame on each side (log 0160),
-  and how far your predicted shape is from the server's (log 0161). Only
-  you see it.
+  enemies, memory and uptime, the longest frame on each side (log 0160) (log 0160).
+  Only you see it.
   `\diag live` keeps a short version on screen, top right, while you
   play, until you type it again. `\simulate lag 150` (optionally a
   jitter, `\simulate lag 150 30`) adds that much lag to your own
   connection, to test; `\simulate lag off` stops it (log 0159).
+  `\simulate stalls 160 [every 5]` adds TCP-like stalls (nothing comes in,
+  then a burst), `\simulate prod` is the live server's profile (+35 ms,
+  160 ms stalls ~every 5 s), and `\simulate off` stops it all (log 0167).
 - **Admin terminal (logs 0138, 0141, 0142, 0143, 0144, 0145, 0146, 0147, 0148, 0149, 0153, 0156):** a chat line starting with `\` turns the
   chat into a full-screen terminal until Esc (or ✕) closes it; Enter never
   leaves, `\hello` has imsdow wave and say hi, and `\bye` says goodbye to
@@ -626,5 +641,5 @@ As in the book, women are straight lines.
 17. Confirm the barracks build details (log 0077): General's shape, squad
     sizes, pay and prices, pay kept by heirs, certificate for every squad
     member, metal stats.
-18. The trading booth and gathering for near-equilateral triangles (log
-    0074): confirm, and what do goods sell for?
+18. Workmen and the trading booth (log 0177): what do goods sell for, and
+    how much faster should work make soldiering?

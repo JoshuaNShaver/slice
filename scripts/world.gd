@@ -123,7 +123,7 @@ func _process(delta: float) -> void:
 	Diagnostics.note_frame(delta)  # hitches, for \diagnostics (log 0160)
 	var me := _local_player()
 	if me != null:
-		_camera.position = me.drawn_position()
+		_camera.position = me.position
 		_hud.update(me)
 		_update_prompts(me)
 		_announce_place(me)
@@ -207,6 +207,9 @@ func _sync_player_shapes() -> void:
 				"chest": Net.chests.get(id, PackedStringArray()),
 				"pos": Regions.spawn_for(info.kind) + offset,
 			})
+			# A new family's first heir, never played: born (design log 0168).
+			if int(info.generation) == 1 and (Net.progress.get(id, {}) as Dictionary).is_empty():
+				Net.play_cutscene(id, Cutscenes.founding(info))
 	for shape: PlayerShape in _players_root.get_children():
 		if not Net.players.has(shape.peer_id):
 			_players_root.remove_child(shape)

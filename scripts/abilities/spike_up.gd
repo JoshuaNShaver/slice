@@ -25,8 +25,8 @@ func _init() -> void:
 
 ## Throws hostile enemies, but not bosses: too heavy (design log 0089).
 func use_by_player(player: PlayerShape, state: PhysicsDirectBodyState2D) -> void:
-	if not player.multiplayer.is_server():
-		start(player, state, player.corners, player.corner_angles, PlayerShape.RADIUS, [])  # predicted: only the server throws
+	if not player.multiplayer.is_server():  # playing on through a gap: only the server throws
+		start(player, state, player.corners, player.corner_angles, PlayerShape.RADIUS, [])
 		return
 	var foes: Array = player.get_tree().get_nodes_in_group(Enemy.GROUP).filter(func(e: Node) -> bool:
 		var enemy := e as Enemy

@@ -142,7 +142,7 @@ func interact(p: PlayerShape) -> void:
 		return
 	match role:
 		"priest":
-			if not p.actions.marry():
+			if not p.actions.marry(display_name):
 				p.screen.tell(display_name, "Bring me a marriage certificate, and I will marry you.")
 		"general", "quartermaster":
 			_say(p, lines)

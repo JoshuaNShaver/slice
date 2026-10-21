@@ -1,7 +1,7 @@
 # 0164: Your predicted shape is drawn between physics ticks
 
 - **Date:** 2026-10-20
-- **Status:** Accepted
+- **Status:** Superseded by 0169
 - **Decision:** Your own predicted shape, and the camera on it, are drawn
   between its last two physics ticks by how far the frame is into the
   next, plus any correction still fading. Corrections ignore errors under

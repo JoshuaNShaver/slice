@@ -19,6 +19,7 @@ var _since_combat := INF  # s since you last hit or were hit
 var _regen_carry := 0.0  # health regen builds up in fractions
 var _meal_left := 0.0  # health a provision still has to give (design log 0084)
 var _meal_rate := 0.0  # health per second while it lasts
+var _safe_until := 0  # ms (Time.get_ticks_msec); unhurt while watching a cutscene
 
 
 ## Every physics step, before movement.
@@ -31,7 +32,7 @@ func tick(step: float) -> void:
 ## A hit from an enemy's corner; `push` points from it to you.
 ## A sparring partner's hits aren't `lethal`: they stop at 1 health (log 0072).
 func take_hit(raw: float, push: Vector2, lethal := true) -> void:
-	if player.dead or _invulnerable > 0.0:
+	if player.dead or _invulnerable > 0.0 or Time.get_ticks_msec() < _safe_until:
 		return
 	var stats := player.stats
 	_invulnerable = INVULNERABLE_TIME
@@ -44,6 +45,12 @@ func take_hit(raw: float, push: Vector2, lethal := true) -> void:
 		player.dead = true
 		# Deferred: this runs inside a physics callback.
 		Net.player_died.call_deferred(player.peer_id)
+
+
+## Server only. Can't be hurt for `seconds` (0 ends it): a cutscene is
+## playing on the owner's screen (Net.play_cutscene).
+func keep_safe(seconds: float) -> void:
+	_safe_until = Time.get_ticks_msec() + int(seconds * 1000.0) if seconds > 0.0 else 0
 
 
 ## Damage one of your corners deals (design §3). Dents deal none.

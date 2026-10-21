@@ -3,6 +3,7 @@
 
 Implements only what the game uses:
   PostgREST: GET/POST/DELETE /rest/v1/families, GET/POST /rest/v1/chests,
+        GET/POST /rest/v1/unlocks,
         GET/POST /rest/v1/profiles (409 on a taken name, any case)
   Auth: GET /auth/v1/user, GET /auth/v1/authorize (PKCE, redirects at
         once as if Google said yes), POST /auth/v1/token?grant_type=pkce
@@ -30,7 +31,7 @@ USERS = {
 PUBLISHABLE = "sb_publishable_test"
 
 lock = threading.RLock()
-state = {"families": {}, "chests": {}, "profiles": {}, "fail": 0, "requests": 0, "bytes_out": 0, "writes": 0,
+state = {"families": {}, "chests": {}, "unlocks": {}, "profiles": {}, "fail": 0, "requests": 0, "bytes_out": 0, "writes": 0,
          "codes": {}, "refresh": {}}
 
 
@@ -84,7 +85,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/_mock/dump":
             with lock:
                 dump = {"families": {f"{k[0]}:{k[1]}": v for k, v in state["families"].items()},
-                        "chests": state["chests"], "profiles": state["profiles"], "requests": state["requests"],
+                        "chests": state["chests"], "unlocks": state["unlocks"], "profiles": state["profiles"], "requests": state["requests"],
                         "bytes_out": state["bytes_out"], "writes": state["writes"]}
             return self.reply(200, dump)
         self.reply(404, {})
@@ -123,6 +124,17 @@ class Handler(BaseHTTPRequestHandler):
                 row = self.body()
                 with lock:
                     state["chests"][row["user_id"]] = row
+                    state["writes"] += 1
+                return self.reply(201, None if minimal else [row])
+        if table == "unlocks":
+            if self.command == "GET":
+                with lock:
+                    rows = [{"names": state["unlocks"][user]["names"]}] if user in state["unlocks"] else []
+                return self.reply(200, rows)
+            if self.command == "POST":
+                row = self.body()
+                with lock:
+                    state["unlocks"][row["user_id"]] = row
                     state["writes"] += 1
                 return self.reply(201, None if minimal else [row])
         if table == "profiles":

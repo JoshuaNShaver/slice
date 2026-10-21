@@ -20,6 +20,10 @@ func run() -> int:
 	_check(fam_store.get_family(0) == null, "temp store starts empty")
 	fam_store.found_family(0, "Testers", "isosceles")
 	_check(FileAccess.file_exists(_base + "families/slot_1.json"), "founded family saved in temp folder")
+	# Irregular is locked until an heir is born irregular (design log 0174).
+	var locked: Family = fam_store.found_family(1, "Crooked", "irregular")
+	_check(locked.kind == "isosceles" and fam_store.unlocks.is_empty(), "irregular start locked at first")
+	fam_store.delete_family(1)
 
 	# Play: gain levels, loot and a chest item, then leave (saves).
 	net.start_offline(0)
@@ -47,8 +51,15 @@ func run() -> int:
 	_check(p.stats.level == level, "level restored")
 	_check(p.inventory.bag == bag, "bag restored")
 	_check(p.inventory.chest[3] == "voice_7", "chest restored")
+	# An heir born irregular unlocks it, for good, even once that family is gone.
+	net.accounts.on_heir(1, {"sides": 3, "kind": "irregular", "apex": 50, "luck": 20})
 	net.leave()
 	world.free()
+	fam_store.delete_family(0)
+	fam_store.reload()
+	_check(Family.UNLOCK_IRREGULAR in fam_store.unlocks, "irregular birth unlocks irregular starts")
+	var crooked: Family = fam_store.found_family(1, "Crooked", "irregular")
+	_check(crooked.kind == "irregular", "irregular family founded once unlocked")
 
 	_check_cadence()
 	_remove_dir(ProjectSettings.globalize_path(_base))

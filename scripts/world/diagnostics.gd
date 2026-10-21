@@ -10,9 +10,11 @@ extends RefCounted
 const COMMANDS: Array[String] = ["\\diagnostics", "\\diag"]
 const HELP := "your ping, framerate and connection (add live to keep it on screen)"
 const SIMULATE := "\\simulate"
-const PREDICT := "\\predict"
-const PREDICT_HELP := "on|off: move your own shape at once as you press keys (testing; off by default)"
-const SIMULATE_HELP := "lag <ms> [jitter ms]: adds lag to your connection, to test (lag off stops)"
+const SIMULATE_HELP := "lag <ms> [jitter] | stalls <ms> [every <s>] | prod | off: a slower connection, to test"
+## \simulate prod (log 0167): like the live server from here, a steady
+## ~40 ms ping with a stall now and then.
+const PROD := {"lag": 35.0, "jitter": 1.0, "stall": 160.0, "every": 5.0}
+const STALL_EVERY := 5.0  # s between stalls when not given
 const MAX_LAG := 5000.0  # ms
 ## A frame longer than this is a hitch, kept for `worst_frame` (log 0160).
 const HITCH_MS := 25.0
@@ -64,43 +66,66 @@ static func parse(line: String) -> Dictionary:
 		if words.size() == 2 and words[1] == "live":
 			return {"do": "live"}
 		return {"error": "Try %s, or %s live to keep it on screen." % [COMMANDS[0], COMMANDS[1]]}
-	if words[0] == PREDICT:
-		if words.size() == 1:
-			return {"do": "predict", "on": not PlayerPrediction.enabled}
-		if words.size() == 2 and words[1] in ["on", "off"]:
-			return {"do": "predict", "on": words[1] == "on"}
-		return {"error": "Try %s on or %s off." % [PREDICT, PREDICT]}
 	if words[0] != SIMULATE:
 		return {}
-	var usage := {"error": "Try %s lag 150 (ms), %s lag 150 30 (with jitter), or %s lag off." % [SIMULATE, SIMULATE, SIMULATE]}
-	if words.size() < 2 or words[1] != "lag":
+	return _parse_simulate(words)
+
+
+## \simulate lag <ms> [jitter] | stalls <ms> [every <s>] | prod | off
+## (logs 0159, 0167): {"do": "simulate", ...what to set}, or {"error"}.
+static func _parse_simulate(words: PackedStringArray) -> Dictionary:
+	var usage := {"error": "Try %s lag 150 [30 jitter], %s stalls 160 [every 5 s], %s prod, or %s off." % [
+			SIMULATE, SIMULATE, SIMULATE, SIMULATE]}
+	if words.size() == 2 and words[1] == "off":
+		return {"do": "simulate", "lag": 0.0, "jitter": 0.0, "stall": 0.0, "every": 0.0}
+	if words.size() == 2 and words[1] == "prod":
+		return {"do": "simulate", "lag": PROD.lag, "jitter": PROD.jitter, "stall": PROD.stall, "every": PROD.every}
+	if words.size() < 3 or words[1] not in ["lag", "stalls"]:
 		return usage
 	if words.size() == 3 and words[2] in ["off", "0"]:
-		return {"do": "lag", "lag": 0.0, "jitter": 0.0}
-	if words.size() < 3 or words.size() > 4 or not words[2].is_valid_float() \
-			or (words.size() == 4 and not words[3].is_valid_float()):
+		if words[1] == "lag":
+			return {"do": "simulate", "lag": 0.0, "jitter": 0.0}
+		return {"do": "simulate", "stall": 0.0, "every": 0.0}
+	var numbers: Array[float] = []
+	for w in words.slice(2):
+		if w == "every" and words[1] == "stalls":
+			continue
+		if not w.is_valid_float():
+			return usage
+		numbers.append(w.to_float())
+	if words[1] == "lag":
+		if numbers.size() > 2:
+			return usage
+		var lag := clampf(numbers[0], 0.0, MAX_LAG)
+		var jitter := clampf(numbers[1], 0.0, lag / 2.0) if numbers.size() == 2 else 0.0
+		return {"do": "simulate", "lag": lag, "jitter": jitter}
+	if numbers.size() > 2:
 		return usage
-	var lag := clampf(words[2].to_float(), 0.0, MAX_LAG)
-	var jitter := clampf(words[3].to_float(), 0.0, lag / 2.0) if words.size() == 4 else 0.0
-	return {"do": "lag", "lag": lag, "jitter": jitter}
+	return {"do": "simulate", "stall": clampf(numbers[0], 0.0, MAX_LAG),
+			"every": maxf(numbers[1], 0.5) if numbers.size() == 2 else STALL_EVERY}
 
 
-## Your answer to \simulate lag, after setting it.
-static func lag_answer(lag: float, jitter: float) -> String:
+## What \simulate set, for its answer.
+static func simulate_answer() -> String:
 	if Net.lag_peer == null:
 		return "No connection to slow down: %s." % ("you're hosting" if Net.mode == Net.Mode.HOST else "you're offline")
-	if lag <= 0.0:
+	var now := _simulated()
+	if now == "":
 		return "Simulated lag off."
-	return "Simulating %d ms of lag%s, on your connection only. %s lag off to stop." % [
-			roundi(lag), " (give or take %d ms each way)" % roundi(jitter) if jitter > 0.0 else "", SIMULATE]
+	return "%s, on your connection only. %s off to stop." % ["S" + now.substr(1), SIMULATE]
 
 
-## The simulated lag, for reports: "" if none.
+## The simulated lag and stalls, for reports: "" if none.
 static func _simulated() -> String:
-	if Net.lag_peer == null or Net.lag_peer.lag_ms <= 0.0:
+	var peer := Net.lag_peer
+	if peer == null:
 		return ""
-	var jitter := Net.lag_peer.jitter_ms
-	return "simulated +%d ms%s" % [roundi(Net.lag_peer.lag_ms), " ±%d" % roundi(jitter) if jitter > 0.0 else ""]
+	var parts: Array[String] = []
+	if peer.lag_ms > 0.0:
+		parts.append("+%d ms%s" % [roundi(peer.lag_ms), " ±%d" % roundi(peer.jitter_ms) if peer.jitter_ms > 0.0 else ""])
+	if peer.stall_ms > 0.0 and peer.stall_every > 0.0:
+		parts.append("%d ms stalls ~%ss" % [roundi(peer.stall_ms), str(snappedf(peer.stall_every, 0.1))])
+	return "" if parts.is_empty() else "simulated " + ", ".join(parts)
 
 
 ## The live panel (\diag live): a few short lines. `pings` are the latest
@@ -124,9 +149,6 @@ static func live_text(pings: Array[float], server: Dictionary, me: PlayerShape) 
 	if not net.is_empty():
 		lines.append("updates %.0f/s  gap %d ms  late %d ms" % [
 				net.rate, roundi(net.gap * 1000.0), roundi(net.late * 1000.0)])
-	var guessed := _prediction(me, true)
-	if guessed != "":
-		lines.append(guessed)
 	if not server.is_empty():
 		var hitch := _worst(server.get("worst_frame", 0.0))
 		lines.append("server %d fps  physics %.1f/%.1f ms  %d on%s" % [
@@ -175,9 +197,6 @@ static func report(pings: Array[float], sent: int, server: Dictionary, me: Playe
 			lines.append("  Updates: %.0f a second, longest gap %d ms, late by %d ms on average (worst %d), last %d s" % [
 				net.rate, roundi(net.gap * 1000.0), roundi(net.late * 1000.0), roundi(net.late_max * 1000.0),
 				roundi(NetSmoother.STATS_WINDOW)])
-		var guessed := _prediction(me, false)
-		if guessed != "":
-			lines.append("  Prediction: " + guessed)
 	if server.is_empty():
 		lines.append("  Server: didn't answer")
 	else:
@@ -191,24 +210,6 @@ static func report(pings: Array[float], sent: int, server: Dictionary, me: Playe
 		lines.append("  Server build: %s%s" % [BuildInfo.describe(str(server.get("build", ""))),
 				"" if str(server.get("build", "")) == BuildInfo.id() else " (not the same as yours)"])
 	return "\n".join(lines)
-
-
-## How your predicted shape (log 0161) has matched the server: short for
-## the live panel, else for the report. "" when not predicting.
-static func _prediction(me: PlayerShape, short: bool) -> String:
-	if me == null or me.prediction == null:
-		return ""
-	if not PlayerPrediction.enabled:
-		return "prediction off" if short else "off (%s on to try it)" % PREDICT
-	if me.prediction.following:
-		return "following the server" if short else "following the server (a ride, a teleport, thrown)"
-	var st := me.prediction.stats()
-	if not st.has("off"):
-		return "predicting" if short else "predicting, nothing to compare yet"
-	if short:
-		return "predicted  off %.0f px (worst %d)  snaps %d" % [st.off, roundi(st.off_max), st.snaps]
-	return "your shape moves at once; off from the server by %.1f px on average (worst %d), %d snaps, last %d s" % [
-			st.off, roundi(st.off_max), st.snaps, roundi(PlayerPrediction.STATS_WINDOW)]
 
 
 ## For reports: "40 ms (last 10 s)" or "under 25 ms (last 10 s)".

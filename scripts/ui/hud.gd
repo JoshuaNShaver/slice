@@ -41,6 +41,8 @@ const MESSAGE_TIME := 3.5  # s
 const SPEAKER_RANGE := 1200.0  # px; farther speakers are heard as thoughts
 const CLOSE_SIZE := 32  # px; each panel's ✕ button
 const DIAG_EVERY := 0.25  # s between rewrites of \diag live's panel
+const WAKE_FIRST := 1.0  # s after a cutscene before its first wake line
+const WAKE_EVERY := 4.0  # s between wake lines
 
 var _root: Control
 var _portrait: ShapeIcon
@@ -91,6 +93,8 @@ var _countdown_squad: Label
 var _countdown_ready: Button
 var _countdown_left := 0.0
 var _underground := false  # chalk text, over the underworld's slate
+var _cutscene: CutscenePlayer
+var _after_cutscene: Array[String] = []  # thoughts held back while one plays
 # Last values seen, to announce changes.
 var _seen := {}
 
@@ -98,6 +102,7 @@ var _seen := {}
 func _ready() -> void:
 	add_to_group(GROUP)
 	Controls.changed.connect(_on_controls_changed)
+	Net.cutscene_started.connect(play_cutscene)
 	_build()
 
 
@@ -361,8 +366,35 @@ func chat_notice(text: String) -> void:
 	_chat.add_notice(text)
 
 
-## Your own news, in a thought cloud beside you.
+## Plays a birth or wedding cutscene (Net.cutscene_started, design log 0168).
+func play_cutscene(scene: Dictionary) -> void:
+	_cutscene.play(scene)
+
+
+func cutscene_playing() -> bool:
+	return _cutscene != null and _cutscene.playing()
+
+
+## The overlay closed: tell the server, then say what waited for it, and
+## the wake lines (the Gleaner, log 0171), one every few seconds.
+func _on_cutscene_finished(scene: Dictionary) -> void:
+	Net.cutscene_done()
+	var speaker := str(scene.get("wake_speaker", ""))
+	var wake: Array = scene.get("wake", [])
+	for i in wake.size():
+		get_tree().create_timer(WAKE_FIRST + i * WAKE_EVERY).timeout.connect(say.bind(speaker, str(wake[i])))
+	var waiting := _after_cutscene.duplicate()
+	_after_cutscene.clear()
+	var after := WAKE_FIRST + wake.size() * WAKE_EVERY if not wake.is_empty() else WAKE_FIRST
+	for text: String in waiting:
+		get_tree().create_timer(after).timeout.connect(think.bind(text))
+
+
+## Your own news, in a thought cloud beside you (after any cutscene).
 func think(text: String) -> void:
+	if cutscene_playing():
+		_after_cutscene.append(text)
+		return
 	if _me == null or not is_instance_valid(_me):
 		show_message(text)
 		return
@@ -558,6 +590,9 @@ func _build() -> void:
 	_root.add_child(_message)
 	_root.add_child(_build_countdown())
 	_root.add_child(_build_diagnostics())
+	_cutscene = CutscenePlayer.new()
+	_cutscene.finished.connect(_on_cutscene_finished)
+	_root.add_child(_cutscene)  # last: over everything
 
 
 ## Top right, under your pay: \diag live's numbers, light on dark so they

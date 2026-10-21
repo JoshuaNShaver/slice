@@ -142,9 +142,23 @@ func run() -> int:
 	_results.append("RESULT boss pos=%s hp=%d" % [_v(boss.position), boss.hp])
 	_record("after_boss", p)
 
-	# Marriage: a new heir takes over the shape (design log 0030).
+	# Marriage: a new heir takes over the shape (design log 0030), and the
+	# wedding and birth play as a cutscene, with you kept safe (log 0168).
+	var scenes: Array[Dictionary] = []
+	var on_scene := func(scene: Dictionary) -> void: scenes.append(scene)
+	Net.cutscene_started.connect(on_scene)
+	Net.accounts.find_player = func(id: int) -> PlayerShape: return p if id == p.peer_id else null
 	p.inventory.add_to_bag(Gear.CERTIFICATE)
 	_check(p.actions.marry(), "marry")
+	_check(scenes.size() == 1 and (scenes[0].acts as Array).size() == 2, "wedding and birth cutscene sent")
+	var hp_before := p.stats.hp
+	p.combat.take_hit(50.0, Vector2.UP)
+	_check(p.stats.hp == hp_before, "safe while watching")
+	Net._cutscene_done()
+	p.combat.take_hit(50.0, Vector2.UP)
+	_check(p.stats.hp < hp_before, "hurt again once it ends")
+	Net.cutscene_started.disconnect(on_scene)
+	Net.accounts.find_player = Callable()
 	_check(p.generation == 2 and p.stats.level == 1 and p.stats.abilities.is_empty(), "heir starts fresh")
 	_check(p.inventory.equipped == PlayerInventory.blank(Gear.SLOTS.size()), "heir wears nothing")
 	await _steps(10)

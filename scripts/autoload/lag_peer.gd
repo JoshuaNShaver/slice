@@ -5,10 +5,16 @@ extends MultiplayerPeerExtension
 ## half the lag (give or take the jitter) before it moves on. Packets keep
 ## their order, as they would over WebSocket. With no lag set they pass
 ## straight through.
+##
+## Stalls (log 0167) are what a lost packet does to TCP: every so often
+## nothing comes in for a while, then everything held up arrives at once.
+## Only incoming, the server's updates, which is what `\diag` measures.
 
 var inner: MultiplayerPeer
 var lag_ms := 0.0  # added round trip
 var jitter_ms := 0.0  # each way, give or take
+var stall_ms := 0.0  # how long each stall holds incoming packets
+var stall_every := 0.0  # seconds between stalls, on average (0: none)
 
 var _out: Array[Dictionary] = []  # {at, data, peer, channel, mode}, oldest first
 var _in: Array[Dictionary] = []
@@ -18,6 +24,8 @@ var _target := 0
 var _channel := 0
 var _mode := TRANSFER_MODE_RELIABLE
 var _rng := RandomNumberGenerator.new()
+var _stall_until := 0  # usec: nothing comes in before this
+var _next_stall := 0  # usec the next stall starts
 
 
 func _init(wrapped: MultiplayerPeer) -> void:
@@ -31,6 +39,22 @@ func _init(wrapped: MultiplayerPeer) -> void:
 func simulate(lag: float, jitter := 0.0) -> void:
 	lag_ms = maxf(lag, 0.0)
 	jitter_ms = clampf(jitter, 0.0, lag_ms / 2.0)
+
+
+## Sets the stalls: `ms` long, about every `every` seconds (half to one
+## and a half times that, at random). 0 for either turns them off.
+func simulate_stalls(ms: float, every: float) -> void:
+	stall_ms = maxf(ms, 0.0)
+	stall_every = maxf(every, 0.0)
+	_stall_until = 0
+	_schedule_stall()
+
+
+func _schedule_stall() -> void:
+	if stall_ms <= 0.0 or stall_every <= 0.0:
+		_next_stall = 0
+		return
+	_next_stall = Time.get_ticks_usec() + int(stall_every * _rng.randf_range(0.5, 1.5) * 1000000.0)
 
 
 ## When a packet queued now moves on: half the lag, jitter either way, and
@@ -73,6 +97,11 @@ func _poll() -> void:
 
 func _get_available_packet_count() -> int:
 	var now := Time.get_ticks_usec()
+	if _next_stall > 0 and now >= _next_stall:
+		_stall_until = now + int(stall_ms * 1000.0)
+		_schedule_stall()
+	if now < _stall_until:
+		return 0  # held up behind a lost packet
 	var count := 0
 	for p in _in:
 		if p.at > now:

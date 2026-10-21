@@ -482,7 +482,8 @@ func _build_slot_card(slot: int, family: Family) -> Control:
 	return card.panel
 
 
-## Three toggle buttons, one per starting triangle, with the choice named below.
+## One toggle button per starting triangle the player may pick, with the
+## choice named below. Irregular is hidden until unlocked (design log 0175).
 func _build_start_picker(slot: int) -> Control:
 	var chosen: String = _start_kinds.get(slot, "isosceles")
 	var box := VBoxContainer.new()
@@ -493,7 +494,14 @@ func _build_start_picker(slot: int) -> Control:
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(caption)
 	var group := ButtonGroup.new()
+	# Irregular appears once an heir is born irregular (design logs 0174, 0175).
+	var unlocks: Array = Net.accounts.unlocks if _online_mode else FamilyStore.unlocks
+	if not Family.can_start(chosen, unlocks):
+		chosen = "isosceles"
+		_start_kinds[slot] = chosen
 	for kind in Family.STARTING_KINDS:
+		if not Family.can_start(kind, unlocks):
+			continue
 		var apex := Family.START_APEX
 		var button := Button.new()
 		button.toggle_mode = true

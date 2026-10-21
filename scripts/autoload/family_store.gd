@@ -12,6 +12,8 @@ signal slots_changed
 const SLOT_COUNT := SaveStore.SLOT_COUNT
 
 var store: LocalFileStore
+## This machine's unlocks (design log 0174): what a new family may start as.
+var unlocks: Array[String] = []
 var _slots: Array = []
 var _rng := RandomNumberGenerator.new()
 
@@ -38,6 +40,10 @@ func reload() -> void:
 	for i in SLOT_COUNT:
 		var raw: Variant = data.families[i] if data.ok else null
 		_slots[i] = Family.from_dict(raw) if raw is Dictionary else null
+	var saved: Array = data.get("unlocks", []) if data.ok else []
+	unlocks = Family.clean_unlocks(saved, _slots)
+	if data.ok and unlocks.size() != saved.size():
+		store.save_unlocks(LocalFileStore.LOCAL, unlocks)  # keep what older saves showed
 	slots_changed.emit()
 
 
@@ -45,8 +51,11 @@ func get_family(slot: int) -> Family:
 	return _slots[slot]
 
 
+## A locked start (Family.can_start) founds an isosceles family instead.
 func found_family(slot: int, family_name: String, start_kind: String) -> Family:
 	assert(_slots[slot] == null, "slot %d is already taken" % slot)
+	if not Family.can_start(start_kind, unlocks):
+		start_kind = "isosceles"
 	var f := Family.found(family_name, start_kind, _rng)
 	_slots[slot] = f
 	store.save_family(LocalFileStore.LOCAL, slot, f.to_dict())

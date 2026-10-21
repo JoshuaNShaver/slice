@@ -43,6 +43,8 @@ const TOUCH_NAMES := {
 
 ## True while the controls screen waits for a key, so gameplay ignores it.
 var capturing := false
+## True while a cutscene plays (CutscenePlayer), so gameplay ignores keys.
+var watching := false
 
 
 ## True while keys go to a text field (chat), so gameplay ignores them.

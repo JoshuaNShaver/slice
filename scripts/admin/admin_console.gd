@@ -31,12 +31,11 @@ const ALIASES := {
 const ADMIN_ROLES: Array[String] = ["admin", "first_architect"]
 ## The terminal's own commands (ChatBox) and Diagnostics', which anyone may
 ## type; for Tab to complete (log 0163).
-const PLAYER_WORDS: Array[String] = ["help", "hello", "bye", "diagnostics", "diag", "simulate", "predict"]
+const PLAYER_WORDS: Array[String] = ["help", "hello", "bye", "diagnostics", "diag", "simulate"]
 ## What can follow these first words: {word: [next words]}, then for
 ## deeper words "word1 word2": [...].
 const FOLLOWERS := {
-	"diagnostics": ["live"], "diag": ["live"], "simulate": ["lag"], "simulate lag": ["off"],
-	"predict": ["on", "off"],
+	"diagnostics": ["live"], "diag": ["live"], "simulate": ["lag", "stalls", "prod", "off"], "simulate lag": ["off"], "simulate stalls": ["off"],
 }
 
 ## Peer id -> short id, the small number `\player list` shows. Handed out
@@ -217,7 +216,6 @@ static func help() -> String:
 		lines.append("  %s%s: short for %s%s" % [ESCAPE, alias, ESCAPE, " ".join(ALIASES[alias])])
 	lines.append("  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP])
 	lines.append("  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP])
-	lines.append("  %s %s" % [Diagnostics.PREDICT, Diagnostics.PREDICT_HELP])
 	return "\n".join(lines)
 
 
@@ -230,7 +228,6 @@ static func player_help() -> String:
 		"  %sbye: say goodbye and close the terminal" % ESCAPE,
 		"  %s: %s" % [Diagnostics.COMMANDS[0], Diagnostics.HELP],
 		"  %s %s" % [Diagnostics.SIMULATE, Diagnostics.SIMULATE_HELP],
-		"  %s %s" % [Diagnostics.PREDICT, Diagnostics.PREDICT_HELP],
 	])
 
 

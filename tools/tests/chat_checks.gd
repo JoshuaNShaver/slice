@@ -140,10 +140,30 @@ func run() -> int:
 	# \diag live and \simulate lag (log 0159): parsed here, never sent.
 	_check(Diagnostics.parse("\\diag live").get("do") == "live", "\\diag live parses")
 	var lag := Diagnostics.parse("\\simulate lag 150 30")
-	_check(lag.get("do") == "lag" and lag.lag == 150.0 and lag.jitter == 30.0, "\\simulate lag 150 30: %s" % lag)
+	_check(lag.get("do") == "simulate" and lag.lag == 150.0 and lag.jitter == 30.0, "\\simulate lag 150 30: %s" % lag)
 	_check(Diagnostics.parse("\\simulate lag 100 90").get("jitter") == 50.0, "jitter at most half the lag")
 	_check(Diagnostics.parse("\\simulate lag off").get("lag") == 0.0, "\\simulate lag off")
 	_check(Diagnostics.parse("\\simulate lag fast").has("error"), "\\simulate lag needs a number")
+	# Stalls and the prod profile (log 0167).
+	var stalls := Diagnostics.parse("\\simulate stalls 160 every 3")
+	_check(stalls.get("stall") == 160.0 and stalls.get("every") == 3.0 and not stalls.has("lag"),
+			"\\simulate stalls 160 every 3: %s" % stalls)
+	_check(Diagnostics.parse("\\simulate stalls 200").get("every") == Diagnostics.STALL_EVERY, "stalls default every")
+	_check(Diagnostics.parse("\\simulate stalls off").get("stall") == 0.0, "\\simulate stalls off")
+	var prod := Diagnostics.parse("\\simulate prod")
+	_check(prod.get("lag") == Diagnostics.PROD.lag and prod.get("stall") == Diagnostics.PROD.stall, "\\simulate prod: %s" % prod)
+	var all_off := Diagnostics.parse("\\simulate off")
+	_check(all_off.get("lag") == 0.0 and all_off.get("stall") == 0.0, "\\simulate off stops both")
+	_check(Diagnostics.parse("\\simulate stalls lots").has("error"), "stalls need a number")
+	var peer := LagPeer.new(OfflineMultiplayerPeer.new())
+	peer.simulate_stalls(80.0, 0.5)
+	var held := false  # a stall starts within 0.75 s (0.5 s, give or take half)
+	var t_end := Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < t_end and not held:
+		peer._get_available_packet_count()  # starts a stall when one is due
+		held = Time.get_ticks_usec() < peer._stall_until
+		await tree.process_frame
+	_check(held, "stalls come when due")
 	_check(Diagnostics.parse("\\player list").is_empty() and Diagnostics.parse("hi").is_empty(), "others aren't parsed")
 	_check("\\simulate" in their_help, "a player's help lists simulate")
 	_notices.clear()

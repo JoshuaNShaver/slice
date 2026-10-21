@@ -5,7 +5,7 @@ extends SaveStore
 ##
 ## The "local" account (the player at this machine: offline, or a LAN host
 ## playing) keeps today's paths: <base>families/slot_N.json and
-## <base>chests.json. Any other account (a LAN guest, a dev server's
+## <base>chests.json (and <base>unlocks.json, log 0174). Any other account (a LAN guest, a dev server's
 ## players) lives in <base>accounts/<id>/.
 
 const LOCAL := "local"
@@ -34,11 +34,12 @@ static func valid_account(account: String) -> bool:
 func load_account(account: String) -> Dictionary:
 	if not valid_account(account):
 		push_error("LocalFileStore: bad account id %s" % account)
-		return {"ok": false, "families": [], "chest": []}
+		return {"ok": false, "families": [], "chest": [], "unlocks": []}
 	var out := SaveStore.empty_account()
 	for slot in SLOT_COUNT:
 		out.families[slot] = _read_family(_family_path(account, slot))
 	out.chest = _read_chest(_chest_path(account))
+	out.unlocks = _read_unlocks(_dir(account) + "unlocks.json")
 	return out
 
 
@@ -58,6 +59,11 @@ func delete_family(account: String, slot: int) -> void:
 func save_chest(account: String, items: Array) -> void:
 	if valid_account(account):
 		_write(_chest_path(account), JSON.stringify({"items": items}, "\t"))
+
+
+func save_unlocks(account: String, names: Array) -> void:
+	if valid_account(account):
+		_write(_dir(account) + "unlocks.json", JSON.stringify({"names": names}, "\t"))
 
 
 func _dir(account: String) -> String:
@@ -95,6 +101,14 @@ func _read_family(path: String) -> Variant:
 	DirAccess.rename_absolute(path, path + ".corrupt")
 	push_warning("Unreadable family save moved to %s.corrupt" % path)
 	return null
+
+
+## Unreadable unlocks are just none: being born irregular again earns them.
+func _read_unlocks(path: String) -> Array:
+	if not FileAccess.file_exists(path):
+		return []
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return data.names if data is Dictionary and data.get("names") is Array else []
 
 
 func _read_chest(path: String) -> Array:

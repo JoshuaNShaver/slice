@@ -8,14 +8,18 @@ const PRIEST_SIDES := 10  # design log 0010
 const KINDS: Array[String] = ["regular", "equilateral", "isosceles", "irregular"]
 const IRREGULAR_HEIR_CHANCE := 0.1  # design log 0009
 
-## Isosceles triangles (design log 0031): a new family's apex is 45°, and each
-## heir's is 5° wider, so the 3rd heir reaches 60°: equilateral.
-const START_APEX := 45
+## Isosceles triangles (design logs 0031, 0176): a new family's apex is 40°,
+## and each heir's is 5° wider, so the 4th heir reaches 60°: equilateral.
+const START_APEX := 40
 const APEX_STEP := 5
 const EQUILATERAL_APEX := 60
 
 ## The triangles a new family can start as, picked by the player (design logs 0050, 0065).
 const STARTING_KINDS: Array[String] = ["isosceles", "irregular"]
+## Account unlocks (design log 0174), kept across families. "irregular": an
+## heir has been born irregular, so a new family may start irregular.
+const UNLOCK_IRREGULAR := "irregular"
+const UNLOCKS: Array[String] = [UNLOCK_IRREGULAR]
 
 const POLYGON_NAMES := {
 	3: "triangle", 4: "square", 5: "pentagon", 6: "hexagon", 7: "heptagon",
@@ -89,8 +93,8 @@ static func roll_heir(parent_sides: int, parent_kind: String, parent_apex: int,
 	return heir
 
 
-## The apex a shape may have: isosceles 45–55°, irregular triangles 45–60°
-## (older saves had none, so they start at 45°), anything else 0.
+## The apex a shape may have: isosceles 40–55°, irregular triangles 40–60°
+## (older saves had none, so they start at 40°), anything else 0.
 static func clean_apex(n_sides: int, shape_kind: String, raw_apex: int) -> int:
 	if n_sides != 3:
 		return 0
@@ -99,6 +103,28 @@ static func clean_apex(n_sides: int, shape_kind: String, raw_apex: int) -> int:
 	if shape_kind == "irregular":
 		return clampi(raw_apex, START_APEX, EQUILATERAL_APEX)
 	return 0
+
+
+## May a new family start as `start_kind`, with these account unlocks?
+## Irregular only once an heir has been born irregular (design log 0174).
+static func can_start(start_kind: String, unlocks: Array) -> bool:
+	if start_kind not in STARTING_KINDS:
+		return false
+	return start_kind != "irregular" or UNLOCK_IRREGULAR in unlocks
+
+
+## Known unlock names from saved data, plus what the families show: an
+## irregular family's heir was born irregular (saves from before log 0174).
+static func clean_unlocks(raw: Variant, families: Array) -> Array[String]:
+	var out: Array[String] = []
+	if raw is Array:
+		for name: Variant in raw:
+			if name is String and name in UNLOCKS and name not in out:
+				out.append(name)
+	for f: Variant in families:
+		if f is Family and f.kind == "irregular" and UNLOCK_IRREGULAR not in out:
+			out.append(UNLOCK_IRREGULAR)
+	return out
 
 
 static func clean_name(raw: String) -> String:

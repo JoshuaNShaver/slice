@@ -49,14 +49,16 @@ var find_player := Callable()
 ## Server only. Peer id -> {"account", "username" ("" until chosen;
 ## always "" for guests), "role" ("player", "admin" or "first_architect";
 ## logs 0125, 0147, 0152),
-## "families" (Family or null), "chest", "slot" (-1 until playing),
-## "saved_at"}.
+## "families" (Family or null), "chest", "unlocks" (names, log 0174),
+## "slot" (-1 until playing), "saved_at"}.
 var sessions: Dictionary = {}
 ## Server only. Every login is an admin (--dev-admins, for tests and dev
 ## servers; log 0125).
 var dev_admins := false
 var _tries: Dictionary = {}
 
+## Client only. The account's unlocks, sent with the slots (log 0174).
+var unlocks: Array = []
 ## Client only. This player's role, as the server said (log 0147): picks
 ## imsdow's lines in the terminal, an admin's or a player's (log 0156).
 var my_role := "player"
@@ -202,10 +204,19 @@ func on_heir(id: int, heir: Dictionary) -> void:
 	family.apex = heir.apex
 	family.luck = heir.luck
 	family.progress = {}
+	_unlock(id, Family.UNLOCK_IRREGULAR if heir.kind == "irregular" else "")
 	var p := _shape(id)
 	if p != null:
 		keeper.checkpoint(sessions[id], p, true)
 	keeper.save_family(sessions[id])
+
+
+## Server only. The account unlocks `name` for good (log 0174); "" does nothing.
+func _unlock(id: int, unlock_name: String) -> void:
+	if unlock_name == "" or not sessions.has(id) or unlock_name in sessions[id].unlocks:
+		return
+	sessions[id].unlocks.append(unlock_name)
+	store.save_unlocks(sessions[id].account, sessions[id].unlocks)
 
 
 func _final_save(id: int) -> void:
@@ -387,8 +398,11 @@ func _new_session(account: String, data: Dictionary) -> Dictionary:
 	for i in mini(data.families.size(), SLOT_COUNT):
 		var raw: Variant = data.families[i]
 		families[i] = Family.from_dict(raw) if raw is Dictionary else null
+	var unlocks := Family.clean_unlocks(data.get("unlocks", []), families)
+	if unlocks.size() != (data.get("unlocks", []) as Array).size():
+		store.save_unlocks(account, unlocks)  # keep what older saves showed
 	return {"account": account, "username": "", "role": "player", "families": families, "chest": data.chest,
-			"slot": -1, "saved_at": SaveKeeper._now()}
+			"unlocks": unlocks, "slot": -1, "saved_at": SaveKeeper._now()}
 
 
 # --- Slots (server) --------------------------------------------------------
@@ -397,7 +411,7 @@ func _send_slots(id: int) -> void:
 	var list := []
 	for f: Family in sessions[id].families:
 		list.append(f.to_dict() if f != null else null)
-	_slots.rpc_id(id, list)
+	_slots.rpc_id(id, list, sessions[id].unlocks)
 
 
 func _session_for_menu(id: int) -> Dictionary:
@@ -416,6 +430,10 @@ func _found(slot: Variant, family_name: Variant, start_kind: Variant) -> void:
 		return
 	if session.families[slot] != null:
 		_error.rpc_id(id, "That slot is taken.")
+		return
+	if not Family.can_start(str(start_kind), session.unlocks):
+		_error.rpc_id(id, "Irregular families are unlocked once an heir is born irregular.")
+		_send_slots(id)
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -510,7 +528,8 @@ func _role(role: String) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _slots(list: Array) -> void:
+func _slots(list: Array, account_unlocks: Array) -> void:
+	unlocks = account_unlocks
 	var families := []
 	families.resize(SLOT_COUNT)
 	for i in mini(list.size(), SLOT_COUNT):

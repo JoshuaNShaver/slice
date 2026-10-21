@@ -16,6 +16,12 @@ signal players_changed
 ## On the player's own machine, after marrying. `heir` is what
 ## Family.roll_heir made; the server has already saved it.
 signal heir_born(heir: Dictionary)
+## On the player's own machine: a birth or wedding cutscene to play
+## (Cutscenes, design logs 0168, 0172).
+signal cutscene_started(scene: Dictionary)
+
+## Server only: how long a player watching a cutscene is kept safe at most.
+const CUTSCENE_SAFE_TIME := 180.0  # s
 
 enum Mode { OFFLINE, HOST, JOIN }
 
@@ -382,6 +388,42 @@ func heir_born_on_server(id: int, heir: Dictionary) -> void:
 		players[id].generation += 1
 		_broadcast_players()
 	_heir_born.rpc_id(id, heir)
+
+
+## Server only. Plays a cutscene (Cutscenes) on one player's screen. They
+## can't be hurt until it ends (cutscene_done) or for CUTSCENE_SAFE_TIME.
+func play_cutscene(id: int, scene: Dictionary) -> void:
+	var shape := _shape_of(id)
+	if shape != null:
+		shape.combat.keep_safe(CUTSCENE_SAFE_TIME)
+	_cutscene.rpc_id(id, scene)
+
+
+@rpc("authority", "call_local", "reliable")
+func _cutscene(scene: Dictionary) -> void:
+	cutscene_started.emit(scene)
+
+
+## Owner side: the cutscene is over (watched or skipped).
+func cutscene_done() -> void:
+	if multiplayer.has_multiplayer_peer():
+		_cutscene_done.rpc_id(1)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _cutscene_done() -> void:
+	if not multiplayer.is_server():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	var shape := _shape_of(id if id != 0 else multiplayer.get_unique_id())
+	if shape != null:
+		shape.combat.keep_safe(0.0)
+
+
+## Server only. The world's shape for a player (the world sets
+## accounts.find_player), or null.
+func _shape_of(id: int) -> PlayerShape:
+	return accounts.find_player.call(id) if accounts.find_player.is_valid() else null
 
 
 ## Server -> the player who died. Dying without an heir ends the family

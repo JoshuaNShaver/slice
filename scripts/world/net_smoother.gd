@@ -9,26 +9,38 @@ extends RefCounted
 ##   blended between the two updates around that moment.
 ## - Your own shape (`live` true) shows the newest update, so steering stays
 ##   as quick as the round trip allows.
-## - When updates run late, the body keeps moving at its last velocity for up
-##   to MAX_GUESS, instead of freezing. The guess stops at terrain and slides
-##   along it (logs 0154, 0158), so a landing shape isn't drawn sunk into
-##   the floor.
+## - When updates run late, the body coasts on instead of freezing, for up
+##   to MAX_GUESS (log 0169): its recent velocity, slowing gently (COAST), and
+##   falling under gravity, stopped by terrain and sliding along it (logs
+##   0154, 0158), so a landing shape isn't drawn sunk into the floor.
 ## - When an update disagrees with what's on screen, the difference fades out
-##   over about SETTLE instead of snapping.
+##   over about SETTLE instead of snapping; a big one, as after a long stall,
+##   over up to SETTLE_BIG.
 
 ## Seconds between the server's updates of each body (logs 0154, 0158):
 ## half the server's frames, so fewer TCP packets, without the bigger
 ## corrections that 30 a second gave.
 const SEND_INTERVAL := 1.0 / 60.0
 const DELAY := 0.06  # seconds: a few server updates' worth
-const MAX_GUESS := 0.25  # seconds to keep moving with no news: rides out a TCP resend
+## Seconds to keep coasting with no news (log 0169): through a Wi-Fi stall
+## or a TCP resend, rather than freezing.
+const MAX_GUESS := 1.5
+## Seconds: how fast a coasting body's speed and spin die away (time
+## constant). Barely at first, so short gaps look as before.
+const COAST := 1.0
 const SETTLE := 0.08  # seconds: how fast a correction fades (time constant)
+const SETTLE_BIG := 0.25  # ... for a correction of BIG_OFF or more
+const BIG_OFF := 150.0  # px
+const AVERAGE := 0.2  # seconds of updates a coasting body's velocity is taken over
 const KEEP := 0.5  # seconds of updates to hold on to
 const TELEPORT := 300.0  # px moved in one update that means a jump cut, not motion
 const CLOCK_WRAP := 4096.0  # server time is sent as seconds mod this, to fit a float32
 const TERRAIN_MASK := 1  # PlayerShape.LAYER_TERRAIN: what a guess stops at
 const STATS_WINDOW := 10.0  # seconds of arrivals that stats() looks back over
-const CLOCK_DRIFT := 0.02  # how fast the clock estimate gives in to slower packets
+## Seconds: how fast the clock estimate gives in to slower packets (time
+## constant), by time, not by packet, so a stall's burst of late packets
+## can't drag it back (log 0169).
+const CLOCK_DRIFT := 2.0
 
 var live := false
 ## The body being drawn, if any: guesses are stopped by what it collides with.
@@ -37,6 +49,7 @@ var body: PhysicsBody2D
 var _times := PackedFloat64Array()  # server time, unwrapped
 var _last_sent := -INF  # newest server time seen, unwrapped; kept through snaps
 var _clock := INF  # local time minus server time, on the quickest recent packets
+var _last_arrival := 0.0  # local time the last update came in
 var _poses: Array[Vector3] = []  # x, y, rotation
 var _vels: Array[Vector3] = []  # vx, vy, spin
 var _offset := Vector3.ZERO  # what's on screen minus where the updates say
@@ -63,7 +76,10 @@ func push(state: PackedFloat32Array) -> void:
 			return  # out of order or repeated: already have newer
 	_last_sent = sent
 	var lag := _now() - sent
-	_clock = lag if lag < _clock else _clock + (lag - _clock) * CLOCK_DRIFT
+	# At most a few updates' worth: the wait before a stall's burst doesn't count.
+	var since := minf(_now() - _last_arrival, 0.05) if _last_arrival > 0.0 else 0.0
+	_last_arrival = _now()
+	_clock = lag if lag < _clock else _clock + (lag - _clock) * (1.0 - exp(-since / CLOCK_DRIFT))
 	_arrived.append(_now())
 	_late.append(lag - _clock)
 	while _arrived.size() > 1 and _now() - _arrived[0] > STATS_WINDOW:
@@ -114,13 +130,31 @@ func stats() -> Dictionary:
 			"late": late / count, "late_max": Array(_late).max()}
 
 
-## Starts drawing from `at` (x, y, rotation) and fades into the updates
-## from there: your predicted shape handing over to the server's (log 0161).
+## Seconds since the last update came in (INF before the first).
+func since_update() -> float:
+	return _now() - _last_arrival if _last_arrival > 0.0 else INF
+
+
+## False when the newest update says the body is moved by script (an
+## elevator ride: zero velocity), so it shouldn't carry on by itself.
+func can_play_on() -> bool:
+	return not _vels.is_empty() and _vels[-1] != Vector3.ZERO
+
+
+## The newest update's recent velocity and spin (see _recent_velocity).
+func recent_velocity() -> Vector3:
+	return Vector3.ZERO if _vels.is_empty() else _recent_velocity(_vels.size() - 1)
+
+
+## Draws from `at` (x, y, rotation) and fades into the updates from there:
+## your own shape handing back after playing on through a gap (log 0173).
+## Too far off (it was teleported meanwhile), it jumps instead.
 func hold(at: Vector3) -> void:
 	if _poses.is_empty():
 		return
 	var target := _target(_server_now())
-	_offset = Vector3(at.x - target.x, at.y - target.y, angle_difference(target.z, at.z))
+	var off := Vector3(at.x - target.x, at.y - target.y, angle_difference(target.z, at.z))
+	_offset = off if _xy(off).length() < TELEPORT else Vector3.ZERO
 
 
 func is_empty() -> bool:
@@ -129,7 +163,8 @@ func is_empty() -> bool:
 
 ## Where to draw the body this frame: x, y, rotation.
 func current(delta: float) -> Vector3:
-	_offset *= exp(-delta / SETTLE)
+	var settle := lerpf(SETTLE, SETTLE_BIG, clampf(_xy(_offset).length() / BIG_OFF, 0.0, 1.0))
+	_offset *= exp(-delta / settle)
 	return _target(_server_now()) + _offset
 
 
@@ -158,14 +193,50 @@ func _target(now: float) -> Vector3:
 	return _poses[last]
 
 
-## Update i carried forward to time t at its velocity, for at most MAX_GUESS.
+## Update i carried forward to time t, for at most MAX_GUESS: at its
+## recent velocity and spin, dying away over COAST, and falling under
+## gravity.
 func _guess(i: int, t: float) -> Vector3:
+	if _vels[i] == Vector3.ZERO:
+		return _poses[i]  # moved by script (an elevator ride), not physics: wait for news
 	var ahead := clampf(t - _times[i], 0.0, MAX_GUESS)
-	var guess := _poses[i] + _vels[i] * ahead
-	if body == null or ahead <= 0.0:
-		return guess
-	var moved := _clip(_poses[i], _xy(_vels[i]) * ahead)
-	return Vector3(_poses[i].x + moved.x, _poses[i].y + moved.y, guess.z)
+	var coasted := COAST * (1.0 - exp(-ahead / COAST))  # distance per unit speed
+	var vel := _recent_velocity(i)
+	var motion := _xy(vel) * coasted
+	var fall := _gravity() * (0.5 * ahead * ahead)
+	var turned := _poses[i].z + vel.z * coasted
+	if body != null and ahead > 0.0:
+		# Along its way first, then down: in one move, the fall would meet
+		# the ground and take the sideways motion with it.
+		motion = _clip(_poses[i], motion)
+		motion += _clip(_poses[i] + Vector3(motion.x, motion.y, 0.0), fall)
+	else:
+		motion += fall
+	return Vector3(_poses[i].x + motion.x, _poses[i].y + motion.y, turned)
+
+
+## Velocity and spin at update i, averaged over the AVERAGE before it from
+## where the body went: a tumbling shape's speed at any one moment swings
+## (down into the ground as it tips over a corner, near zero at the top),
+## though it rolls on steadily (log 0169). The update's own if too few.
+func _recent_velocity(i: int) -> Vector3:
+	var k := i
+	while k > 0 and _times[i] - _times[k - 1] <= AVERAGE:
+		k -= 1
+	var span := _times[i] - _times[k]
+	if span < AVERAGE / 2.0:
+		return _vels[i]
+	var a := _poses[k]
+	var b := _poses[i]
+	var turn := 0.0
+	for j in range(k + 1, i + 1):  # summed step by step, so a full turn isn't lost
+		turn += angle_difference(_poses[j - 1].z, _poses[j].z)
+	return Vector3((b.x - a.x) / span, (b.y - a.y) / span, turn / span)
+
+
+static func _gravity() -> Vector2:
+	return ProjectSettings.get_setting("physics/2d/default_gravity_vector", Vector2.DOWN) \
+			* float(ProjectSettings.get_setting("physics/2d/default_gravity", 980.0))
 
 
 ## How far the body can move by `motion` from `pose` before it hits

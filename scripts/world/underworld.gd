@@ -69,6 +69,22 @@ const NPCS: Array[Dictionary] = [
 		],
 	},
 	{
+		# Takes the Board's "destroyed" infants from the bottom of its chute,
+		# and greets them as they wake (design logs 0171, 0172; Cutscenes).
+		"name": "The Gleaner", "at": Vector2(-430, FLOOR_Y), "sides": 5, "kind": "irregular",
+		"radius": 26.0, "color": Palette.CHALK[4], "serves": "irregulars",
+		"lines": [
+			"The Board's chute ends just there. I wait at the bottom of it.",
+			"Up top they wrote you down as destroyed. Paperwork is all the Board finishes.",
+			"Not all of them come down whole. You did. Don't waste it.",
+			"The Bonesetter mends us. The cave makes fighters of us. I just catch.",
+		],
+		"refusals": [
+			"You never saw me, Regular. Nobody up there ever has.",
+			"Nothing down here concerns your Board.",
+		],
+	},
+	{
 		"name": "The Bonesetter", "at": Vector2(60, FLOOR_Y), "sides": 7, "kind": "irregular",
 		"radius": 32.0, "color": Palette.CHALK[3], "role": "healer", "serves": "irregulars",
 		"heal_area": Rect2(WEST_X, TOP, EAST_X - WEST_X, BOTTOM - TOP),

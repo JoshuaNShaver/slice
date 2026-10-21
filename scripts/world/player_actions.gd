@@ -17,9 +17,10 @@ func _submit_interact() -> void:
 		get_tree().call_group(World.GROUP, "interact", player)
 
 
-## Server only. A priest marries you (design log 0030), using a certificate.
-## False if you have none.
-func marry() -> bool:
+## Server only. A priest (named `priest`) marries you (design log 0030),
+## using a certificate, and the wedding and the birth play as a cutscene
+## (Cutscenes, log 0168). False if you have none.
+func marry(priest := "The Priest") -> bool:
 	var certificate := marriage_certificate()
 	if player.dead or certificate == "":
 		return false
@@ -28,6 +29,8 @@ func marry() -> bool:
 	player.inventory.take_from_bag(certificate)
 	var heir := Family.roll_heir(player.sides, player.kind, player.apex, rng,
 			certificate == Gear.BLESSED_CERTIFICATE)
+	var parent := {"sides": player.sides, "kind": player.kind, "apex": player.apex}
+	Net.play_cutscene(player.peer_id, Cutscenes.marriage(player.family_name, parent, heir, priest))
 	player.become_heir(heir)
 	Net.heir_born_on_server(player.peer_id, heir)
 	return true
