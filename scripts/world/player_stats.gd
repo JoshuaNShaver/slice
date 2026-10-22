@@ -4,10 +4,11 @@ extends Node
 ## server owns them and they sync to every client for the bars.
 ##
 ## Jumps are free (log 0087); energy pays for abilities (log 0086). Kills
-## give XP (log 0028). `pay` is combatant pay (log 0071), earned on missions
-## and spent at the Quartermaster. `abilities` are the ones you've learned.
+## give XP (log 0028). `chits` are army pay (log 0204), earned on missions
+## and by work and spent at the Quartermaster; `coins` are trade money, the
+## merchants' (log 0205). `abilities` are the ones you've learned.
 
-const MAX_PAY := 1000000
+const MAX_CHITS := 1000000
 
 var player: PlayerShape
 var level := 1
@@ -21,7 +22,9 @@ var hp := Stats.BASE_HP
 var max_hp := Stats.BASE_HP
 var energy := Stats.MAX_ENERGY
 var xp := 0  # toward the next level
-var pay := 0  # combatant pay (design log 0071)
+var chits := 0  # army pay (design log 0204)
+var coins := 0  # trade money (design logs 0204, 0205)
+var dock_held := 0  # a merchant's logs waiting at the dock (Market, log 0205)
 var abilities := PackedStringArray()  # learned ability ids (design log 0086)
 
 
@@ -78,9 +81,14 @@ func add_xp(amount: int) -> void:
 		xp = 0
 
 
-## Server only. Wages for a mission (design log 0071).
-func add_pay(amount: int) -> void:
-	pay = clampi(pay + amount, 0, MAX_PAY)
+## Server only. Wages for a mission or work (design log 0204).
+func add_chits(amount: int) -> void:
+	chits = clampi(chits + amount, 0, MAX_CHITS)
+
+
+## Server only. Trade money (design log 0205).
+func add_coins(amount: int) -> void:
+	coins = clampi(coins + amount, 0, MAX_CHITS)
 
 
 ## Adds (direction 1) or removes (direction -1) a gear item's stats.
@@ -101,7 +109,7 @@ func apply_gains(gains: Dictionary, direction: int) -> void:
 
 
 ## Server only. A new heir starts at level 1 (design log 0030); luck and
-## pay are set apart.
+## money are set apart.
 func reset_for_heir() -> void:
 	level = 1
 	xp = 0

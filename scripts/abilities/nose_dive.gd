@@ -22,7 +22,7 @@ func _init() -> void:
 	id = "nose_dive"
 	name = "Nose dive"
 	action = "nose_dive"
-	price = 60
+	price = 1000  # chits (design log 0206)
 	text = "Leap high, over enemies. Coming down, your sharpest corner points down and you fall faster."
 
 

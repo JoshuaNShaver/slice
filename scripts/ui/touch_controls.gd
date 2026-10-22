@@ -27,7 +27,7 @@ const ABILITY_RADIUS := 46.0
 const CONTEXT_RADIUS := 42.0
 const SIDE_RADIUS := 30.0
 const SIDE_SPACING := 74.0
-const SIDE_TOP := 92.0  # the column never rises above this (the pay is over it)
+const SIDE_TOP := 92.0  # the column never rises above this (the quest tracker is over it)
 const SIDE_ACTIONS: Array[String] = ["drink", "chat", "character_sheet", "menu"]  # bottom to top
 ## Buttons the HUD hears as events (its panels listen for them).
 const EVENT_ACTIONS: Array[String] = ["drink", "chat", "character_sheet", "menu", "home"]

@@ -1,7 +1,7 @@
 # 0086: Abilities: rush, nose dive, spike up
 
 - **Date:** 2026-10-18
-- **Status:** Accepted (the moves and 50 energy); Proposed (prices, keys, numbers, kept until marriage); nose dive jump speed superseded by 0090
+- **Status:** Accepted (the moves and 50 energy); Proposed (prices, keys, numbers, kept until marriage); nose dive jump speed superseded by 0090, prices by 0206
 - **Decision:** Abilities are bought once from the Quartermaster for pay
   and cost 50 energy per use.
   - **Rush** (Shift, 40 pay): sideways speed and spin ×5.

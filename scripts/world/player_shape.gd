@@ -14,7 +14,7 @@ extends RigidBody2D
 ## - motion (PlayerMotion): rolling, jumping, teleports, elevators, launches.
 ## - moves (PlayerMoves): queuing and using learned abilities (log 0086).
 ## - combat (PlayerCombat): hits given and taken, healing, death.
-## - stats (PlayerStats): level, XP, stats, health, energy, pay, abilities.
+## - stats (PlayerStats): level, XP, stats, health, energy, money, abilities.
 ## - inventory (PlayerInventory): bag, gear and house chests (logs 0036, 0064).
 ## - actions (PlayerActions): NPCs, shops, missions, marriage.
 ## - screen (PlayerScreen): server -> owner HUD messages and panels.
@@ -28,6 +28,8 @@ const RADIUS := 28.0
 const COLLISION_PAD := 2.0
 const LAYER_TERRAIN := 1
 const LAYER_PLAYERS := 2
+## What a shape bumps into: terrain, hostiles and boats (log 0201).
+const MASK := LAYER_TERRAIN | Enemy.LAYER | Boat.LAYER
 const GROUP := "players"
 const CHEST_SLOTS := PlayerInventory.CHEST_SLOTS  # Net checks saved chests with this
 ## Playing on (log 0173): starts after this long without an update...
@@ -114,7 +116,7 @@ static func create(data: Dictionary) -> PlayerShape:
 
 	# Players pass through each other for now; they hit terrain and enemies.
 	p.collision_layer = LAYER_PLAYERS
-	p.collision_mask = LAYER_TERRAIN | Enemy.LAYER
+	p.collision_mask = MASK
 	p.physics_material_override = PhysicsMaterial.new()
 	p.physics_material_override.friction = 0.9
 	p.physics_material_override.bounce = 0.2
@@ -142,7 +144,7 @@ static func create(data: Dictionary) -> PlayerShape:
 	config.property_set_replication_mode("Stats:energy", SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	var on_change: Array[String] = []
 	for stat: String in ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck", "hp", "max_hp",
-			"xp", "pay", "abilities"]:
+			"xp", "chits", "coins", "abilities"]:
 		on_change.append("Stats:" + stat)
 	for items: String in ["bag", "equipped", "chest"]:
 		on_change.append("Inventory:" + items)
@@ -300,7 +302,7 @@ static func _clean_items(raw: Variant, size: int) -> PackedStringArray:
 
 ## Server only. The heir takes over this shape, starting fresh at level 1 with
 ## no gear, back at the spawn point (design log 0030). The certificate used
-## is already gone; spare certificates, potions and pay are kept, gear is not.
+## is already gone; spare certificates, potions and money are kept, gear is not.
 func become_heir(heir: Dictionary) -> void:
 	inventory.reset_for_heir()
 	stats.abilities = PackedStringArray()  # the heir hasn't been drilled (design log 0086)

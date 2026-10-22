@@ -44,7 +44,7 @@ const LEDGES: Array[Vector3] = [
 ]
 
 const SIGNS: Array[Dictionary] = [
-	{"pos": Vector2(820, -160), "text": "East: the Noble Quarter →"},
+	{"pos": Vector2(620, -138), "text": "East: the Noble Quarter →"},
 	{"pos": Vector2(120, -500), "text": "↑ North: uncharted"},
 	{"pos": Vector2(0, -20), "text": "The Center"},
 ]

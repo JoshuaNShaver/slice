@@ -74,7 +74,7 @@ func _info(family: String, sides: int, kind: String, apex := 0) -> Dictionary:
 
 
 func _progress(level: int, abilities: Array) -> Dictionary:
-	return {"level": level, "pay": 200, "abilities": abilities,
+	return {"level": level, "chits": 200, "abilities": abilities,
 			"stats": {"vigor": level, "mettle": level, "force": level, "torque": level},
 			"bag": [Gear.POTION, Gear.POTION]}
 

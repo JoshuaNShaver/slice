@@ -64,20 +64,28 @@ func corner_damage(corner: int) -> float:
 	return maxf(Stats.corner_damage(player.corner_angles[corner], player.stats.force), 0.0)
 
 
-## Your corners' hits on enemies this step (Combat), then remember this
-## step's velocities for the next.
+## Your corners' hits on enemies and the Logging Isle's trees (Timber, log
+## 0202) this step (Combat), then remember this step's velocities for the next.
 func hit_check(state: PhysicsDirectBodyState2D) -> void:
 	if not player.dead:
-		for hit in Combat.find_hits(state, player.corners, _prev_linear, _prev_angular,
-				func(o: Object) -> bool: return o is Enemy and (o as Enemy).players_can_hit(player.peer_id), _hit_cooldowns):
-			var enemy: Enemy = hit.target
-			enemy.apply_central_impulse(hit.push * Combat.KNOCKBACK * enemy.mass)
+		for hit in Combat.find_hits(state, player.corners, _prev_linear, _prev_angular, _can_hit, _hit_cooldowns):
 			var crit := randf() < Stats.lucky_chance(Stats.CRIT_CHANCE, player.stats.luck)
 			var damage := corner_damage(hit.corner) * (Stats.CRIT_MULT if crit else 1.0)
+			if hit.target is Timber:
+				(hit.target as Timber).take_hit(damage, player.peer_id, crit)
+				continue
+			var enemy: Enemy = hit.target
+			enemy.apply_central_impulse(hit.push * Combat.KNOCKBACK * enemy.mass)
 			enemy.take_hit(damage, player.peer_id, crit)
 			_since_combat = 0.0
 	_prev_linear = state.linear_velocity
 	_prev_angular = state.angular_velocity
+
+
+func _can_hit(o: Object) -> bool:
+	if o is Timber:
+		return true
+	return o is Enemy and (o as Enemy).players_can_hit(player.peer_id)
 
 
 ## Fills your health (healers, design log 0033).

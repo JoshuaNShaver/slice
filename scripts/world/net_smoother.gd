@@ -46,6 +46,10 @@ const STATS_WINDOW := 10.0  # seconds of arrivals that stats() looks back over
 ## can't drag it back (log 0169).
 const CLOCK_DRIFT := 2.0
 
+## Clients: local time minus server time, from your own shape's updates,
+## for anything drawn from the server's clock (Ocean's waves).
+static var clock_offset := 0.0
+
 var live := false
 ## The body being drawn, if any: guesses are stopped by what it collides with.
 var body: PhysicsBody2D
@@ -84,6 +88,8 @@ func push(state: PackedFloat32Array) -> void:
 	var since := minf(_now() - _last_arrival, 0.05) if _last_arrival > 0.0 else 0.0
 	_last_arrival = _now()
 	_clock = lag if lag < _clock else _clock + (lag - _clock) * (1.0 - exp(-since / CLOCK_DRIFT))
+	if live:
+		clock_offset = _clock
 	_arrived.append(_now())
 	_late.append(lag - _clock)
 	while _arrived.size() > 1 and _now() - _arrived[0] > STATS_WINDOW:
@@ -273,6 +279,11 @@ func _clip(pose: Vector3, motion: Vector2) -> Vector2:
 
 static func _xy(v: Vector3) -> Vector2:
 	return Vector2(v.x, v.y)
+
+
+## Seconds on this machine's clock, as the server stamps its updates.
+static func now() -> float:
+	return _now()
 
 
 static func _now() -> float:

@@ -10,23 +10,26 @@ extends CanvasLayer
 ## - Speech and thoughts (design log 0082): an NPC's line in a bubble over
 ##   them (say), your own news in a thought cloud beside you (think).
 ## - Tab: character sheet: your five gear slots (drag gear on or off, or
-##   double-click to take off) and stats. Esc: menu (players, leave,
+##   double-click to take off) and stats; its Purse page holds your chits
+##   and coins (design log 0204). Esc: menu (players, leave,
 ##   controls). Keys are rebindable (Controls, design log 0035).
 ## - Your house's chests (design log 0064): opened at your house's door
 ##   (HouseDoor), closed by Esc or by walking away. Drag between them and
 ##   the bag; double-click a chest item to take it.
-## - Top right: currencies. Combatant pay (design log 0071).
 ## - The General's orders and the Quartermaster's shop (design logs 0070,
 ##   0071): opened by talking to them, closed by Esc or walking away.
+## - The dock's market and your booth on Merchants' Row (design log 0205):
+##   opened by the Harbourmaster and the Market Clerk, refreshed from the
+##   server after each trade (show_market).
 ## - Every panel has an ✕ in its top right corner; the use key that opened
 ##   the chests, orders or shop closes them again (design log 0129).
-## - Under the pay counter: a countdown popup while a squad musters or heads
+## - Top right: a countdown popup while a squad musters or heads
 ##   home, with a Ready button to skip the wait (design log 0081).
 ## - On a touch screen (Touch, design log 0122): TouchControls instead of
 ##   the key hints, the quick slots at the bottom center, and the bag only
 ##   while a panel is open. Drag a bag item onto the drop zone beside the
 ##   bag to drop it (design log 0131).
-## - Top right, under the pay: the quest you're on and its goals (design
+## - Top right: the quest you're on and its goals (design
 ##   log 0179, PlayerQuests.tracker).
 ## - Chat (ChatBox, design log 0124): Enter, or Chat on a touch screen.
 ##   What players nearby say also shows in a bubble over them.
@@ -75,10 +78,20 @@ var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.chest
 var _storage: Control
 var _orders: Control
 var _shop: Control
+var _market: Control  # the dock's logs (log 0205)
+var _market_body: VBoxContainer
+var _booth: Control  # your booth's orders
+var _booth_body: VBoxContainer
+var _work_amount := 5  # logs a work order will ask for
+var _market_data := {}
 var _shop_pay: Label
 var _ability_buttons := {}  # ability id -> its buy button in the shop
 var _abilities_label: Label  # character sheet
-var _pay_label: Label
+var _character_page: Control  # equipment and stats
+var _purse_page: Control
+var _page_buttons: Array[Button] = []
+var _chits_label: Label
+var _coins_label: Label
 var _me: PlayerShape
 var _set_label: Label
 var _message: Label
@@ -143,7 +156,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _character.visible and _me != null and is_instance_valid(_me):
 			_me.quests.report("open", "character")  # a quest may wait for it (log 0179)
 	elif event.is_action_pressed("menu"):
-		if _storage.visible or _orders.visible or _shop.visible:
+		if _storage.visible or open_panel_name() != "":
 			_storage.visible = false
 			close_panel()
 		elif _controls.visible:
@@ -236,8 +249,9 @@ func update(me: PlayerShape) -> void:
 	_portrait.apex = me.apex
 	_portrait.equipped = me.inventory.equipped
 	_set_text(_level_label, "Level %d" % me.stats.level)
-	_set_text(_pay_label, "Pay: %d" % me.stats.pay)
-	_set_text(_shop_pay, "Your pay: %d" % me.stats.pay)
+	_set_text(_chits_label, _money(me.stats.chits))
+	_set_text(_coins_label, _money(me.stats.coins))
+	_set_text(_shop_pay, "Your chits: %s" % _money(me.stats.chits))
 	_update_abilities(me)
 	_update_tracker(me.quests.tracker)
 	_health_bar.set_values(me.stats.hp, me.stats.max_hp)
@@ -292,6 +306,8 @@ func open_panel(panel: String) -> void:
 	_storage.visible = false
 	_orders.visible = panel == "orders"
 	_shop.visible = panel == "shop"
+	_market.visible = panel == "market"
+	_booth.visible = panel == "booth"
 
 
 ## "orders", "shop" or "" (neither is open).
@@ -300,12 +316,18 @@ func open_panel_name() -> String:
 		return "orders"
 	if _shop != null and _shop.visible:
 		return "shop"
+	if _market != null and _market.visible:
+		return "market"
+	if _booth != null and _booth.visible:
+		return "booth"
 	return ""
 
 
 func close_panel() -> void:
 	_orders.visible = false
 	_shop.visible = false
+	_market.visible = false
+	_booth.visible = false
 
 
 ## The use key pressed again: closes the chests, orders or shop it opened.
@@ -327,7 +349,6 @@ func _set_underground(on: bool) -> void:
 	var ink := Palette.CHALK_LINE if on else Palette.INK
 	var faded := Palette.CHALK_FADED if on else Palette.INK_FADED
 	_level_label.add_theme_color_override("font_color", ink)
-	_pay_label.add_theme_color_override("font_color", ink)
 	_message.add_theme_color_override("font_color", ink)
 	_hint.add_theme_color_override("font_color", faded)
 	_chat.set_underground(on)
@@ -590,13 +611,11 @@ func _build() -> void:
 	_root.add_child(_orders)
 	_shop = _build_shop()
 	_root.add_child(_shop)
+	_market = _build_trade_panel(true)
+	_root.add_child(_market)
+	_booth = _build_trade_panel(false)
+	_root.add_child(_booth)
 
-	_pay_label = Label.new()
-	_pay_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
-	_pay_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_pay_label.add_theme_font_size_override("font_size", 18)
-	_pay_label.tooltip_text = "Combatant pay: earned on missions, spent at the Quartermaster."
-	_root.add_child(_pay_label)
 	_on_controls_changed()
 
 	_message = Label.new()
@@ -607,11 +626,10 @@ func _build() -> void:
 	_message.modulate.a = 0.0
 	_root.add_child(_message)
 	_root.add_child(_build_countdown())
-	# Top right, under the pay: the quest tracker, then \diag live.
+	# Top right: the quest tracker, then \diag live.
 	var right := VBoxContainer.new()
 	right.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
 	right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	right.offset_top = MARGIN + 32
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	right.add_theme_constant_override("separation", 8)
 	_root.add_child(right)
@@ -775,7 +793,7 @@ func _build_slots() -> Control:
 func _layout_for_touch() -> void:
 	var touch := Touch.active
 	var panel := _character.visible or _menu.visible or _controls.visible \
-			or _storage.visible or _orders.visible or _shop.visible
+			or _storage.visible or open_panel_name() != ""
 	_touch.visible = touch
 	_touch.playing = not panel and not _chat.is_open
 	_chat.set_touch(touch)
@@ -847,9 +865,25 @@ func _build_character() -> Control:
 	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
 	title_row.add_child(clear_of_close)
 
+	# Pages: the character (equipment, stats) and the purse (log 0204).
+	var pages := HBoxContainer.new()
+	pages.add_theme_constant_override("separation", 8)
+	column.add_child(pages)
+	for page_name: String in ["Character", "Purse"]:
+		var button := Button.new()
+		button.text = page_name
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+		button.pressed.connect(_show_page.bind(page_name == "Purse"))
+		_page_buttons.append(button)
+		pages.add_child(button)
+
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 32)
 	column.add_child(columns)
+	_character_page = columns
+	_purse_page = _build_purse()
+	column.add_child(_purse_page)
 
 	var equipment := VBoxContainer.new()
 	equipment.custom_minimum_size.x = 200
@@ -889,7 +923,51 @@ func _build_character() -> Control:
 	_close_hint = _faded("")
 	column.add_child(_close_hint)
 	_add_close_button(panel, func() -> void: _character.visible = false)
+	_show_page(false)
 	return panel
+
+
+## The character sheet's pages: equipment and stats, or the purse.
+func _show_page(purse: bool) -> void:
+	_character_page.visible = not purse
+	_purse_page.visible = purse
+	for i in _page_buttons.size():
+		_page_buttons[i].button_pressed = (i == 1) == purse
+
+
+## The purse (design log 0204): chits, the army's pay, and coins, trade money.
+func _build_purse() -> Control:
+	var purse := VBoxContainer.new()
+	purse.add_theme_constant_override("separation", 14)
+	purse.custom_minimum_size.x = 432
+	_chits_label = Label.new()
+	_coins_label = Label.new()
+	for entry: Array in [["chits", _chits_label, "Chits: army pay. Earned on missions and by work, spent at the Quartermaster."],
+			["coins", _coins_label, "Coins: trade money. Merchants buy and sell with them."]]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		row.add_child(MoneyIcon.new(entry[0], 36))
+		var label: Label = entry[1]
+		label.add_theme_font_size_override("font_size", 26)
+		label.custom_minimum_size.x = 120
+		row.add_child(label)
+		var about := _faded(entry[2])
+		about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		about.custom_minimum_size.x = 240
+		about.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(about)
+		purse.add_child(row)
+	return purse
+
+
+## "12,500": thousands set apart, for money.
+static func _money(amount: int) -> String:
+	var digits := str(absi(amount))
+	var out := ""
+	while digits.length() > 3:
+		out = "," + digits.substr(digits.length() - 3) + out
+		digits = digits.substr(0, digits.length() - 3)
+	return ("-" if amount < 0 else "") + digits + out
 
 
 ## Your house's chests: a grid of slots that trade with the bag.
@@ -933,7 +1011,7 @@ func _build_orders() -> Control:
 	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
 	column.add_child(_heading("The General's orders"))
-	column.add_child(_faded("Levels are a guide. Missions pay XP and combatant pay, nothing else."))
+	column.add_child(_faded("Levels are a guide. Missions pay XP and chits, nothing else."))
 	for mission_type in Mission.ORDER:
 		var info: Dictionary = Mission.TYPES[mission_type]
 		var row := HBoxContainer.new()
@@ -942,7 +1020,7 @@ func _build_orders() -> Control:
 		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var title := Label.new()
 		var squad := "alone" if info.squad <= 1 else "squad of up to %d" % info.squad
-		title.text = "%s · levels %s · %s · +%d pay" % [info.name, info.levels, squad, info.pay]
+		title.text = "%s · levels %s · %s · +%d chits" % [info.name, info.levels, squad, info.pay]
 		text.add_child(title)
 		var about := _faded(info.about)
 		about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -964,12 +1042,10 @@ func _build_orders() -> Control:
 	return panel
 
 
-## Top right, under the pay counter: a muster's or the trip home's countdown.
+## Top right: a muster's or the trip home's countdown.
 func _build_countdown() -> Control:
 	var panel := PanelContainer.new()
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, MARGIN)
-	panel.offset_top += 40  # under the pay counter
-	panel.offset_bottom += 40
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	panel.visible = false
 	panel.add_theme_stylebox_override("panel", _solid_panel_box())
@@ -1085,7 +1161,7 @@ func _update_abilities(me: PlayerShape) -> void:
 			known.append("%s (%s)" % [info.name, Controls.describe(info.action)])
 		var button: Button = _ability_buttons.get(id)
 		if button != null:
-			var text := "%s · %s" % [info.name, "learned" if learned else "%d pay" % info.price]
+			var text := "%s · %s" % [info.name, "learned" if learned else "%s chits" % _money(info.price)]
 			if button.text != text:
 				button.text = text
 			button.disabled = learned
@@ -1097,19 +1173,165 @@ func _shop_cell(item: String) -> Control:
 	var cell := VBoxContainer.new()
 	cell.add_theme_constant_override("separation", 2)
 	cell.add_child(_shop_slot(item))
-	var price := _faded("%d" % Gear.price(item))
+	var price := _faded(_money(Gear.price(item)))
 	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cell.add_child(price)
 	return cell
 
 
 func _shop_slot(item: String) -> ItemSlot:
-	var slot := ItemSlot.new("", "Double-click: buy for %d pay" % Gear.price(item))
+	var slot := ItemSlot.new("", "Double-click: buy for %s chits" % _money(Gear.price(item)))
 	slot.item = item
 	slot.double_clicked.connect(func() -> void:
 		if _me != null:
 			_me.actions.request_buy(item))
 	return slot
+
+
+## The dock's market (`dock`) or your booth: a panel whose body
+## show_market fills from the server's snapshot.
+func _build_trade_panel(dock: bool) -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = 520
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	var header := HBoxContainer.new()
+	var title := _heading(Market.HARBOURMASTER if dock else "Your booth on Merchants' Row")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
+	column.add_child(header)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 10)
+	column.add_child(body)
+	if dock:
+		_market_body = body
+	else:
+		_booth_body = body
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
+	return panel
+
+
+## The server's market snapshot (PlayerScreen.show_market, Market.snapshot):
+## opens the dock's market or your booth, or refreshes it.
+func show_market(panel: String, data: Dictionary) -> void:
+	_market_data = data
+	_fill_market()
+	_fill_booth()
+	if open_panel_name() != panel:
+		open_panel(panel)
+
+
+func _fill_market() -> void:
+	if _market_body == null or _market_data.is_empty():
+		return
+	for child in _market_body.get_children():
+		child.queue_free()
+	var d := _market_data
+	var mood := "Short, and dear." if d.stock < Market.STOCK_START else (
+			"A glut: cheap." if d.stock >= Market.STOCK_FULL else "Steady.")
+	_market_body.add_child(_money_row())
+	_market_body.add_child(_faded("In stock: %d logs. %s" % [d.stock, mood]))
+	for with_coins: bool in [false, true]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var each: int = d.coin_price if with_coins else d.chit_price
+		var label := Label.new()
+		label.text = "%s %s a log" % [_money(each), "coins" if with_coins else "chits"]
+		label.custom_minimum_size.x = 180
+		row.add_child(label)
+		for count in [1, 5, 10]:
+			row.add_child(_trade_button("Buy %d" % count, "buy_coins" if with_coins else "buy_chits", count))
+		_market_body.add_child(row)
+
+	var work_left := int(d.work_left)
+	if work_left > 0:
+		_market_body.add_child(_faded("Your work order: %d logs still to come." % work_left))
+	else:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var label := Label.new()
+		label.text = "Work order: %d logs, %s coins" % [_work_amount, _money(_work_amount * int(d.work_price))]
+		label.custom_minimum_size.x = 260
+		row.add_child(label)
+		for step: int in [-1, 1]:
+			var button := Button.new()
+			button.text = "−" if step < 0 else "+"
+			button.focus_mode = Control.FOCUS_NONE
+			button.pressed.connect(func() -> void:
+				_work_amount = clampi(_work_amount + step, 1, Market.WORK_MAX)
+				_fill_market())
+			row.add_child(button)
+		row.add_child(_trade_button("Post", "work", _work_amount))
+		_market_body.add_child(row)
+	var note := _faded("Work orders cost %s coins a log, paid now; workmen's logs fill them first." % _money(int(d.work_price)))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 500
+	_market_body.add_child(note)
+	if int(d.held) > 0:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var label := Label.new()
+		label.text = "Waiting for you: %d logs" % int(d.held)
+		label.custom_minimum_size.x = 260
+		row.add_child(label)
+		row.add_child(_trade_button("Collect", "collect", 0))
+		_market_body.add_child(row)
+
+
+func _fill_booth() -> void:
+	if _booth_body == null or _market_data.is_empty():
+		return
+	for child in _booth_body.get_children():
+		child.queue_free()
+	var d := _market_data
+	_booth_body.add_child(_money_row())
+	var logs := _me.inventory.count_of(Gear.LOG) if _me != null and is_instance_valid(_me) else 0
+	_booth_body.add_child(_faded("In your bag: %d logs. The dock sells at %s coins a log." % [logs, _money(int(d.coin_price))]))
+	var orders: Array = d.orders
+	if orders.is_empty():
+		_booth_body.add_child(_faded("No orders yet. Buyers come by every minute or two."))
+	for order: Array in orders:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var label := Label.new()
+		var minutes := maxi(ceili(int(order[4]) / 60.0), 1)
+		label.text = "%s · %d logs at %d coins (%s) · %d min" % [order[1], order[2], order[3],
+				_money(int(order[2]) * int(order[3])), minutes]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var button := _trade_button("Deliver", "deliver", int(order[0]))
+		button.disabled = logs < int(order[2])
+		row.add_child(button)
+		_booth_body.add_child(row)
+
+
+func _money_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var chits := _me.stats.chits if _me != null and is_instance_valid(_me) else 0
+	var coins := _me.stats.coins if _me != null and is_instance_valid(_me) else 0
+	for entry: Array in [["chits", chits], ["coins", coins]]:
+		row.add_child(MoneyIcon.new(entry[0], 22))
+		var label := Label.new()
+		label.text = _money(entry[1])
+		label.custom_minimum_size.x = 90
+		row.add_child(label)
+	return row
+
+
+func _trade_button(text: String, action: String, amount: int) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	button.pressed.connect(func() -> void:
+		if _me != null and is_instance_valid(_me):
+			_me.actions.request_market(action, amount))
+	return button
 
 
 ## Esc: who's here, and the way out.

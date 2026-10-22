@@ -11,8 +11,15 @@ extends Node2D
 ## - "priest": marries you, using a marriage certificate (design log 0030).
 ## - "healer": heals you in full when you ask.
 ## - "general": gives missions (design log 0070), in a HUD panel.
-## - "quartermaster": sells military gear and provisions for pay (design
+## - "quartermaster": sells military gear and provisions for chits (design
 ##   logs 0071, 0080).
+## - "dock": the Dock Tradesman, buys every log in your bag for chits
+##   (design log 0204).
+## - "boats": a boatwright, launches a boat for you at data "launch",
+##   bow toward data "facing" (World.launch_boat, design log 0201).
+## - "market": the Harbourmaster, the dock's log market for merchants;
+##   "booth": the Market Clerk, your booth's orders on Merchants' Row
+##   (Market, design log 0205). Both open a HUD panel.
 ## Any NPC with a heal_area also heals everyone it serves inside that area,
 ## for free, as the Center's priest always has (design log 0033).
 ##
@@ -35,6 +42,8 @@ var role := "talk"
 var serves := "anyone"
 var lines: Array = []
 var refusals: Array = []
+## Everything it was made from, for roles that need more (a boatwright's "launch").
+var data := {}
 ## Healers: where they heal passively, and what they say when they do.
 var heal_area := Rect2()
 var heal_lines: Array = []
@@ -66,6 +75,7 @@ static func create(data: Dictionary) -> Npc:
 	n.serves = data.get("serves", "anyone")
 	n.lines = data.get("lines", [])
 	n.refusals = data.get("refusals", [])
+	n.data = data
 	n.heal_area = data.get("heal_area", Rect2())
 	n.heal_lines = data.get("heal_lines", n.lines)
 	n._points = _outline(n.sides, n.kind, n.radius, n.display_name, n.apex)
@@ -106,7 +116,7 @@ func _ready() -> void:
 
 
 func serves_player(p: PlayerShape) -> bool:
-	return Regions.admits(serves, p.sides, p.kind)
+	return Regions.admits(serves, p.sides, p.kind, p.apex)
 
 
 ## Is `p` within reach of an NPC with this role who serves them?
@@ -141,8 +151,20 @@ func prompt_for(p: PlayerShape) -> String:
 		return "%s: be healed" % key
 	if role == "general" and serves_player(p):
 		return "%s: take orders" % key
+	if role == "dock" and serves_player(p):
+		var logs := p.inventory.count_of(Gear.LOG)
+		if logs == 0:
+			return "%s: talk" % key
+		return "%s: sell %d %s (%d chits)" % [key, logs, "log" if logs == 1 else "logs",
+				logs * int(Gear.GOODS[Gear.LOG].chits)]
+	if role == "market" and serves_player(p):
+		return "%s: trade" % key
+	if role == "booth" and serves_player(p):
+		return "%s: your booth" % key
+	if role == "boats" and serves_player(p):
+		return "%s: take a boat" % key
 	if role == "quartermaster" and serves_player(p):
-		return "%s: trade (%d pay)" % [key, p.stats.pay]
+		return "%s: trade (%d chits)" % [key, p.stats.chits]
 	return "%s: talk" % key
 
 
@@ -160,6 +182,19 @@ func interact(p: PlayerShape) -> void:
 		"general", "quartermaster":
 			_say(p, lines)
 			p.screen.open_panel("orders" if role == "general" else "shop")
+		"dock":
+			if p.inventory.count_of(Gear.LOG) > 0:
+				p.actions.sell_logs(display_name)
+			else:
+				_say(p, lines)
+		"market", "booth":
+			var market := p.get_tree().get_first_node_in_group(Market.GROUP) as Market
+			if market != null:
+				_say(p, lines)
+				p.screen.show_market(role, market.snapshot(p))
+		"boats":
+			_say(p, lines)
+			p.get_tree().call_group(World.GROUP, "launch_boat", p, data.launch, int(data.get("facing", -1)))
 		"healer":
 			if p.stats.hp < p.stats.max_hp:
 				p.combat.heal_full()

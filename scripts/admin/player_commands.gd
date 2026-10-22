@@ -13,13 +13,13 @@ const VERBS := {
 	"get": {"usage": "players get [who]", "flags": ["id"],
 			"help": "One player's details."},
 	"set": {"usage": "players set <field> <value> [--id who]", "flags": ["id"],
-			"help": "Sets level, xp, pay or hp. A new level rolls its stat gains, as leveling does."},
+			"help": "Sets level, xp, chits, coins or hp. A new level rolls its stat gains, as leveling does."},
 	"levelup": {"usage": "players levelup [count] [--id who]", "flags": ["id"],
 			"help": "Levels up count times (default 1), rolling stat gains."},
 	"quests": {"noun": preload("res://scripts/admin/player_quest_commands.gd"),
 			"help": "a player's quests: list, get, start, set, delete"},
 }
-const FIELDS: Array[String] = ["level", "xp", "pay", "hp"]
+const FIELDS: Array[String] = ["level", "xp", "chits", "coins", "hp"]
 
 
 func words_for(verb: String) -> Array[String]:
@@ -56,7 +56,7 @@ func run_get(caller: PlayerShape, words: Array[String], flags: Dictionary) -> St
 				Net.accounts.role_of(p.peer_id)],
 		"  the %s family, generation %d: %s" % [p.family_name, p.generation,
 				Family.describe_shape(p.sides, p.kind, p.apex)],
-		"  level %d, xp %s, hp %d/%d, pay %d" % [s.level, xp_line, s.hp, s.max_hp, s.pay],
+		"  level %d, xp %s, hp %d/%d, chits %d, coins %d" % [s.level, xp_line, s.hp, s.max_hp, s.chits, s.coins],
 		"  vigor %d, mettle %d, force %d, torque %d, rigidity %d, luck %d" % [s.vigor, s.mettle,
 				s.force, s.torque, s.rigidity, s.luck],
 		"  at %s (%d, %d)" % [place.get("name", "between places"), int(p.position.x), int(p.position.y)],
@@ -88,9 +88,12 @@ func run_set(caller: PlayerShape, words: Array[String], flags: Dictionary) -> St
 			s.xp = 0
 			s.add_xp(maxi(value, 0))  # levels up if it's enough
 			value = s.xp
-		"pay":
-			s.pay = clampi(value, 0, PlayerStats.MAX_PAY)
-			value = s.pay
+		"chits":
+			s.chits = clampi(value, 0, PlayerStats.MAX_CHITS)
+			value = s.chits
+		"coins":
+			s.coins = clampi(value, 0, PlayerStats.MAX_CHITS)
+			value = s.coins
 		"hp":
 			s.hp = clampi(value, 1, s.max_hp)
 			value = s.hp

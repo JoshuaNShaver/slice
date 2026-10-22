@@ -36,14 +36,20 @@ Mark your own suggestions `Proposed` until the user agrees.
   clients; log 0106) and its child-node parts: `PlayerMotion` (rolling,
   jumps, teleports, rides), `PlayerMoves` (using abilities), `PlayerCombat`
   (hits, healing, death), `PlayerStats`, `PlayerInventory` (bag, gear,
-  chests), `PlayerActions` (NPCs, shops, missions, marriage), `PlayerScreen`
+  chests), `PlayerActions` (NPCs, shops, missions, marriage, drowning,
+  selling logs, market trades), `PlayerScreen`
   (server -> owner HUD messages), `PlayerChat` (chat lines and admin
   commands, log 0124; `Diagnostics` writes up `\diagnostics` and `\diag live`, and parses `\simulate lag`, logs 0155, 0159),
   `PlayerInput` (owner's keys), `PlayerQuests` (quests, log 0179);
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
-  off the Undercroft), `Barracks` (drill yard, General, Quartermaster).
+  off the Undercroft), `Barracks` (drill yard, General, Quartermaster),
+  `Coast` (west of the barracks, workmen only: dock, piers, the Logging
+  Isle; logs 0200-0202, 0208) with `Ocean` (waves from the server's clock,
+  drowning), `Boat` (server-simulated sailing boats) and `Timber` (the
+  isle's trees, logs every 1,000 damage). `Market` (the merchants' dock
+  stock, work orders and booth orders on Merchants' Row; log 0205, 0209).
   `Mission` (one squad's instanced battlefield) and `Missions` (server-side
   musters, pay, discharge). `Npc` (talkers, priests, healers; built from each
   terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
@@ -94,7 +100,7 @@ Mark your own suggestions `Proposed` until the user agrees.
   launch, log 0166). `scripts/build_info.gd`: the build id (commit, plus a
   hash of uncommitted changes), baked into exports by
   `addons/server_address`. `scripts/ui/`: palette, item slot,
-  theme, HUD, touch controls, chat box (and its admin terminal's
+  theme, HUD (its Tab panel's Purse page: chits and coins, log 0204; `MoneyIcon`), touch controls, chat box (and its admin terminal's
   `ConsoleCompanion`, imsdow, whose lines are in `imsdow.cfg` and animations are folders of text or picture
   frames in `assets/companion/<animation>/`, colored by
   `companion_pop.gdshader`; `tools/companion_ink.py` cleans pictures into
@@ -137,6 +143,10 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   Actions, keys as GitHub secrets): see `deploy/README.md`.
 - Player smoke test: `Godot --headless --path . -s tools/tests/test_player.gd`
   (prints RESULT lines to compare before and after a refactor).
+- Coast test (gate, sailing, capsizing, drowning, trees, the market; prints
+  BOAT lines for tuning): `-s tools/tests/test_coast.gd`. Screenshots of the
+  coast, the Row and the purse (needs a window, not headless):
+  `Godot --path . --resolution 1280x720 -s tools/record/shots.gd -- --no-hot-reload --out=<folder>`.
 - Save test (offline, temp folder): `-s tools/tests/test_saves.gd`. Online
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
   (see the file; start that server with `--dev-admins`, since the test

@@ -87,13 +87,13 @@ func run() -> int:
 	qm_data.at = p.position + Vector2(0, 20)
 	var qm := Npc.create(qm_data)
 	_root.add_child(qm)
-	var pay_before: int = p.stats.pay
+	var pay_before: int = p.stats.chits
 	for id: String in ["rush", "nose_dive", "spike_up"]:
 		p.actions._submit_learn(id)
 	_check(Array(p.stats.abilities) == ["rush", "nose_dive", "spike_up"], "learned three")
-	_check(p.stats.pay == pay_before - 180, "paid 180")
+	_check(p.stats.chits == pay_before - 8500, "paid 8,500")
 	p.actions._submit_learn("rush")
-	_check(p.stats.pay == pay_before - 180, "no paying twice")
+	_check(p.stats.chits == pay_before - 8500, "no paying twice")
 	qm.queue_free()
 	await _steps(240)  # energy back to full
 	_record("before_moves", p)
@@ -121,7 +121,7 @@ func run() -> int:
 	var p2 := _spawn(2, clean, Array(p.inventory.chest))
 	await _steps(1)
 	_check(p2.progress() == saved, "progress round trip")
-	for stat: String in ["level", "xp", "pay", "vigor", "mettle", "force", "torque", "rigidity", "max_hp"]:
+	for stat: String in ["level", "xp", "chits", "coins", "vigor", "mettle", "force", "torque", "rigidity", "max_hp"]:
 		_check(p2.stats.get(stat) == p.stats.get(stat), "restored " + stat)
 	_check(p2.inventory.chest == p.inventory.chest, "restored chest")
 	_check(PlayerShape._clean_items(["potion", 5, "bogus"], 3) == PackedStringArray(["potion", "", ""]),
@@ -175,7 +175,7 @@ func run() -> int:
 func _spawn(id: int, progress: Dictionary, chest: Array = ["voice_7"]) -> PlayerShape:
 	if progress.is_empty():
 		progress = PlayerShape.sanitize_progress({
-			"level": 3, "xp": 10, "pay": 500,
+			"level": 3, "xp": 10, "chits": 10000,
 			"stats": {"vigor": 3, "mettle": 2, "force": 4, "torque": 3},
 			"bag": [Gear.POTION, "", "points_6", "", "", "plating_6"],
 			"equipped": ["", "", "", "", ""],

@@ -324,6 +324,18 @@ static func years_pass(newborn: Dictionary, below: bool) -> Dictionary:
 			"place": "Some years later", "beats": beats, "cast": []}
 
 
+## Falling into the western sea (design log 0201): the screen goes dark, and
+## you wake on the shore without what you carried. `lost`: how many things.
+static func drowned(lost: int) -> Dictionary:
+	var beats: Array = [beat("", "The sea closes over you. It is very cold, and very dark, and it does not care what shape you are.")]
+	if lost > 0:
+		beats.append(beat("", "When it gives you back, it keeps everything you carried."))
+	else:
+		beats.append(beat("", "When it gives you back, it is almost disappointed: you carried nothing worth keeping."))
+	var act := {"id": "drowned", "setting": "card_below", "place": "The western sea", "beats": beats, "cast": []}
+	return {"acts": [act], "wake": ["You wake on the shore, coughing up seawater."], "wake_speaker": ""}
+
+
 static func _priest(priest_name: String, irregular := false) -> Dictionary:
 	return {"name": priest_name, "sides": 11 if irregular else 40,
 			"kind": "irregular" if irregular else "regular", "apex": 0, "halo": not irregular}

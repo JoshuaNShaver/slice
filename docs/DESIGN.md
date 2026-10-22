@@ -23,7 +23,7 @@ Gravity pulls **south** (screen down), as in the book.
 | Direction | Region | Who goes there |
 |---|---|---|
 | Center | Respawn hub | Everyone (but irregulars) |
-| West (left) | The barracks and drill yard; missions go to the front (logs 0061, 0067–0072, 0077) | Triangles (soldiers), and any higher rank (log 0073) |
+| West (left) | The barracks and drill yard; missions go to the front (logs 0061, 0067–0072, 0077). Past them, the coast: sailing and the Logging Isle (logs 0200–0202) | Triangles (soldiers), and any higher rank (log 0073); the coast needs a 45°+ apex |
 | East, up an elevator | The Noble Quarter (log 0054) | 4+ sides, regular |
 | Further east and north, up a hill | The Priests' Hill and the Temple of the Circle (log 0055) | Same as the Quarter; the sanctum is for circles (10+ sides) |
 | North | Undecided (log 0062) | |
@@ -31,7 +31,7 @@ Gravity pulls **south** (screen down), as in the book.
 
 Shape gates access, and each rank keeps every activity below it (log
 0073): triangles go to war; from a 45° apex they also work (woodcutting,
-mining), and from 55° keep a trading booth (log 0177, not built); squares gain the college (log 0075), circles the
+mining; the coast, log 0200), and from 55° trade as merchants (log 0205); squares gain the college (log 0075), circles the
 dimension puzzles (log 0076). Exact gates per region are TBD (see Open
 questions).
 Places and spawn points live in `scripts/world/regions.gd`.
@@ -159,6 +159,41 @@ get around by jumping, like a player, and the further back they are the
 harder they roll and jump (logs 0079, 0080); once engaged they just
 fight. On invasion they hunt the Revolt anywhere on the field (log 0079).
 
+**The west coast (logs 0200–0202, 0208; `Coast`, `Ocean`):** a little past
+the barracks the ground slopes down to the sea. Only 45°+ triangles and
+higher ranks go on; the Harbour Watch turns sharper ones back at the gate
+("workmen only"). At the dock: the Dock Tradesman, the Boatwright, the
+Harbourmaster and a pier. Then ~4,000 px of open sea, the Logging Isle
+(its own pier and the Boatwright's Mate), and sea to the world's west edge.
+- **Sailing (logs 0201, 0208; `Boat`):** the waves are calm at the shores
+  and rough at sea, and make boats hard to sail. A boatwright launches
+  your own boat (one at a time): a half-disc hull with one triangular
+  sail. Rolling into the sail leans it forward and drives it; the lean
+  keeps building while you hold it (about 4 s rolls it over), so you sail
+  in bursts. Let go and it slows and rights itself. The use key turns it
+  about, which you need to step off onto a pier. Fall in and the screen
+  goes dark: you wake on the shore, everything in the bag lost (worn gear
+  kept).
+- **The Logging Isle (logs 0202, 0208; `Timber`):** 6 trees in a row,
+  taller than the screen. Jump or roll a corner into one, as at an enemy:
+  10,000 hidden health, and every 1,000 damage drops a log (loot to pick
+  up) for one hitter, picked weighted by damage dealt. Felled trees regrow
+  in 3 minutes. One log per bag slot, so a full bag is 10 logs, sold to
+  the Dock Tradesman for 200 chits each (log 0204).
+- **Merchants (logs 0205, 0209; `Market`, numbers *proposed*):** a 55°+
+  triangle trades between two markets.
+  - The Harbourmaster sells logs from one stock shared by everyone, for
+    chits (210–420) or coins (12–50); scarce is dear, a glut cheap. Logs
+    workmen sell go into it, a crew adds a trickle, and gluts and
+    shortages swing it every few minutes.
+  - A work order (up to 10 logs at 1.5× the coin price, paid up front)
+    is filled by workmen's deliveries first, the crew slowly otherwise;
+    the logs wait at the dock to collect.
+  - On Merchants' Row (the Center's east rise) the Market Clerk shows your
+    booth's orders: up to 3, a new one every 90 s, 2–8 logs at about
+    19–48 coins each, open 10 minutes. Some come in under the dock's
+    price: buy cheap, hold, and wait.
+
 **Priests** (circles) marry you (§5): the priest on the Center plaza and the
 High Priest at the temple for regulars, the Hedge Priest for irregulars.
 
@@ -254,7 +289,7 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   | Voice | a pipe for your cry (an ability slot later) | mettle | nothing yet |
 
 - **Military tiers (logs 0071, 0072, 0077):** leather (drill yard drops),
-  then bronze, iron and steel (bought: 30 / 90 / 240 pay* each). *Proposed:*
+  then bronze, iron and steel (bought, a full set of four: 400 / 800 / 2,000 chits, log 0206; leather is the main set before working). *Proposed:*
   +2 / 4 / 7 / 10, plating +3 / 6 / 10 / 15, so steel equals lilac. No
   pigment slot (colour is contraband), so no military sets.
 - **Tiers (log 0029):** each cave room drops the next tier: rose 1, mint 2,
@@ -322,15 +357,15 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 
 ## 2c. Abilities (log 0086)
 
-Bought once from the Quartermaster for pay; each use costs 50 energy. An
-heir starts with none. *Proposed:* prices, keys and numbers. Each ability
+Bought once from the Quartermaster for chits (prices, log 0206); each use costs 50 energy. An
+heir starts with none. *Proposed:* keys and numbers. Each ability
 is one script in `scripts/abilities/` (log 0107).
 
 | Ability | Key | Price | What it does |
 |---|---|---|---|
-| Rush | Shift | 40 | Sideways speed and spin ×5, on the ground or in the air |
-| Nose dive | Up / W | 60 | A jump at 3.5× jump speed (rises over 3 triangle heights, clearing enemies); coming down, your sharpest corner turns to point down and gravity pulls 2× |
-| Spike up | Down / S | 80 | A face flat on the ground, sharpest corner up, held 1 s. Hostile enemies within 260 px are thrown up, helpless, and come down on it |
+| Rush | Shift | 2,500 | Sideways speed and spin ×5, on the ground or in the air |
+| Nose dive | Up / W | 1,000 | A jump at 3.5× jump speed (rises over 3 triangle heights, clearing enemies); coming down, your sharpest corner turns to point down and gravity pulls 2× |
+| Spike up | Down / S | 5,000 | A face flat on the ground, sharpest corner up, held 1 s. Hostile enemies within 260 px are thrown up, helpless, and come down on it |
 
 ## 4b. Stats (logs 0021–0023)
 
@@ -353,9 +388,12 @@ Values marked * are proposed tuning.
   the quick slots at the bottom center, the bag only while a panel is open). **Tab** opens the character sheet
   (equipment, stats); **Esc** the menu (players here, Controls, Leave). Every
   panel has an ✕ top right; the use key closes the chests, orders or shop it
-  opened (log 0129). Top right is
-  for currencies: **pay** (log 0071), kept by heirs (log 0077, proposed);
-  under it, the quest you're on (§5c). **Energy** is 2 pips over your own shape, one per
+  opened (log 0129). Currencies stay off the HUD, in a **Purse** tab of
+  the Tab panel (log 0204): **chits**, earned by missions and work and
+  spent at the barracks (kept by heirs, log 0077, proposed), and
+  **coins**, the merchants' trade money, in a colour unlike any other in
+  the game (*proposed:* verdigris). Top right shows the quest you're on
+  (§5c). **Energy** is 2 pips over your own shape, one per
   ability use, faded while full. Other players show a small health bar under their
   name.
 - **Speech and thoughts (log 0082):** NPC lines appear in a bubble above the
@@ -715,12 +753,15 @@ As in the book, women are straight lines.
 13. Confirm 20 chest slots in the square's house (log 0064).
 14. Momentum crits (log 0047): should a corner hit at very high speed
     (e.g. 4× the minimum hit speed) always crit, rewarding movement?
-15. What lies north of the Center (log 0062), and what exactly lies west
-    past the barracks (log 0061)?
+15. What lies north of the Center (log 0062)? (West past the barracks is
+    the coast, log 0200.)
 16. The noble lift takes regulars only (an irregular square can't ride).
     Moot while irregulars can't leave the underworld; confirm.
 17. Confirm the barracks build details (log 0077): General's shape, squad
     sizes, pay and prices, pay kept by heirs, certificate for every squad
     member, metal stats.
-18. Workmen and the trading booth (log 0177): what do goods sell for, and
-    how much faster should work make soldiering?
+18. Confirm the coast's and the market's built numbers (logs 0208, 0209):
+    boat handling, tree regrowth, dock prices and stock, booth orders.
+    What else do coins buy? (Mission pay stays low on purpose, so players
+    work early for better gear, log 0207.)
+19. The coins' colour (log 0204): verdigris?

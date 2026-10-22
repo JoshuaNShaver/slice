@@ -16,7 +16,7 @@ func _init() -> void:
 	id = "rush"
 	name = "Rush"
 	action = "rush"
-	price = 40
+	price = 2500  # chits (design log 0206)
 	text = "Your speed and spin, times five. Works in the air."
 
 

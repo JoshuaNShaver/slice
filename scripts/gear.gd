@@ -25,24 +25,31 @@ class_name Gear
 ##
 ## Military gear (design logs 0071, 0072) is tiers 5-8: leather from the
 ## drill yard, then bronze, iron and steel, bought from the Quartermaster
-## with combatant pay. It is plain, told apart by crosshatching (log 0069),
+## with chits (log 0206). It is plain, told apart by crosshatching (log 0069),
 ## and has no pigment: colour is contraband, and the army doesn't sell it.
 ##
-## Provisions (design log 0084) are food the Quartermaster sells for pay.
+## Provisions (design log 0084) are food the Quartermaster sells for chits.
 ## Unlike a potion, a meal heals over a few seconds (Stats.MEAL_TIME).
 
 const CERTIFICATE := "certificate"
 const BLESSED_CERTIFICATE := "blessed_certificate"
 const POTION := "potion"
+## Goods (design logs 0202, 0204): a log from the Logging Isle, one per bag
+## slot, which the Dock Tradesman buys for chits.
+const LOG := "log"
+const GOODS := {
+	"log": {"name": "Log", "chits": 200},
+}
 ## Food, cheapest first. `heal`: share of max health, over Stats.MEAL_TIME.
-## `price`: combatant pay at the Quartermaster. *Proposed* numbers.
+## `price`: chits at the Quartermaster. *Proposed* numbers.
 const PROVISIONS := {
 	"hardtack": {"name": "Hardtack", "heal": 0.2, "price": 3},
 	"cheese": {"name": "Cheese", "heal": 0.35, "price": 6},
 	"salt_pork": {"name": "Salt pork", "heal": 0.5, "price": 10},
 }
+## Kept in the bag when an heir takes over (PlayerInventory.reset_for_heir).
 const CONSUMABLES: Array[String] = [CERTIFICATE, BLESSED_CERTIFICATE, POTION,
-		"hardtack", "cheese", "salt_pork"]
+		"hardtack", "cheese", "salt_pork", LOG]
 
 ## In order: the HUD lists them this way, and `equipped` is indexed by it.
 const SLOTS: Array[String] = ["points", "plating", "pigment", "eye", "voice"]
@@ -65,8 +72,8 @@ const STEEL := 8
 ## Index = tier. Tier 0 is nothing. `set`: the full-set bonus (log 0040).
 ## Torque is speed, rigidity is defense, and vigor is health (10 each).
 ## Military tiers are muted, not coloured; `hatch` is their crosshatch:
-## line angles (degrees) and spacing (px at world size). `price`: combatant
-## pay at the Quartermaster (*proposed*); 0 means it isn't sold.
+## line angles (degrees) and spacing (px at world size). `price`: chits a
+## piece at the Quartermaster (log 0206); 0 means it isn't sold.
 const TIERS: Array[Dictionary] = [
 	{"name": "", "color": Color.TRANSPARENT, "set": {}},
 	{"name": "Rose", "color": Color("e38f8f"), "set": {"force": 15}},
@@ -75,9 +82,9 @@ const TIERS: Array[Dictionary] = [
 	{"name": "Gilded", "color": Color("d9b44a"), "set": {"vigor": 15, "luck": 15}},
 	# Military sets are modest, +10 (log 0085, *proposed* past leather).
 	{"name": "Leather", "color": Color("d8c7a4"), "set": {"force": 10}, "hatch": [[45.0], 9.0], "price": 0},
-	{"name": "Bronze", "color": Color("cdb78e"), "set": {"vigor": 10}, "hatch": [[45.0, -45.0], 9.0], "price": 30},
-	{"name": "Iron", "color": Color("b9b3a6"), "set": {"rigidity": 10}, "hatch": [[0.0, 90.0], 6.0], "price": 90},
-	{"name": "Steel", "color": Color("a3a6a8"), "set": {"torque": 10}, "hatch": [[0.0, 60.0, -60.0], 6.0], "price": 240},
+	{"name": "Bronze", "color": Color("cdb78e"), "set": {"vigor": 10}, "hatch": [[45.0, -45.0], 9.0], "price": 100},
+	{"name": "Iron", "color": Color("b9b3a6"), "set": {"rigidity": 10}, "hatch": [[0.0, 90.0], 6.0], "price": 200},
+	{"name": "Steel", "color": Color("a3a6a8"), "set": {"torque": 10}, "hatch": [[0.0, 60.0, -60.0], 6.0], "price": 500},
 ]
 
 
@@ -108,7 +115,7 @@ static func is_provision(it: String) -> bool:
 	return PROVISIONS.has(it)
 
 
-## Combatant pay the Quartermaster asks for an item, or 0 if he doesn't sell it.
+## Chits the Quartermaster asks for an item, or 0 if he doesn't sell it.
 static func price(it: String) -> int:
 	if is_provision(it):
 		return PROVISIONS[it].price
@@ -201,6 +208,8 @@ static func item_name(it: String) -> String:
 		return "Healing potion"
 	if is_provision(it):
 		return PROVISIONS[it].name
+	if GOODS.has(it):
+		return GOODS[it].name
 	if not is_gear(it):
 		return it
 	return "%s %s" % [TIERS[tier_of(it)].name, SLOT_INFO[slot_of(it)].noun]
@@ -217,6 +226,8 @@ static func describe(it: String) -> String:
 	if is_provision(it):
 		return "%s: restores %d%% of your health over %d s." % [
 				item_name(it), roundi(PROVISIONS[it].heal * 100), roundi(Stats.MEAL_TIME)]
+	if it == LOG:
+		return "Log: the Dock Tradesman pays %d chits for it." % GOODS[LOG].chits
 	if not is_gear(it):
 		return it
 	var slot := slot_of(it)
@@ -380,6 +391,20 @@ static func draw_icon(canvas: CanvasItem, it: String, at: Vector2, alpha := 1.0)
 		return
 	if is_provision(it):
 		_draw_provision(canvas, it, at, alpha)
+		return
+	if it == LOG:
+		# A short log on its side: bark lines, and a cut end with rings.
+		var body := Rect2(at + Vector2(-14, -8), Vector2(24, 16))
+		canvas.draw_rect(body, Color(Palette.PARCHMENT_DARK, alpha))
+		canvas.draw_line(body.position, Vector2(body.end.x, body.position.y), ink, 2.0)
+		canvas.draw_line(Vector2(body.position.x, body.end.y), body.end, ink, 2.0)
+		canvas.draw_line(at + Vector2(-10, -2), at + Vector2(2, -2), Color(Palette.INK, 0.4 * alpha), 1.2)
+		canvas.draw_line(at + Vector2(-6, 3), at + Vector2(6, 3), Color(Palette.INK, 0.4 * alpha), 1.2)
+		var end := at + Vector2(10, 0)
+		canvas.draw_circle(end, 8.0, Color(Palette.PARCHMENT_LIGHT, alpha))
+		canvas.draw_arc(end, 8.0, 0, TAU, 16, ink, 2.0, true)
+		canvas.draw_arc(end, 4.0, 0, TAU, 12, Color(Palette.INK, 0.5 * alpha), 1.2, true)
+		canvas.draw_arc(body.position + Vector2(0, 8), 8.0, PI / 2.0, PI * 1.5, 8, ink, 2.0, true)
 		return
 	var fill := Color(color(it), alpha)
 	var pts: PackedVector2Array

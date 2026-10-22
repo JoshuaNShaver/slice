@@ -128,13 +128,12 @@ func _build_collision() -> void:
 
 
 func _ground_polygon() -> PackedVector2Array:
+	# Open to the west: the coast carries on from WEST_X (log 0200).
 	return PackedVector2Array([
-		Vector2(WEST_X - WALL_THICKNESS, TOP),
-		Vector2(WEST_X, TOP),
 		Vector2(WEST_X, FLOOR_Y),
 		Vector2(EAST_X, FLOOR_Y),
 		Vector2(EAST_X, BOTTOM),
-		Vector2(WEST_X - WALL_THICKNESS, BOTTOM),
+		Vector2(WEST_X, BOTTOM),
 	])
 
 
@@ -146,7 +145,6 @@ func _draw() -> void:
 		draw_line(Vector2(x + 4, FLOOR_Y + 6), Vector2(x - 8, FLOOR_Y + 18), hatch, 1.5)
 		x += 16.0
 	draw_line(Vector2(WEST_X, FLOOR_Y - 1.5), Vector2(EAST_X, FLOOR_Y - 1.5), Palette.INK, 3.0, true)
-	draw_line(Vector2(WEST_X, TOP), Vector2(WEST_X, FLOOR_Y), Palette.INK, 3.0, true)
 
 	_draw_fence()
 	for hall in HALLS:

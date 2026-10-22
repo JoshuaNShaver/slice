@@ -13,7 +13,7 @@ const PADDING := Vector2(14, 10)
 const SPEECH_GAP := 46.0  # px from the anchor up to the box
 const THOUGHT_OFFSET := Vector2(40, -70)  # from the anchor to the cloud's bottom-left
 const SCREEN_MARGIN := 16.0
-const TOP_MARGIN := 150.0  # keep clear of the vitals and the pay counter
+const TOP_MARGIN := 150.0  # keep clear of the vitals and the quest tracker
 const BASE_TIME := 3.0  # s on screen, plus a little per character
 const TIME_PER_CHAR := 0.04
 

@@ -98,12 +98,12 @@ func run() -> int:
 	_run_cmd(me, "\\players levelup 99")
 	_check(me.stats.level == Stats.MAX_LEVEL, "levelup stops at the top")
 	_check("already at the top" in _run_cmd(me, "\\players levelup"), "levelup at the top says so")
-	_run_cmd(me, "\\players set pay 1234 --id oth")
-	_check(other.stats.pay == 1234, "set pay by name")
+	_run_cmd(me, "\\players set chits 1234 --id oth")
+	_check(other.stats.chits == 1234, "set chits by name")
 	_run_cmd(me, "\\players set hp 99999 --id oth")
 	_check(other.stats.hp == other.stats.max_hp, "hp clamped to max")
 	_check("Can't set" in _run_cmd(me, "\\players set luck 50"), "unlisted field refused")
-	_check("whole number" in _run_cmd(me, "\\players set pay lots"), "non-number refused")
+	_check("whole number" in _run_cmd(me, "\\players set chits lots"), "non-number refused")
 
 	# Enemies.
 	var spawn := Barracks.spawn_points()[3]  # a sparring partner

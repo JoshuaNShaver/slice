@@ -41,6 +41,8 @@ const FACE_TILT := 0.14
 const TELEPORT_GHOST_STEPS := 3
 const FALL_LIMIT := 4500.0  # fall below this and you go back to the spawn point
 const RIDE_SPEED := 650.0  # px/s, elevators
+## On a boat's deck you lean rather than roll (log 0201): top spin is capped.
+const DECK_SPIN := 2.5
 
 ## What integrate() did: HALT ends the step (a ride or a teleport), THROWN
 ## means you're helpless in the air, JUMPED that you jumped this step.
@@ -50,6 +52,7 @@ var player: PlayerShape
 var move := 0.0  # the owner's roll input, -1 to 1
 var ground_normal := Vector2.UP
 var touching_ground := false  # this step
+var on_boat: Boat = null  # this step, standing on one
 var grounded := false  # this step, counting coyote time
 var _jump_timer := 0.0
 var _since_ground := INF
@@ -124,7 +127,7 @@ func _end_ride() -> void:
 		return
 	_ride = {}
 	if _ghost_steps == 0:
-		player.set_deferred("collision_mask", PlayerShape.LAYER_TERRAIN | Enemy.LAYER)
+		player.set_deferred("collision_mask", PlayerShape.MASK)
 
 
 ## Server only. Thrown into the air by a boss's spike up (design log 0089):
@@ -160,9 +163,13 @@ func integrate(state: PhysicsDirectBodyState2D) -> int:
 	if _ghost_steps > 0 and _teleport_to == null:
 		_ghost_steps -= 1
 		if _ghost_steps == 0:
-			player.set_deferred("collision_mask", PlayerShape.LAYER_TERRAIN | Enemy.LAYER)
+			player.set_deferred("collision_mask", PlayerShape.MASK)
 	if _teleport_to == null and state.transform.origin.y > FALL_LIMIT and multiplayer.is_server():
 		teleport(player.spawn_point)
+	if _teleport_to == null and multiplayer.is_server():
+		Coast.hold_back(player, state)  # workmen only (log 0200)
+		if Ocean.drowns(state.transform.origin, Ocean.now()):
+			player.actions.drown()  # log 0201
 	if _teleport_to != null:
 		state.transform = Transform2D(0.0, _teleport_to)
 		state.linear_velocity = Vector2.ZERO
@@ -174,10 +181,14 @@ func integrate(state: PhysicsDirectBodyState2D) -> int:
 	# tip over next.
 	var step := state.step
 	var normal := Vector2.ZERO
+	on_boat = null
 	for i in state.get_contact_count():
 		var n := state.get_contact_local_normal(i)
 		if n.y < -0.5:
 			normal += n
+			var boat := state.get_contact_collider_object(i) as Boat
+			if boat != null:
+				on_boat = boat
 	touching_ground = normal != Vector2.ZERO
 	if touching_ground:
 		ground_normal = normal.normalized()
@@ -206,6 +217,8 @@ func integrate(state: PhysicsDirectBodyState2D) -> int:
 	var spin_scale := Stats.spin_scale(player.stats.torque)
 	if grounded and move != 0.0:
 		var top := spin_scale * lerpf(BASE_SPIN, TOP_SPIN, clampf(_hold_time / RAMP_TIME, 0.0, 1.0))
+		if on_boat != null:
+			top = minf(top, DECK_SPIN)
 		# Push only up to the top spin. Gravity can take you past it downhill.
 		if state.angular_velocity * move < top:
 			var tip := TIP_ASSIST * state.total_gravity.length() * PlayerShape.RADIUS * state.inverse_inertia / state.inverse_mass

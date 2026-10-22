@@ -9,7 +9,7 @@ extends Node
 ##
 ## Each squad gets its own Mission (instanced), with soldiers on its side
 ## and the Colour Revolt to beat. Missions pay only XP (per kill) and, when
-## every rebel is down, combatant pay. Leaving early, by the home key or
+## every rebel is down, chits (log 0204). Leaving early, by the home key or
 ## otherwise, forfeits the pay. If the squad brought down a Revolt boss, each
 ## member has a DISCHARGE_CHANCE (luck helps) that the General discharges
 ## them with a marriage certificate when they're back (logs 0067, 0092).
@@ -127,9 +127,9 @@ func mark_ready(player: PlayerShape) -> void:
 			# Reporting the Captain back (design log 0089).
 			var info: Dictionary = Mission.TYPES[inst.type]
 			var pay: int = info.pay * info.report_pay
-			player.stats.add_pay(pay)
+			player.stats.add_chits(pay)
 			player.screen.show_countdown("", 0.0, 0, 0, false)
-			player.screen.tell("The General", "A Captain, out on recon? Good eyes, soldier. +%d pay." % pay)
+			player.screen.tell("The General", "A Captain, out on recon? Good eyes, soldier. +%d chits." % pay)
 			player.teleport(Barracks.MUSTER)
 			inst.members.erase(id)
 			if inst.members.is_empty():
@@ -372,7 +372,7 @@ func _watch(slot: int, delta: float) -> void:
 		if p == null or not field.has_point(p.position):
 			inst.members.erase(id)
 			if p != null:
-				p.screen.tell("The General", "You left the front. No pay for deserters.")
+				p.screen.tell("The General", "You left the front. No chits for deserters.")
 	if inst.members.is_empty():
 		_close(slot)
 
@@ -406,7 +406,7 @@ func _offer_report(inst: Dictionary, show: bool) -> void:
 			continue
 		if show:
 			p.screen.show_countdown("A Captain! Report back?", REPORT_TIME, 0, 0, false,
-					"Report back (+%d pay)" % (info.pay * info.report_pay))
+					"Report back (+%d chits)" % (info.pay * info.report_pay))
 		else:
 			p.screen.show_countdown("", 0.0, 0, 0, false)
 
@@ -422,13 +422,13 @@ func _win(slot: int) -> void:
 		var p := world.player(id)
 		if p == null:
 			continue
-		p.stats.add_pay(pay)
+		p.stats.add_chits(pay)
 		if inst.boss_down:
-			p.screen.tell("The General", "Their gentry is down. +%d pay. Report to me at the barracks." % pay)
+			p.screen.tell("The General", "Their gentry is down. +%d chits. Report to me at the barracks." % pay)
 		elif inst.pay_mult > 1:
-			p.screen.tell("The General", "More than scouts out there, I hear. Well done. +%d pay." % pay)
+			p.screen.tell("The General", "More than scouts out there, I hear. Well done. +%d chits." % pay)
 		else:
-			p.screen.tell("The General", "Mission complete. +%d pay. Back to the barracks." % pay)
+			p.screen.tell("The General", "Mission complete. +%d chits. Back to the barracks." % pay)
 		p.screen.show_countdown("Back to the barracks", RETURN_DELAY, 0, 0, false)
 	inst.return_time = RETURN_DELAY
 

@@ -4,7 +4,7 @@ extends RefCounted
 ## what to save, putting it back on a fresh shape, and checking a save that
 ## came from outside. The one place that knows the save format.
 ##
-## progress(): {"level", "xp", "pay", "abilities", "stats" (without gear),
+## progress(): {"level", "xp", "chits", "coins", "dock_held", "abilities", "stats" (without gear),
 ## "bag", "equipped"}. The chest is saved apart, as a plain item list, and
 ## quests with the account (PlayerQuests, log 0183).
 
@@ -27,7 +27,9 @@ static func progress(p: PlayerShape) -> Dictionary:
 	return {
 		"level": stats.level,
 		"xp": stats.xp,
-		"pay": stats.pay,
+		"chits": stats.chits,
+		"coins": stats.coins,
+		"dock_held": stats.dock_held,
 		"abilities": Array(stats.abilities),
 		"stats": base,
 		"bag": Array(p.inventory.bag),
@@ -42,7 +44,9 @@ static func apply(p: PlayerShape, saved: Dictionary, saved_chest: Variant) -> vo
 	if not saved.is_empty():
 		stats.level = saved.level
 		stats.xp = saved.xp
-		stats.pay = saved.get("pay", 0)
+		stats.chits = saved.get("chits", 0)
+		stats.coins = saved.get("coins", 0)
+		stats.dock_held = saved.get("dock_held", 0)
 		stats.abilities = PackedStringArray(saved.get("abilities", []))
 		for stat: String in Stats.LEVELED:
 			stats.set(stat, saved.stats[stat])
@@ -78,7 +82,10 @@ static func sanitize(raw: Dictionary) -> Dictionary:
 	return {
 		"level": clean_level,
 		"xp": clampi(_as_int(raw.get("xp"), 0), 0, top_xp),
-		"pay": clampi(_as_int(raw.get("pay"), 0), 0, PlayerStats.MAX_PAY),
+		# Saves from before log 0204 call chits "pay".
+		"chits": clampi(_as_int(raw.get("chits", raw.get("pay")), 0), 0, PlayerStats.MAX_CHITS),
+		"coins": clampi(_as_int(raw.get("coins"), 0), 0, PlayerStats.MAX_CHITS),
+		"dock_held": clampi(_as_int(raw.get("dock_held"), 0), 0, Market.HELD_MAX),
 		"abilities": _clean_abilities(raw.get("abilities", [])),
 		"stats": stats,
 		"bag": clean_bag,

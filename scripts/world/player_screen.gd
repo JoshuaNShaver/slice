@@ -52,3 +52,15 @@ func show_countdown(title: String, seconds: float, ready_count: int, total: int,
 func _countdown_shown(title: String, seconds: float, ready_count: int, total: int, you_ready: bool,
 		button: String) -> void:
 	get_tree().call_group(Hud.GROUP, "show_countdown", title, seconds, ready_count, total, you_ready, button)
+
+
+## Server only. Opens the dock's market or your booth on Merchants' Row
+## (design log 0205), or refreshes it: `panel` "market" or "booth", `data`
+## from Market.snapshot.
+func show_market(panel: String, data: Dictionary) -> void:
+	_market_shown.rpc_id(player.peer_id, panel, data)
+
+
+@rpc("authority", "call_local", "reliable")
+func _market_shown(panel: String, data: Dictionary) -> void:
+	get_tree().call_group(Hud.GROUP, "show_market", panel, data)

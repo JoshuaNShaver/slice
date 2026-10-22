@@ -15,7 +15,7 @@ signal began(ability: Ability)
 var id := ""
 var name := ""
 var action := ""  # its Controls input action
-var price := 0  # combatant pay at the Quartermaster
+var price := 0  # chits at the Quartermaster (design log 0206)
 var text := ""
 var cost := Abilities.COST  # energy per use
 

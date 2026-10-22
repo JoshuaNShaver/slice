@@ -1,7 +1,7 @@
 # 0077: Barracks build details
 
 - **Date:** 2026-10-18
-- **Status:** Proposed (built); the boss-kill discharge superseded by 0092
+- **Status:** Proposed (built); the boss-kill discharge superseded by 0092, metal prices by 0206
 - **Decision:** Details chosen while building the barracks:
   - People: a Drill Sergeant (isosceles), the Quartermaster (equilateral,
     a tradesman), the Surgeon (square, heals on request) and the General

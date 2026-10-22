@@ -1,6 +1,6 @@
 class_name Abilities
 ## Abilities (design log 0086): moves bought once from the Quartermaster for
-## combatant pay. Each costs COST energy to use. Jumps are free (log 0087),
+## chits (log 0206). Each costs COST energy to use. Jumps are free (log 0087),
 ## so energy is only for these.
 ##
 ## Each ability is its own script extending Ability (design log 0107): its

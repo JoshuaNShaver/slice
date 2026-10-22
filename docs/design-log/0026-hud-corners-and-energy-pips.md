@@ -1,7 +1,7 @@
 # 0026: HUD corners and energy pips
 
 - **Date:** 2026-10-17
-- **Status:** Accepted (character sheet key superseded by 0034)
+- **Status:** Accepted (character sheet key superseded by 0034; currency corner by 0204)
 - **Decision:** Top left: your shape, level, health bar and XP bar. Bottom
   right: a 1-5 hotbar over a 5×2 bag, as icon slots. Equipment and stats move
   to a character sheet on C; the player list and Leave move to an Esc menu.

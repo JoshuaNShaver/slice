@@ -1,6 +1,7 @@
 class_name World
 extends Node2D
-## The world (DESIGN §1, Regions): the Center, the barracks to the west,
+## The world (DESIGN §1, Regions): the Center, the barracks and the coast
+## to the west (the sea, its boats and the Logging Isle's trees),
 ## the Noble Quarter and the Priests' Hill to the east, the underworld below
 ## (the Undercroft and the training cave), and the missions' battlefields far
 ## off (design logs 0027, 0051-0072).
@@ -43,6 +44,11 @@ var _pickup_count := 0
 var _missions_root: Node2D
 var _mission_spawner: MultiplayerSpawner
 var _missions: Missions
+var _boats_root: Node2D
+var _boat_spawner: MultiplayerSpawner
+var _boat_count := 0
+var _trees_root: Node2D
+var _tree_spawner: MultiplayerSpawner
 var _camera_place := "-"
 var _rng := RandomNumberGenerator.new()
 var _save_timer := 0.0
@@ -68,12 +74,14 @@ func _ready() -> void:
 	_rng.randomize()
 	add_child(CenterTerrain.new())
 	add_child(Barracks.new())
+	add_child(Coast.new())
+	add_child(Market.new())
 	add_child(UpperEast.new())
 	add_child(Underworld.new())
 	add_child(Cave.new())
 	for lift: Dictionary in [CenterTerrain.LIFT_DOWN, CenterTerrain.LIFT_UP]:
 		add_child(Elevator.create(lift))
-	for data: Dictionary in CenterTerrain.NPCS + Barracks.NPCS + UpperEast.NPCS + Underworld.NPCS:
+	for data: Dictionary in CenterTerrain.NPCS + Barracks.NPCS + Coast.NPCS + Market.NPCS + UpperEast.NPCS + Underworld.NPCS:
 		add_child(Npc.create(data))
 	var door := HouseDoor.new()
 	door.position = Buildings.men_door(UpperEast.HOME, UpperEast.HOME_WIDTH)
@@ -84,6 +92,11 @@ func _ready() -> void:
 	_pickups_root = _add_spawned_root("Pickups", Pickup.create)
 	_pickup_spawner = get_node("PickupsSpawner")
 	_missions_root = _add_spawned_root("Missions", Mission.create)
+	_trees_root = _add_spawned_root("Trees", Timber.create)
+	_tree_spawner = get_node("TreesSpawner")
+	_boats_root = _add_spawned_root("Boats", Boat.create)
+	_boat_spawner = get_node("BoatsSpawner")
+	add_child(Ocean.new())  # over the boats: their hulls sit in the water
 	_mission_spawner = get_node("MissionsSpawner")
 	_missions = Missions.new()
 	_missions.name = "MissionControl"
@@ -117,6 +130,7 @@ func _ready() -> void:
 	if multiplayer.is_server():
 		Net.accounts.find_player = player
 		_spawn_all_enemies()
+		_spawn_trees()
 		_on_players_changed()
 	else:
 		Net.announce_ready()
@@ -133,7 +147,8 @@ func _process(delta: float) -> void:
 		if _hud.storage_open() and not me.inventory.can_use_chest():
 			_hud.close_storage()
 		var panel := _hud.open_panel_name()
-		if panel != "" and not Npc.near_role(me, "general" if panel == "orders" else "quartermaster"):
+		var role: String = {"orders": "general", "shop": "quartermaster"}.get(panel, panel)
+		if panel != "" and not Npc.near_role(me, role):
 			_hud.close_panel()
 		_follow_camera_limits(me)
 	if multiplayer.is_server():
@@ -162,7 +177,7 @@ func player(peer_id: int) -> PlayerShape:
 
 ## The camera stays inside the main world, or inside a mission's field.
 func _world_bounds() -> Rect2:
-	return Rect2(Cave.WEST_X - 100, UpperEast.TOP, UpperEast.EAST_X - Cave.WEST_X + 200,
+	return Rect2(Coast.WEST_X - 100, UpperEast.TOP, UpperEast.EAST_X - Coast.WEST_X + 200,
 			Underworld.BOTTOM - 200 - UpperEast.TOP)
 
 
@@ -221,6 +236,8 @@ func _sync_player_shapes() -> void:
 				Net.play_cutscene(id, shape.quests.after_birth(Cutscenes.founding(info), info))
 	for shape: PlayerShape in _players_root.get_children():
 		if not Net.players.has(shape.peer_id):
+			_remove_boat_of(shape.peer_id)
+			(get_tree().get_first_node_in_group(Market.GROUP) as Market).forget(shape.peer_id)
 			_players_root.remove_child(shape)
 			shape.queue_free()
 		else:
@@ -271,6 +288,31 @@ func interact(who: PlayerShape) -> void:
 	var target := _nearest_interactable(who.position)
 	if target != null:
 		target.interact(who)
+
+
+## Server only (a boatwright, Npc "boats", design log 0201): a boat for
+## `who` on the water at `at`, bow toward `facing`, with them on its deck
+## behind the mast. Their old boat, if any, goes.
+func launch_boat(who: PlayerShape, at: Vector2, facing: int) -> void:
+	_remove_boat_of(who.peer_id)
+	_boat_count += 1
+	_boat_spawner.spawn({"name": "B%d" % _boat_count, "pos": at, "facing": facing, "owner": who.peer_id})
+	who.teleport(at + Vector2(-facing * Boat.RADIUS * 0.5, -PlayerShape.RADIUS - 12.0))
+
+
+## Server only.
+func _remove_boat_of(peer_id: int) -> void:
+	for boat: Boat in _boats_root.get_children():
+		if boat.owner_peer == peer_id:
+			_boats_root.remove_child(boat)
+			boat.queue_free()
+
+
+## Server only. The Logging Isle's trees (design log 0202).
+func _spawn_trees() -> void:
+	for i in Coast.TREES.size():
+		var x := Coast.TREES[i]
+		_tree_spawner.spawn({"name": "T%d" % i, "pos": Vector2(x, Coast.ground_y(x))})
 
 
 ## Server only (PlayerActions._submit_mission): the General's orders.

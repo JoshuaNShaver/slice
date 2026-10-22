@@ -18,6 +18,9 @@ const XP := Color("e0c36a")
 const PLAIN := PARCHMENT_LIGHT
 ## The Colour Revolt's loud paint (design log 0068): nothing else is this bright.
 const REVOLT := Color("e0452b")
+## Coins (design log 0204): verdigris, a deep blue-green unlike any other
+## colour in the game, so money always stands out.
+const COIN := Color("1f8a7a")
 
 const CHALK: Array[Color] = [
 	Color("f4b6b6"),  # rose
