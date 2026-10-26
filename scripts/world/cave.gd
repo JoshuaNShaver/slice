@@ -152,11 +152,7 @@ func _draw() -> void:
 	draw_line(Vector2(MOUTH_X, Underworld.ceiling()[0].y - OFFSET.y), Vector2(MOUTH_X, CEILING[0].y),
 			Palette.CHALK_LINE, 3.0, true)
 
-	var font := ThemeDB.fallback_font
-	for s in SIGNS:
-		var pos: Vector2 = s.pos
-		draw_line(pos + Vector2(0, -20), pos + Vector2(0, 50), Palette.CHALK_FADED, 2.0)
-		draw_string(font, pos + Vector2(-200, -28), s.text, HORIZONTAL_ALIGNMENT_CENTER, 400, 18, Palette.CHALK_LINE)
+	Buildings.draw_signs(self, SIGNS, Palette.CHALK_LINE, 18)
 
 
 func _draw_hatching(line: PackedVector2Array, from: Vector2, to: Vector2) -> void:

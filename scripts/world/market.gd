@@ -19,6 +19,16 @@ extends Node2D
 ## "merchants"). Every peer builds the Market (it draws the Row's stalls);
 ## only the server trades. A player's screen gets a snapshot after each
 ## trade (PlayerScreen.show_market). *Proposed* numbers throughout.
+##
+## Promissory notes (log 0212): the Harbourmaster sells his paper for
+## coins, one note per log at the dock's coin price, taken from the stock.
+## They stack in the bag, and a booth order takes them for logs (logs
+## first, then notes), so a merchant can buy ahead and fill big orders
+## without hauling the wood.
+##
+## The dock also keeps a smaller stock of rare ore (log 0211), for the
+## Blacksmith's finest work: dearer than logs, with its own price that
+## follows its own stock, but no work orders, swings or booth orders.
 
 const GROUP := "market"
 
@@ -45,6 +55,15 @@ const ORDER_EVERY := 90.0  # s between new orders
 const ORDER_TIME := 600.0  # s an order stays open
 const ORDER_SIZE := Vector2i(2, 8)
 const ORDER_PRICE := 32  # coins per log, times a random 0.6-1.5
+## Rare ore (log 0211): about three times a log.
+const ORE_START := 10
+const ORE_FULL := 20
+const ORE_MAX := 40
+const ORE_CREW_EVERY := 90.0  # s per ore the crew brings in
+const ORE_BASE_CHITS := 780
+const ORE_CHITS_RANGE := Vector2i(620, 1260)  # never under what the Tradesman pays (600)
+const ORE_BASE_COINS := 85
+const ORE_COINS_RANGE := Vector2i(45, 150)
 const BUYERS: Array[String] = ["The Carpenter", "The Cooper", "The Shipwright", "A Noble's Steward",
 		"The Wheelwright", "The Temple's Verger"]
 
@@ -60,7 +79,7 @@ const NPCS: Array[Dictionary] = [
 	{
 		"name": HARBOURMASTER, "at": Vector2(-6980, Coast.SHORE_Y), "sides": 4, "radius": 27.0,
 		"role": "market", "serves": "merchants",
-		"lines": ["Logs by the stack, for chits or coin. The price is the tide's, not mine."],
+		"lines": ["Logs by the stack, ore by the lump, for chits or coin. The price is the tide's, not mine."],
 		"refusals": ["The stock's for merchants, friend. Sell your logs to the Tradesman."],
 	},
 	{
@@ -72,7 +91,9 @@ const NPCS: Array[Dictionary] = [
 ]
 
 var stock := STOCK_START
+var ore_stock := ORE_START
 var _crew := 0.0
+var _ore_crew := 0.0
 var _swing := 200.0
 var _orders := {}  # peer id -> [{"id", "buyer", "qty", "price", "left"}]
 var _order_timer := {}  # peer id -> s until their next order
@@ -92,11 +113,26 @@ func _ready() -> void:
 ## Dearer when the dock is short, cheaper when it's full: 1.6 at empty, 1.0
 ## at STOCK_START, 0.8 at STOCK_FULL, 0.5 at STOCK_MAX.
 func scarcity() -> float:
-	if stock <= STOCK_START:
-		return lerpf(1.6, 1.0, float(stock) / STOCK_START)
-	if stock <= STOCK_FULL:
-		return lerpf(1.0, 0.8, float(stock - STOCK_START) / (STOCK_FULL - STOCK_START))
-	return lerpf(0.8, 0.5, clampf(float(stock - STOCK_FULL) / (STOCK_MAX - STOCK_FULL), 0.0, 1.0))
+	return _scarcity(stock, STOCK_START, STOCK_FULL, STOCK_MAX)
+
+
+## The same curve for any stock: `have` against its start, full and max.
+static func _scarcity(have: int, start: int, full: int, top: int) -> float:
+	if have <= start:
+		return lerpf(1.6, 1.0, float(have) / start)
+	if have <= full:
+		return lerpf(1.0, 0.8, float(have - start) / (full - start))
+	return lerpf(0.8, 0.5, clampf(float(have - full) / (top - full), 0.0, 1.0))
+
+
+func ore_chit_price() -> int:
+	var k := _scarcity(ore_stock, ORE_START, ORE_FULL, ORE_MAX)
+	return clampi(roundi(ORE_BASE_CHITS * k), ORE_CHITS_RANGE.x, ORE_CHITS_RANGE.y)
+
+
+func ore_coin_price() -> int:
+	var k := _scarcity(ore_stock, ORE_START, ORE_FULL, ORE_MAX)
+	return clampi(roundi(ORE_BASE_COINS * k), ORE_COINS_RANGE.x, ORE_COINS_RANGE.y)
 
 
 func chit_price() -> int:
@@ -121,6 +157,11 @@ func _physics_process(delta: float) -> void:
 		_crew = 0.0
 		if stock < STOCK_FULL:
 			stock += 1
+	_ore_crew += delta
+	if _ore_crew >= ORE_CREW_EVERY:
+		_ore_crew = 0.0
+		if ore_stock < ORE_FULL:
+			ore_stock += 1
 	_swing -= delta
 	if _swing <= 0.0:
 		_swing = _rng.randf_range(SWING_EVERY.x, SWING_EVERY.y)
@@ -190,6 +231,11 @@ func add_supply(count: int) -> void:
 	stock = mini(stock + count, STOCK_MAX)
 
 
+## Server only. Ore sold to the Dock Tradesman goes into the dock's ore stock.
+func add_ore_supply(count: int) -> void:
+	ore_stock = mini(ore_stock + count, ORE_MAX)
+
+
 func _deliver_work(id: int, count: int) -> void:
 	if not _work.has(id) or count <= 0:
 		return
@@ -204,7 +250,8 @@ func _deliver_work(id: int, count: int) -> void:
 
 
 ## Server only. A merchant's trade; returns what to tell them, or "".
-## "buy_chits" / "buy_coins": `amount` logs from the stock into the bag.
+## "buy_chits" / "buy_coins": `amount` logs from the stock into the bag;
+## "buy_ore_chits" / "buy_ore_coins": the same for rare ore.
 ## "work": post a work order for `amount` logs. "collect": held logs into
 ## the bag. "deliver": fill order `amount` from the bag.
 func trade(p: PlayerShape, action: String, amount: int) -> String:
@@ -213,6 +260,10 @@ func trade(p: PlayerShape, action: String, amount: int) -> String:
 	match action:
 		"buy_chits", "buy_coins":
 			return _buy(p, action == "buy_coins", amount)
+		"buy_ore_chits", "buy_ore_coins":
+			return _buy_ore(p, action == "buy_ore_coins", amount)
+		"buy_notes":
+			return _buy_notes(p, amount)
 		"work":
 			return _post_work(p, amount)
 		"collect":
@@ -247,6 +298,50 @@ func _buy(p: PlayerShape, with_coins: bool, amount: int) -> String:
 			"coins" if with_coins else "chits"]
 
 
+func _buy_notes(p: PlayerShape, amount: int) -> String:
+	amount = clampi(amount, 1, Gear.NOTE_STACK)
+	if stock <= 0:
+		return "No logs to write paper against. Wait for the tide."
+	amount = mini(amount, stock)
+	amount = mini(amount, p.inventory.room_for_notes())
+	if amount <= 0:
+		return "Your bag's full."
+	var each := coin_price()
+	amount = mini(amount, p.stats.coins / each)
+	if amount <= 0:
+		return "A note's %d coins, same as the log. You can't cover one." % each
+	p.inventory.add_notes(amount)
+	p.stats.coins -= amount * each
+	stock -= amount
+	return "%d %s at %d coins. Any booth buyer will honour them." % [amount,
+			"note" if amount == 1 else "notes", each]
+
+
+func _buy_ore(p: PlayerShape, with_coins: bool, amount: int) -> String:
+	amount = clampi(amount, 1, PlayerInventory.BAG_SIZE)
+	if ore_stock <= 0:
+		return "No ore in. The quarry crew's slow; wait, or fetch it yourself."
+	amount = mini(amount, ore_stock)
+	var free := p.inventory.bag.count("")
+	if free == 0:
+		return "Your bag's full."
+	amount = mini(amount, free)
+	var each := ore_coin_price() if with_coins else ore_chit_price()
+	var money := "coins" if with_coins else "chits"
+	var have := p.stats.coins if with_coins else p.stats.chits
+	amount = mini(amount, have / each)
+	if amount <= 0:
+		return "Ore's %d %s a lump. You can't cover one." % [each, money]
+	for i in amount:
+		p.inventory.add_to_bag(Gear.ORE)
+	if with_coins:
+		p.stats.coins -= amount * each
+	else:
+		p.stats.chits -= amount * each
+	ore_stock -= amount
+	return "%d ore at %d %s. It sinks faster than logs, mind." % [amount, each, money]
+
+
 func _post_work(p: PlayerShape, amount: int) -> String:
 	if _work.has(p.peer_id):
 		return "You've a work order out already: %d to come." % _work[p.peer_id].left
@@ -278,10 +373,14 @@ func _fill_order(p: PlayerShape, order_id: int) -> String:
 	for order: Dictionary in open:
 		if order.id != order_id:
 			continue
-		if p.inventory.count_of(Gear.LOG) < order.qty:
-			return "%s wants %d logs. You have %d." % [order.buyer, order.qty, p.inventory.count_of(Gear.LOG)]
-		for i in order.qty:
+		var logs := p.inventory.count_of(Gear.LOG)
+		var notes := p.inventory.count_notes()
+		if logs + notes < order.qty:
+			return "%s wants %d logs. You have %d, notes included." % [order.buyer, order.qty, logs + notes]
+		var from_logs := mini(logs, order.qty)
+		for i in from_logs:
 			p.inventory.take_from_bag(Gear.LOG)
+		p.inventory.take_notes(order.qty - from_logs)
 		var paid: int = order.qty * order.price
 		p.stats.add_coins(paid)
 		open.erase(order)
@@ -296,6 +395,7 @@ func snapshot(p: PlayerShape) -> Dictionary:
 		orders.append([order.id, order.buyer, order.qty, order.price, roundi(order.left)])
 	return {
 		"stock": stock, "chit_price": chit_price(), "coin_price": coin_price(), "work_price": work_price(),
+		"ore_stock": ore_stock, "ore_chit_price": ore_chit_price(), "ore_coin_price": ore_coin_price(),
 		"work_left": int(_work[p.peer_id].left) if _work.has(p.peer_id) else 0,
 		"held": p.stats.dock_held, "orders": orders,
 	}
@@ -308,20 +408,8 @@ func _player(id: int) -> PlayerShape:
 
 # --- Drawing: Merchants' Row ------------------------------------------------
 
+## No stalls (log 0221): the Row is its name, and the Clerk in your way.
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	for x in STALLS:
-		var base := Vector2(x, ROW_FLOOR)
-		var awning := PackedVector2Array([base + Vector2(-50, -110), base + Vector2(50, -110), base + Vector2(60, -85),
-				base + Vector2(-60, -85)])
-		draw_colored_polygon(awning, Palette.PARCHMENT_LIGHT)
-		Gear.draw_hatch(self, awning, [[90.0], 14.0], 1.0, Color(Palette.INK, 0.3))
-		awning.append(awning[0])
-		draw_polyline(awning, Palette.INK, 2.0, true)
-		for side in [-1.0, 1.0]:
-			draw_line(base + Vector2(side * 50, -110), base + Vector2(side * 50, 0), Palette.INK, 2.5)
-		var counter := Rect2(base + Vector2(-46, -40), Vector2(92, 40))
-		draw_rect(counter, Palette.PARCHMENT_LIGHT)
-		draw_rect(counter, Palette.INK, false, 2.0)
 	draw_string(font, Vector2(STALLS[1] - 200, ROW_FLOOR - 128), "Merchants' Row", HORIZONTAL_ALIGNMENT_CENTER,
 			400, 20, Palette.INK)

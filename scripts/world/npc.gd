@@ -13,18 +13,31 @@ extends Node2D
 ## - "general": gives missions (design log 0070), in a HUD panel.
 ## - "quartermaster": sells military gear and provisions for chits (design
 ##   logs 0071, 0080).
-## - "dock": the Dock Tradesman, buys every log in your bag for chits
-##   (design log 0204).
+## - "dock": the Dock Tradesman, buys every log and ore in your bag for
+##   chits (design logs 0204, 0211).
+## - "vault": the Strongroom Keeper, your family's chests, bought for coins
+##   (log 0212). Opens a HUD panel.
+## - "smith": the Blacksmith, upgrades gear for coins and rare ore (log
+##   0211); keeps the ore you hand him on account. Opens a HUD panel.
 ## - "boats": a boatwright, launches a boat for you at data "launch",
 ##   bow toward data "facing" (World.launch_boat, design log 0201).
+## - "rowboats": the fortress raid's Boatman (log 0250), the same but a
+##   rowboat, which rows between data "route" (its dock's x, its landing's);
+##   only while no rowboat is waiting at the dock (get aboard that one).
 ## - "market": the Harbourmaster, the dock's log market for merchants;
 ##   "booth": the Market Clerk, your booth's orders on Merchants' Row
 ##   (Market, design log 0205). Both open a HUD panel.
+## - "ranger_quartermaster": the rangers' stores on their island (log 0246):
+##   ranger gear, drills and rations, in a HUD panel.
+## - "travel": sends you to data "to" (World.travel): the rangers' island
+##   ("camp") only for those it admits (RangerCamp.admits), else it just
+##   talks; "barracks" for anyone (logs 0245, 0246).
 ## Any NPC with a heal_area also heals everyone it serves inside that area,
 ## for free, as the Center's priest always has (design log 0033).
 ##
 ## Every peer builds the same NPCs from data (World); only the server acts
-## on what they do. No body: shapes pass in front of them.
+## on what they do. Each has a solid, immovable body (design log 0223): you
+## bump into it, and can stand on it.
 
 const GROUP := "interactables"
 const HEALERS := "healers"
@@ -83,7 +96,23 @@ static func create(data: Dictionary) -> Npc:
 	for p in n._points:
 		lowest = maxf(lowest, p.y)
 	n.position = (data.at as Vector2) - Vector2(0, lowest)
+	n._add_body()
 	return n
+
+
+## The NPC's body: terrain to everyone, so shapes bump into it and can
+## stand on it (design log 0223).
+func _add_body() -> void:
+	var body := StaticBody2D.new()
+	body.name = "Body"
+	body.collision_layer = PlayerShape.LAYER_TERRAIN
+	body.collision_mask = 0
+	body.physics_material_override = PhysicsMaterial.new()
+	body.physics_material_override.friction = 1.0
+	var shape := CollisionPolygon2D.new()
+	shape.polygon = _points
+	body.add_child(shape)
+	add_child(body)
 
 
 ## Irregular NPCs each get their own lopsided outline, seeded by name.
@@ -153,16 +182,25 @@ func prompt_for(p: PlayerShape) -> String:
 		return "%s: take orders" % key
 	if role == "dock" and serves_player(p):
 		var logs := p.inventory.count_of(Gear.LOG)
-		if logs == 0:
+		var ore := p.inventory.count_of(Gear.ORE)
+		if logs + ore == 0:
 			return "%s: talk" % key
-		return "%s: sell %d %s (%d chits)" % [key, logs, "log" if logs == 1 else "logs",
-				logs * int(Gear.GOODS[Gear.LOG].chits)]
+		var chits := logs * int(Gear.GOODS[Gear.LOG].chits) + ore * int(Gear.GOODS[Gear.ORE].chits)
+		var what := "%d %s" % [logs, "log" if logs == 1 else "logs"] if ore == 0 else (
+				"%d ore" % ore if logs == 0 else "%d logs and %d ore" % [logs, ore])
+		return "%s: sell %s (%d chits)" % [key, what, chits]
+	if role == "smith" and serves_player(p):
+		return "%s: upgrade gear" % key
+	if role == "vault" and serves_player(p):
+		return "%s: your family's chests" % key
 	if role == "market" and serves_player(p):
 		return "%s: trade" % key
 	if role == "booth" and serves_player(p):
 		return "%s: your booth" % key
 	if role == "boats" and serves_player(p):
 		return "%s: take a boat" % key
+	if role == "rowboats" and serves_player(p):
+		return "%s: a rowboat of your own" % key
 	if role == "quartermaster" and serves_player(p):
 		return "%s: trade (%d chits)" % [key, p.stats.chits]
 	return "%s: talk" % key
@@ -182,8 +220,25 @@ func interact(p: PlayerShape) -> void:
 		"general", "quartermaster":
 			_say(p, lines)
 			p.screen.open_panel("orders" if role == "general" else "shop")
+		"ranger_quartermaster":
+			_say(p, lines)
+			p.screen.open_panel("ranger_shop")
+		"travel":
+			var to := str(data.get("to", ""))
+			if to == "camp" and not RangerCamp.admits(p):
+				_say(p, lines)
+				return
+			p.screen.tell(display_name, str(data.get("send_line", (lines as Array).pick_random() if not lines.is_empty() else "")))
+			p.get_tree().call_group(World.GROUP, "travel", p, to)
+		"vault":
+			_say(p, lines)
+			p.screen.open_panel("vault")
+		"smith":
+			p.actions.hand_over_ore(display_name)
+			_say(p, lines)
+			p.screen.open_panel("smith")
 		"dock":
-			if p.inventory.count_of(Gear.LOG) > 0:
+			if p.inventory.count_of(Gear.LOG) + p.inventory.count_of(Gear.ORE) > 0:
 				p.actions.sell_logs(display_name)
 			else:
 				_say(p, lines)
@@ -195,6 +250,15 @@ func interact(p: PlayerShape) -> void:
 		"boats":
 			_say(p, lines)
 			p.get_tree().call_group(World.GROUP, "launch_boat", p, data.launch, int(data.get("facing", -1)))
+		"rowboats":
+			for node in p.get_tree().get_nodes_in_group(Boat.GROUP):
+				var boat := node as Boat
+				if boat.rowed and boat.moored() and boat.position.distance_to(data.launch) < Boat.ROWED_RADIUS * 2.0:
+					p.screen.tell(display_name, "She's waiting at the end of the dock. Get aboard and speak to her.")
+					return
+			_say(p, lines)
+			p.get_tree().call_group(World.GROUP, "launch_boat", p, data.launch, int(data.get("facing", 1)),
+					data.route)
 		"healer":
 			if p.stats.hp < p.stats.max_hp:
 				p.combat.heal_full()

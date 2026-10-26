@@ -44,24 +44,47 @@ Mark your own suggestions `Proposed` until the user agrees.
   `PlayerSave` (progress save format and sanitizing). `Regions` (where each place is, spawn points, who a gate admits),
   terrain per region: `CenterTerrain`, `UpperEast` (Noble Quarter, Priests'
   Hill), `Underworld` (the Undercroft hub, earth band), `Cave` (training cave
-  off the Undercroft), `Barracks` (drill yard, General, Quartermaster),
+  off the Undercroft), `Barracks` (drill yard, General, Quartermaster; all on one island, log 0232),
   `Coast` (west of the barracks, workmen only: dock, piers, the Logging
-  Isle; logs 0200-0202, 0208) with `Ocean` (waves from the server's clock,
-  drowning), `Boat` (server-simulated sailing boats) and `Timber` (the
-  isle's trees, logs every 1,000 damage). `Market` (the merchants' dock
-  stock, work orders and booth orders on Merchants' Row; log 0205, 0209).
+  Isle; logs 0200-0202, 0208) with `Ocean` (waves and each stretch's rain from the server's clock, log 0215;
+  drowning), `Boat` (server-simulated sailing boats) and `WorldResource`
+  (things hit for drops, regrowing): `Timber` (the Logging Isle's trees,
+  logs every 1,000 damage) and `OreRock` (the Quarry Isle's rare ore, log
+  0211). `Market` (the merchants' dock
+  stock, ore stock, work orders and booth orders on Merchants' Row; log 0205, 0209, 0211).
+  Promissory notes stack in one slot (`note_12`, `Gear.note_count`,
+  `PlayerInventory.add_notes`); the family strongroom is
+  `PlayerInventory.vault` (swap indices from `VAULT_BASE`), saved in the
+  family's progress (log 0212), with `heirlooms` / `heirloom_pending`
+  (armor passed down at succession, `PlayerInventory.pass_down`, log 0216).
+  The Blacksmith (`Npc` role "smith", `PlayerActions.upgrade`) upgrades
+  gear to +5; upgrades live in the item string (`points_9+3`, `Gear.plus_of`).
   `Mission` (one squad's instanced battlefield) and `Missions` (server-side
-  musters, pay, discharge). `Npc` (talkers, priests, healers; built from each
-  terrain's `NPCS` data), `Elevator`, `HouseDoor` (chests), `Buildings`
-  (house drawing: open, with rooms, log 0188), `Enemy`, `Pickup` (per-player loot), `NetSmoother`
+  musters, pay, discharge); `Fortress` (the rangers' fortress raid, an
+  instance with its own stormy sea via `Ocean.add_sea`, rowboats (`Boat`
+  `rowed`), a winch and drawbridge, an enemy boat, lookouts and a back
+  door; logs 0248, 0250, 0253). `Npc` (talkers, priests, healers; solid,
+  log 0223; built from each terrain's `NPCS` data), `Elevator` (the underworld lift runs down a shaft
+  cut from the terrain, capped by a hatch, log 0227), `HouseDoor` (chests), `Buildings`
+  (house drawing: open, with rooms, logs 0188, 0222; `raised` mound data),
+  `House` (a solid house, lawful or crooked, log 0222), `Projectiles`
+  (thrown shots, server-decided, flown by every client; log 0242),
+  `RangerCamp` (the rangers' secret island, log 0246), `RangerExam` (ranger
+  school's instanced exam course, log 0245), `Mound` (floating
+  ground: raised houses' organic islands, NPC daises; the road dips into a
+  valley under each, `Buildings.smooth` curves, log 0226). Nothing in
+  the plane is scenery (log 0221). `World.add_places` builds every fixed
+  thing (terrain, mounds, houses, lifts, NPCs), for the game and tests. `Enemy`, `Pickup` (per-player loot), `NetSmoother`
   (client-side smoothing of server-simulated bodies).
 - `scripts/abilities/`: one script per ability (`RushAbility`,
-  `NoseDiveAbility`, `SpikeUpAbility`) extending `Ability`; `Abilities`
-  (the registry, shop order) and `MoveSet` (one body's abilities, for
-  players and Revolt bosses). Log 0107.
+  `NoseDiveAbility`, `SpikeUpAbility`; the rangers' `VolleyAbility`,
+  `ChargedShotAbility`, `DoubleJumpAbility`, held ones released, log 0244)
+  extending `Ability`; `Abilities` (the registry, shop order, key slots:
+  abilities are equipped, `PlayerStats.ability_slots`, log 0243) and
+  `MoveSet` (one body's abilities, for players and Revolt bosses). Log 0107.
 - `scripts/admin/`: admin commands typed into chat after `\` (log 0125):
   `AdminConsole` (parsing, help, who's an admin, short player ids) and one
-  script per noun (`PlayerCommands` with its `players quests` sub-noun `PlayerQuestCommands`, `EnemyCommands`, `QuestCommands`; plural nouns, log 0196). Roles: `profiles.role`, set only in
+  script per noun (`PlayerCommands` with its `players quests` sub-noun `PlayerQuestCommands`, `EnemyCommands`, `QuestCommands`, `ItemCommands` (log 0214), `ResourceCommands` (log 0217); plural nouns, log 0196). Roles: `profiles.role`, set only in
   the database.
 - `scripts/combat.gd`: corner-strike hit detection, shared by players and
   enemies. `scripts/gear.gd`: gear slots, tiers, item strings and icons.
@@ -89,7 +112,8 @@ Mark your own suggestions `Proposed` until the user agrees.
   `-s tools/tests/dump_cutscenes.gd`.
 - `scripts/quests/`: `Quests` (the registry and step format, log 0179) and
   one script per quest, steps as data beside its cutscenes
-  (`BootcampQuest`, log 0181). `scripts/world/player_quests.gd`
+  (`BootcampQuest`, log 0181; `RangerSchoolQuest`, log 0245, offered at
+  level 20 rather than at birth). `scripts/world/player_quests.gd`
   (`PlayerQuests`, a PlayerShape part) keeps each player's progress (the
   account's, not the family's: saved by `SaveKeeper` to the `quests` table
   or `quests.json`, log 0183), counts goals, runs actions and syncs the
@@ -107,7 +131,11 @@ Mark your own suggestions `Proposed` until the user agrees.
   ink; `tools/loading_screen.py` draws the web page's loading screen (the
   Priest, log 0197) into `web/shell.html`; logs 0138, 0141, 0143-0146), shape icon, stat bar, parchment background (stained only in the poor
   quarters, log 0190), atmosphere (foreground dust/light/fog), ink pass
-  (the hand-drawn shader over the world: crosshatched fog, logs 0191, 0194), menu (Offline / Online, log 0119; sidebar,
+  (the hand-drawn shader over the world: crosshatched fog, logs 0191, 0194), flat view
+  (`FlatView`, `\view`: a Flatlander's eyes as vertical bars, rays through
+  `FlatMap`, a picture of only the solid shapes and the sea,
+  `flat_eye.gdshader`; logs 0238-0240, 0249; screenshots:
+  `tools/record/flat_view_shots.gd`), menu (Offline / Online, log 0119; sidebar,
   picture and family panel, log 0185), the menu's hand-drawn look
   (`Sketch` line helpers, `SketchBox` style, `MenuScene` picture,
   `UiTheme.build_menu`), online login, Google sign-in button.
@@ -147,6 +175,19 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   BOAT lines for tuning): `-s tools/tests/test_coast.gd`. Screenshots of the
   coast, the Row and the purse (needs a window, not headless):
   `Godot --path . --resolution 1280x720 -s tools/record/shots.gd -- --no-hot-reload --out=<folder>`.
+  Regimental armor at +0/+3/+5, the Blacksmith and the Quarry Isle:
+  `tools/record/smith_shots.gd`, the same way.
+- Ranger test (ranger school, the island, throwing recruits, the ranger
+  stores, rations): `-s tools/tests/test_ranger.gd`.
+- Missions test (painted skirmishers and archers, the fortress raid: rowboat,
+  storm, lookouts and the alarm, climb, drawbridge, drowning out; prints
+  STORM, BOAT and ROUTE lines; steps the sea's clock with the physics,
+  `Ocean.test_clock`):
+  `-s tools/tests/test_missions.gd`. Screenshots of the raid:
+  `tools/record/fortress_shots.gd`, run like `shots.gd`.
+- Route test (can a starting triangle still get where it must, through the
+  solid world): `-s tools/tests/test_routes.gd`. Screenshots of the houses
+  and islands: `tools/record/world_shots.gd`, run like `shots.gd`.
 - Save test (offline, temp folder): `-s tools/tests/test_saves.gd`. Online
   test against a running server: `-s tools/tests/test_online.gd -- --port=N`
   (see the file; start that server with `--dev-admins`, since the test
@@ -163,6 +204,10 @@ Godot binary: `/Applications/Godot.app/Contents/MacOS/Godot` (4.5.1).
   password user made with the admin API).
 - Test scripts run with `-s`; autoloads are ready only after the first
   `await process_frame`. Don't leave test families in the real save folder.
+- **Run tests with `--fixed-fps 60`** (`Godot --headless --fixed-fps 60 --path . -s ...`):
+  the same physics steps, without waiting for the clock (routes 8 s instead
+  of ~80, the player test 4 s). Not `test_chat.gd`: its ping checks time
+  real milliseconds (it's quick anyway). Run only the tests for what you changed.
 
 ## Code conventions
 

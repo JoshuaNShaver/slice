@@ -6,9 +6,10 @@ extends Control
 ##
 ## - Left: a stick that appears under your thumb; left/right rolls, and
 ##   pushing partway rolls slower.
-## - Right: a big Jump button, the abilities you own in an arc around it,
-##   and Use / Take just outside the arc only while there's something to use
-##   or take.
+## - Right: a big Jump button, the abilities you have equipped in an arc
+##   around it (Side, Up, Down; log 0243), Throw above it while you wear
+##   throwing tips (log 0242), and Use / Take just outside the arc only while
+##   there's something to use or take.
 ## - Right edge, a column rising from just above the arc: Drink (nearest the
 ##   thumb), Chat, Bag (character sheet), Menu.
 ## - Left, above the stick: Home.
@@ -38,7 +39,8 @@ const LINE := Color(0.23, 0.16, 0.12, 0.7)
 ## False while a panel is open: then only the right column shows.
 var playing := true
 
-var _abilities: Array[String] = []  # owned ability ids, in shop order
+var _abilities: Array[String] = []  # equipped ability ids by slot: side, up, down
+var _can_throw := false
 var _can_use := false
 var _can_take := false
 var _held := {}  # touch index -> the action it holds down ("" for the stick)
@@ -55,9 +57,10 @@ func _ready() -> void:
 ## Each frame, from the HUD.
 func update(me: PlayerShape) -> void:
 	_abilities.clear()
-	for id: String in Abilities.ALL:
-		if id in me.stats.abilities:
-			_abilities.append(id)
+	for slot in [Abilities.SIDE, Abilities.UP, Abilities.DOWN]:
+		if me.stats.ability_slots[slot] != "":
+			_abilities.append(me.stats.ability_slots[slot])
+	_can_throw = not Gear.shots_of(me.inventory.equipped[Gear.SLOTS.find("points")]).is_empty()
 	_can_use = false
 	for node in get_tree().get_nodes_in_group(Npc.GROUP):
 		if node.prompt != "":
@@ -167,11 +170,15 @@ func _buttons() -> Array[Dictionary]:
 	list.append({"action": "home", "radius": SIDE_RADIUS,
 			"center": _stick_rest() - Vector2(0, STICK_RADIUS + SIDE_RADIUS + 40.0)})
 	list.append({"action": "jump", "center": jump, "radius": JUMP_RADIUS})
-	# Abilities from left round to straight up: Rush, Nose dive, Spike up.
+	# Equipped abilities from left round to straight up: side, up, down.
 	for i in _abilities.size():
 		var angle := PI + i * (PI / 2.0) / maxf(1.0, _abilities.size() - 1)
-		list.append({"action": Abilities.ALL[_abilities[i]].action, "radius": ABILITY_RADIUS,
+		var info: Dictionary = Abilities.ALL[_abilities[i]]
+		list.append({"action": info.action, "label": info.short, "radius": ABILITY_RADIUS,
 				"center": jump + Vector2.from_angle(angle) * ARC_DISTANCE})
+	if _can_throw:  # above the arc (log 0242)
+		list.append({"action": "throw", "radius": ABILITY_RADIUS,
+				"center": jump + Vector2(-20, -ARC_DISTANCE - 105)})
 	# Use and Take just outside the arc, left of Rush and Nose dive.
 	if _can_use:
 		list.append({"action": "interact", "center": jump + Vector2(-210, -180), "radius": CONTEXT_RADIUS})
@@ -188,7 +195,7 @@ func _draw() -> void:
 		draw_circle(button.center, button.radius, FILL_PRESSED if pressed else FILL)
 		draw_arc(button.center, button.radius, 0.0, TAU, 48, LINE, 2.0, true)
 		var font_size := 22 if button.action == "jump" else 15
-		var text: String = Controls.TOUCH_NAMES.get(button.action, button.action)
+		var text: String = button.get("label", Controls.TOUCH_NAMES.get(button.action, button.action))
 		draw_string(font, button.center + Vector2(-button.radius, font_size * 0.35), text,
 				HORIZONTAL_ALIGNMENT_CENTER, button.radius * 2.0, font_size, Palette.INK)
 	if not playing:

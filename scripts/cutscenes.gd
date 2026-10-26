@@ -326,14 +326,21 @@ static func years_pass(newborn: Dictionary, below: bool) -> Dictionary:
 
 ## Falling into the western sea (design log 0201): the screen goes dark, and
 ## you wake on the shore without what you carried. `lost`: how many things.
-static func drowned(lost: int) -> Dictionary:
+## `raid`: the fortress raid's storm instead (log 0250): the army fishes
+## you out, and you wake at the barracks, out of the raid.
+static func drowned(lost: int, raid := false) -> Dictionary:
 	var beats: Array = [beat("", "The sea closes over you. It is very cold, and very dark, and it does not care what shape you are.")]
 	if lost > 0:
 		beats.append(beat("", "When it gives you back, it keeps everything you carried."))
 	else:
 		beats.append(beat("", "When it gives you back, it is almost disappointed: you carried nothing worth keeping."))
-	var act := {"id": "drowned", "setting": "card_below", "place": "The western sea", "beats": beats, "cast": []}
-	return {"acts": [act], "wake": ["You wake on the shore, coughing up seawater."], "wake_speaker": ""}
+	if raid:
+		beats.append(beat("", "A hook finds you. The army's boat was following, as it always is, for the ones who go over."))
+	var act := {"id": "drowned", "setting": "card_below", "place": "The storm" if raid else "The western sea",
+			"beats": beats, "cast": []}
+	var wake := "You wake in the barracks, wrapped in an army blanket. The raid went on without you." if raid \
+			else "You wake on the shore, coughing up seawater."
+	return {"acts": [act], "wake": [wake], "wake_speaker": ""}
 
 
 static func _priest(priest_name: String, irregular := false) -> Dictionary:

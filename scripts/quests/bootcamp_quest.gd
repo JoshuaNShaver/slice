@@ -2,7 +2,7 @@ class_name BootcampQuest
 ## The first quest (design log 0181): the drill yard's bootcamp, and the
 ## start of a long friendship and rivalry with Darren Heroldt, your senior.
 ## The Priest sends you to the Drill Sergeant; he shows you how corners
-## hurt, then sets you on the straw dummies, the recruits, your first
+## hurt, then sets you on the wild shapes, the recruits, your first
 ## armor, and a bout with Darren. Quests has the format.
 
 const ID := "bootcamp"
@@ -10,9 +10,9 @@ const NAME := "Bootcamp"
 const SERGEANT := "The Drill Sergeant"
 const DARREN := "Darren Heroldt"
 const LEATHER_PLATING := "plating_5"  # Gear.item("plating", Gear.LEATHER)
-## Where Darren waits for your bout: inside the yard's east fence, clear of
+## Where Darren waits for your bout: inside the yard's east end, clear of
 ## the dummies and the recruits.
-const BOUT_AT := Vector2(-2690, Barracks.FLOOR_Y)
+const BOUT_AT := Vector2(-3700, -165)  # the floor of the yard, on the barracks' island (Barracks.ISLAND)
 
 ## Who can take part (Regions.admits): irregulars can't reach the barracks.
 ## Quest progress is the player's (log 0183), so with an irregular family it
@@ -36,8 +36,8 @@ const STEPS: Array = [
 				"lead": [SERGEANT, "Recruit, you're late! Get the lead out: we need to get you trained up."]}],
 	},
 	{
-		"text": "Knock down the straw dummies in the drill yard. Jump on them, corner first.",
-		"goals": [{"kill": "dummy", "count": 5, "label": "Straw dummies"}],
+		"text": "Knock down the wild shapes in the drill yard. Jump on them, corner first.",
+		"goals": [{"kill": "dummy", "count": 5, "label": "Wild shapes"}],
 		"nag": [SERGEANT, [
 			"Five dummies, recruit. Corners first.",
 			"Jump on them. Come down point first.",
@@ -48,7 +48,7 @@ const STEPS: Array = [
 		"text": "Report back to the Drill Sergeant.",
 		"goals": [{"talk": SERGEANT, "label": "Talk to the Drill Sergeant"}],
 		"then": [
-			{"say": [SERGEANT, "Five down! The straw's never been so sorry."]},
+			{"say": [SERGEANT, "Five down! They'll keep clear of this yard now."]},
 			{"say": [SERGEANT, "Now the recruits, past the dummies. Five bouts. They pull their punches: they'll never take your last point of health."]},
 		],
 	},
@@ -111,7 +111,7 @@ const SERGEANT_LOOK := {"name": SERGEANT, "sides": 3, "kind": "isosceles", "apex
 		"wear": ["points_8", "plating_8", "", "eye_8", "voice_8"]}
 const DARREN_LOOK := {"name": DARREN, "sides": 3, "kind": "isosceles", "apex": 35,
 		"wear": ["points_5", "plating_5", "", "eye_5", "voice_5"]}
-const DUMMY_LOOK := {"name": "Straw dummy", "sides": 4, "kind": "regular", "look": "dummy"}
+const DUMMY_LOOK := {"name": "Wild shape", "sides": 5, "kind": "irregular", "look": "dummy"}
 
 
 static func offered(newborn: Dictionary) -> bool:
@@ -145,16 +145,16 @@ static func _you(you: Dictionary, x: float) -> Dictionary:
 ## a dummy, and jumps far higher than you'd think.
 static func _rundown(you: Dictionary) -> Dictionary:
 	var beats: Array = [
-		Cutscenes.beat("", "The drill yard: straw on stakes, a rail fence, and a Sergeant whose point has seen the front."),
+		Cutscenes.beat("", "The drill yard: wild shapes nosing about the dirt, the whole barracks up on its island, and a Sergeant whose point has seen the front."),
 		Cutscenes.beat("sergeant", "The Priest sent you? Good. Stand there, and don't touch anything."),
 		Cutscenes.beat("sergeant", "Lesson one. Only corners hurt. Land a face on a man and you've shaken his hand. Land a corner and you've made your point."),
 		Cutscenes.beat("sergeant", _your_corners(you)),
-		Cutscenes.beat("sergeant", "Lesson two. A corner has to be moving. Roll into them hard, or better, come down on them from above. Watch the straw."),
+		Cutscenes.beat("sergeant", "Lesson two. A corner has to be moving. Roll into them hard, or better, come down on them from above. Watch this one."),
 		Cutscenes.beat("sergeant", "Hup!", [Cutscenes.on("jump", "sergeant", {"onto": "dummy", "height": 0.45, "hit": "9001"})]),
 		Cutscenes.beat("", "He goes up like a struck match, higher than any triangle of his years has a right to, and comes down point first.",
 				[Cutscenes.on("fall", "dummy")]),
 		Cutscenes.beat("sergeant", "Nine thousand and one. You won't manage that, not for years. Jump again just as you land and you'll go higher; off a corner, higher still."),
-		Cutscenes.beat("sergeant", "Lesson three. Your health, top left. Lose all of it and your line ends: no heir, no family, nothing. The straw won't hurt you. The Revolt will."),
+		Cutscenes.beat("sergeant", "Lesson three. Your health, top left. Lose all of it and your line ends: no heir, no family, nothing. The wild ones won't hurt you. The Revolt will."),
 		Cutscenes.beat("sergeant", "Five dummies. Knock them flat, then come back to me.", [Cutscenes.on("hop", "you")]),
 	]
 	return {"id": "bootcamp_rundown", "setting": "yard", "place": "The drill yard", "beats": beats,
@@ -192,10 +192,10 @@ static func _leather(you: Dictionary) -> Dictionary:
 static func _darren(you: Dictionary) -> Dictionary:
 	var beats: Array = [
 		Cutscenes.beat("sergeant", "Almost a soldier. Almost."),
-		Cutscenes.beat("", "Someone has been leaning on the fence, watching. He straightens up.", [Cutscenes.on("move", "darren", {"to": 0.7})]),
+		Cutscenes.beat("", "Someone has been sitting at the edge of the yard, watching. He rolls upright.", [Cutscenes.on("move", "darren", {"to": 0.7})]),
 		Cutscenes.beat("sergeant", "Recruit, your senior: Darren, of the family Heroldt. A year ahead of you in the yard, and he never lets anyone forget it."),
 		Cutscenes.beat("darren", "Heroldt. Like a herald, only louder.", [Cutscenes.on("hop", "darren")]),
-		Cutscenes.beat("darren", "So you knocked over the straw. Everyone knocks over the straw."),
+		Cutscenes.beat("darren", "So you knocked over a few wild shapes. Everyone knocks over the wild shapes."),
 		Cutscenes.beat("sergeant", "From today you two bunk together, drill together, and march together. Start by knocking each other about."),
 		Cutscenes.beat("sergeant", "One bout, in the yard. He's learned spike up: when he plants his point and shouts, get clear or get thrown."),
 		Cutscenes.beat("darren", "Don't worry. I'll go easy on you."),
@@ -212,10 +212,10 @@ static func _bout_over(you: Dictionary, won: bool) -> Dictionary:
 	var beats: Array
 	if won:
 		beats = [
-			Cutscenes.beat("", "Darren goes down in the straw and stays there a moment, looking at the sky."),
+			Cutscenes.beat("", "Darren goes down in the dirt and stays there a moment, looking at the sky."),
 			Cutscenes.beat("darren", "...Huh."),
 			Cutscenes.beat("darren", "Nobody gets past the spike on their first bout. I didn't. I ate it twice."),
-			Cutscenes.beat("sergeant", "Well, well. Up you get, Heroldt. You're embarrassing the straw."),
+			Cutscenes.beat("sergeant", "Well, well. Up you get, Heroldt. You're embarrassing the yard."),
 			Cutscenes.beat("darren", "You've got something, recruit. A real point on you.", [Cutscenes.on("hop", "darren")]),
 			Cutscenes.beat("darren", "I'm going to have to work to keep up with you. Good. I'll be watching."),
 		]
@@ -229,7 +229,7 @@ static func _bout_over(you: Dictionary, won: bool) -> Dictionary:
 			Cutscenes.beat("darren", "We're going to make a good pair, you and me. I can tell.", [Cutscenes.on("hop", "darren")]),
 		]
 	beats.append(Cutscenes.beat("sergeant", "Don't let it go to your head, recruit. You're only getting started."))
-	beats.append(Cutscenes.beat("sergeant", "Keep at your training: the straw, the recruits, Heroldt here. When you feel ready for real combat, see the General for deployment. His tent is west."))
+	beats.append(Cutscenes.beat("sergeant", "Keep at your training: the wild shapes, the recruits, Heroldt here. When you feel ready for real combat, see the General for deployment. He stands under the hall, west."))
 	return {"id": "bootcamp_bout_" + ("won" if won else "lost"), "setting": "yard", "place": "The drill yard",
 			"beats": beats,
 			"cast": [_you(you, 0.3), Cutscenes.actor("sergeant", SERGEANT_LOOK, 0.52, 44),

@@ -9,12 +9,15 @@ extends Node
 ## full inside their areas, if they serve your kind (logs 0033, 0052).
 
 const INVULNERABLE_TIME := 0.6  # s after being hit before you can be hit again
+## s after you strike or are struck that camouflage doesn't hide you (log 0254, *proposed*).
+const REVEAL_TIME := 3.0
 
 var player: PlayerShape
 var _prev_linear := Vector2.ZERO
 var _prev_angular := 0.0
 var _hit_cooldowns: Dictionary = {}
 var _invulnerable := 0.0
+var _fast_left := 0.0  # s your hits still count as at critical speed (log 0229)
 var _since_combat := INF  # s since you last hit or were hit
 var _regen_carry := 0.0  # health regen builds up in fractions
 var _meal_left := 0.0  # health a provision still has to give (design log 0084)
@@ -53,6 +56,21 @@ func take_hit(raw: float, push: Vector2, lethal := true, leave_at := -1) -> bool
 	return true
 
 
+## Server only. How much less far enemies see you (log 0254): your
+## camouflage's share, or 0 for REVEAL_TIME after you strike or are struck.
+func stealth() -> float:
+	var camo := Gear.camo_of(player.inventory.worn("pigment"))
+	if camo.is_empty() or _since_combat < REVEAL_TIME:
+		return 0.0
+	return float(camo.stealth)
+
+
+## Server only. You just fought (a thrown shot landed, log 0242): regen
+## slows as it does after a corner hit.
+func note_combat() -> void:
+	_since_combat = 0.0
+
+
 ## Server only. Can't be hurt for `seconds` (0 ends it): a cutscene is
 ## playing on the owner's screen (Net.play_cutscene).
 func keep_safe(seconds: float) -> void:
@@ -64,15 +82,17 @@ func corner_damage(corner: int) -> float:
 	return maxf(Stats.corner_damage(player.corner_angles[corner], player.stats.force), 0.0)
 
 
-## Your corners' hits on enemies and the Logging Isle's trees (Timber, log
-## 0202) this step (Combat), then remember this step's velocities for the next.
+## Your corners' hits on enemies and on trees and ore rocks (WorldResource, logs
+## 0202, 0211) this step (Combat), then remember this step's velocities for the next.
 func hit_check(state: PhysicsDirectBodyState2D) -> void:
+	_fast_left = Combat.CRIT_SPEED_GRACE if Combat.is_fast(_prev_linear) else _fast_left - state.step
 	if not player.dead:
 		for hit in Combat.find_hits(state, player.corners, _prev_linear, _prev_angular, _can_hit, _hit_cooldowns):
-			var crit := randf() < Stats.lucky_chance(Stats.CRIT_CHANCE, player.stats.luck)
+			# At critical speed every hit crits (log 0229); otherwise luck decides (log 0047).
+			var crit := _fast_left > 0.0 or randf() < Stats.lucky_chance(Stats.CRIT_CHANCE, player.stats.luck)
 			var damage := corner_damage(hit.corner) * (Stats.CRIT_MULT if crit else 1.0)
-			if hit.target is Timber:
-				(hit.target as Timber).take_hit(damage, player.peer_id, crit)
+			if hit.target is WorldResource:
+				(hit.target as WorldResource).take_hit(damage, player.peer_id, crit)
 				continue
 			var enemy: Enemy = hit.target
 			enemy.apply_central_impulse(hit.push * Combat.KNOCKBACK * enemy.mass)
@@ -83,7 +103,7 @@ func hit_check(state: PhysicsDirectBodyState2D) -> void:
 
 
 func _can_hit(o: Object) -> bool:
-	if o is Timber:
+	if o is WorldResource:
 		return true
 	return o is Enemy and (o as Enemy).players_can_hit(player.peer_id)
 

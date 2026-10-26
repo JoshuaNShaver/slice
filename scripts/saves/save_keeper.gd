@@ -69,7 +69,7 @@ static func _family(session: Dictionary) -> Family:
 
 
 static func _meaningful(before: Dictionary, after: Dictionary) -> bool:
-	for key: String in ["level", "bag", "equipped", "abilities"]:
+	for key: String in ["level", "bag", "equipped", "abilities", "ability_slots", "vault", "heirlooms", "heirloom_pending"]:
 		# As JSON: a loaded save holds PackedStringArrays, a fresh one Arrays.
 		if JSON.stringify(before.get(key)) != JSON.stringify(after.get(key)):
 			return true

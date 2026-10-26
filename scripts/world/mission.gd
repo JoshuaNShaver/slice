@@ -20,27 +20,44 @@ extends StaticBody2D
 ## reporting him to the General instead pays (times `pay`).
 ## Invasion's gentry (design log 0091): `gentry` is how many (min, max) of
 ## the Revolt's Gentlemen and Nobles, at gentry_strength, using its moves.
+## Painted skirmishers (log 0247): `skirmishers` (min, max) throwers, at
+## skirmisher_strength; special ops swaps that many bodyguards for them.
+## The fortress raid (logs 0248, 0250) is a Fortress, not this ground:
+## "rangers" (only those through ranger school), "wall_strength" (the
+## wall-walk's guards), "troop" (soldiers who charge in once the drawbridge
+## is down), "boss_type" (the Castellan), "lookout_sight" (how near you
+## come before the lookouts run, log 0253), "alarm_archers" (how many come
+## down if one gets in).
 const TYPES := {
 	"recon": {
 		"name": "Recon", "levels": "5–10", "width": 2800.0, "squad": 4, "pay": 25, "allies": 1,
 		"boss": 0.1, "boss_type": "captain", "boss_strength": 0.5, "boss_pay": 5,
-		"noble": 0.2, "noble_pay": 2, "report_pay": 2,
+		"noble": 0.2, "noble_pay": 2, "report_pay": 2, "skirmishers": Vector2i(1, 2),
 		"brief": "Recon: find the Revolt's scouts and rout them.",
-		"about": "3–5 painted rebels. One soldier goes with you.",
+		"about": "3–5 painted rebels and a skirmisher or two, who throw. One soldier goes with you.",
 	},
 	"invasion": {
 		"name": "Invasion", "levels": "10–20", "width": 5600.0, "squad": 8, "pay": 80, "allies": 10,
 		"boss": 0.0, "gentry": Vector2i(1, 3), "gentry_strength": 2.0,
+		"skirmishers": Vector2i(4, 6), "skirmisher_strength": 1.6,
 		"brief": "Invasion: take the Revolt's camp. Ten soldiers march with you.",
-		"about": "20+ rebels and agitators, and 1–3 of their painted gentry. Ten soldiers on your side.",
+		"about": "20+ rebels and agitators, 4–6 skirmishers and 1–3 of their painted gentry. Ten soldiers on your side.",
 	},
 	"special_ops": {
 		"name": "Special ops", "levels": "20", "width": 3200.0, "squad": 2, "pay": 200, "allies": 0,
-		"boss": 1.0, "boss_type": "chromatistes", "brief": "Special ops: get past the bodyguards and his Captain. Chromatistes must not leave.",
-		"about": "One or two of you. Five bodyguards, a Captain of the Revolt and Chromatistes, the Painter.",
+		"boss": 1.0, "boss_type": "chromatistes", "skirmishers": Vector2i(2, 2), "skirmisher_strength": 2.5,
+		"brief": "Special ops: get past the bodyguards and his Captain. Chromatistes must not leave.",
+		"about": "One or two of you. Three bodyguards, two skirmishers, a Captain of the Revolt and Chromatistes, the Painter.",
+	},
+	"fortress": {
+		"name": "Fortress raid", "levels": "20", "width": 7500.0, "squad": 4, "pay": 250, "allies": 0,
+		"boss": 1.0, "boss_type": "castellan", "rangers": true, "wall_strength": 2.5, "troop": 8,
+		"lookout_sight": 700.0, "alarm_archers": 10,
+		"brief": "Fortress raid: cross by boat, climb the wall, let the drawbridge down. The troop does the rest.",
+		"about": "Rangers only. A rowboat through a storm, an enemy boat at their pier, a wall to climb, and the Castellan of the Revolt. Stop the lookouts. Fall in and you're out.",
 	},
 }
-const ORDER: Array[String] = ["recon", "invasion", "special_ops"]
+const ORDER: Array[String] = ["recon", "invasion", "special_ops", "fortress"]
 
 const STEP := 200.0  # px between ground points
 const FLAT_START := 700.0  # the army's end is flat, for mustering
@@ -134,22 +151,7 @@ func _draw() -> void:
 	line.append(Vector2(width, -WALL_HEIGHT))
 	draw_polyline(line, Palette.INK, 3.0, true)
 
-	# The army's plain flag at the west end; the Revolt's painted banners east.
-	var flag := Vector2(120, floor_at(120))
-	draw_line(flag, flag + Vector2(0, -180), Palette.INK, 3.0)
-	var cloth := PackedVector2Array([flag + Vector2(0, -180), flag + Vector2(70, -165), flag + Vector2(0, -140)])
-	draw_colored_polygon(cloth, Palette.PARCHMENT_LIGHT)
-	Gear.draw_hatch(self, cloth, [[45.0, -45.0], 8.0], 1.0, Color(Palette.INK, 0.4))
-	for k in 3:
-		var bx := width - 120.0 - k * 180.0
-		var base := Vector2(bx, floor_at(bx))
-		draw_line(base, base + Vector2(0, -150), Palette.INK, 3.0)
-		var banner := Rect2(base + Vector2(-34, -150), Vector2(30, 70))
-		draw_rect(banner, Palette.REVOLT)
-		draw_rect(banner, Palette.INK, false, 2.0)
-
 	var font := ThemeDB.fallback_font
 	var sign_at := Vector2(560, floor_at(560))
-	draw_line(sign_at + Vector2(0, -150), sign_at, Palette.INK_FADED, 2.0)
 	draw_string(font, sign_at + Vector2(-400, -160), TYPES[mission_type].brief, HORIZONTAL_ALIGNMENT_CENTER,
 			800, 18, Palette.INK)

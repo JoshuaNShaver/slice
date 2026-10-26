@@ -15,7 +15,8 @@ var _time := 0.0  # s left of the charge
 func _init() -> void:
 	id = "rush"
 	name = "Rush"
-	action = "rush"
+	slot = Abilities.SIDE
+	short = "Rush"
 	price = 2500  # chits (design log 0206)
 	text = "Your speed and spin, times five. Works in the air."
 

@@ -4,8 +4,10 @@ extends RefCounted
 ## what to save, putting it back on a fresh shape, and checking a save that
 ## came from outside. The one place that knows the save format.
 ##
-## progress(): {"level", "xp", "chits", "coins", "dock_held", "abilities", "stats" (without gear),
-## "bag", "equipped"}. The chest is saved apart, as a plain item list, and
+## progress(): {"level", "xp", "chits", "coins", "dock_held", "smith_ore", "abilities",
+## "ability_slots" (equipped to keys, log 0243), "stats" (without gear),
+## "bag", "equipped", "vault" (the family's strongroom, log 0212),
+## "heirlooms" and "heirloom_pending" (log 0216)}. The chest is saved apart, as a plain item list, and
 ## quests with the account (PlayerQuests, log 0183).
 
 
@@ -30,10 +32,15 @@ static func progress(p: PlayerShape) -> Dictionary:
 		"chits": stats.chits,
 		"coins": stats.coins,
 		"dock_held": stats.dock_held,
+		"smith_ore": stats.smith_ore,
 		"abilities": Array(stats.abilities),
+		"ability_slots": Array(stats.ability_slots),
 		"stats": base,
 		"bag": Array(p.inventory.bag),
 		"equipped": Array(equipped),
+		"vault": Array(p.inventory.vault),
+		"heirlooms": Array(p.inventory.heirlooms),
+		"heirloom_pending": Array(p.inventory.heirloom_pending),
 	}
 
 
@@ -47,11 +54,18 @@ static func apply(p: PlayerShape, saved: Dictionary, saved_chest: Variant) -> vo
 		stats.chits = saved.get("chits", 0)
 		stats.coins = saved.get("coins", 0)
 		stats.dock_held = saved.get("dock_held", 0)
+		stats.smith_ore = saved.get("smith_ore", 0)
 		stats.abilities = PackedStringArray(saved.get("abilities", []))
+		# Saves from before the slots fill them from what's owned (log 0243).
+		stats.ability_slots = Abilities.fill_slots(stats.abilities, PackedStringArray(saved.get("ability_slots", [])))
 		for stat: String in Stats.LEVELED:
 			stats.set(stat, saved.stats[stat])
 		inventory.bag = PackedStringArray(saved.bag)
 		inventory.equipped = PackedStringArray(saved.equipped)
+		inventory.vault = PackedStringArray(saved.get("vault", []))
+		inventory.heirlooms = PackedStringArray(saved.get("heirlooms", PlayerInventory.blank(Gear.SLOTS.size())))
+		inventory.heirloom_pending = PackedStringArray(saved.get("heirloom_pending",
+				PlayerInventory.blank(Gear.SLOTS.size())))
 		stats.max_hp = Stats.max_hp(stats.vigor)
 		for item in inventory.equipped:
 			stats.apply_bonuses(item, 1)
@@ -74,11 +88,13 @@ static func sanitize(raw: Dictionary) -> Dictionary:
 		var value: Variant = raw_stats.get(stat) if raw_stats is Dictionary else null
 		stats[stat] = clampi(_as_int(value, 0), 0, Stats.GAIN_MAX * (clean_level - 1))
 	var clean_bag := clean_items(raw.get("bag", []), PlayerInventory.BAG_SIZE)
-	var raw_equipped := clean_items(raw.get("equipped", []), Gear.SLOTS.size())
-	var clean_equipped := PlayerInventory.blank(Gear.SLOTS.size())
-	for i in raw_equipped.size():
-		if Gear.slot_of(raw_equipped[i]) == Gear.SLOTS[i]:
-			clean_equipped[i] = raw_equipped[i]
+	var clean_equipped := _clean_worn(raw.get("equipped", []))
+	# The strongroom: whole chests only, as many as can be bought.
+	var raw_vault: Variant = raw.get("vault", [])
+	if raw_vault is PackedStringArray:
+		raw_vault = Array(raw_vault)
+	var chests := clampi(raw_vault.size() / PlayerInventory.VAULT_CHEST_SLOTS if raw_vault is Array else 0,
+			0, PlayerInventory.VAULT_PRICES.size())
 	return {
 		"level": clean_level,
 		"xp": clampi(_as_int(raw.get("xp"), 0), 0, top_xp),
@@ -86,11 +102,28 @@ static func sanitize(raw: Dictionary) -> Dictionary:
 		"chits": clampi(_as_int(raw.get("chits", raw.get("pay")), 0), 0, PlayerStats.MAX_CHITS),
 		"coins": clampi(_as_int(raw.get("coins"), 0), 0, PlayerStats.MAX_CHITS),
 		"dock_held": clampi(_as_int(raw.get("dock_held"), 0), 0, Market.HELD_MAX),
+		"smith_ore": clampi(_as_int(raw.get("smith_ore"), 0), 0, PlayerStats.SMITH_ORE_MAX),
 		"abilities": _clean_abilities(raw.get("abilities", [])),
+		"ability_slots": _clean_slots(raw.get("ability_slots", [])),
 		"stats": stats,
 		"bag": clean_bag,
 		"equipped": clean_equipped,
+		"vault": clean_items(raw_vault, chests * PlayerInventory.VAULT_CHEST_SLOTS),
+		"heirlooms": _clean_worn(raw.get("heirlooms", []) if chests > 0 else []),
+		"heirloom_pending": _clean_worn(raw.get("heirloom_pending", []) if chests > 0 else []),
 	}
+
+
+## Gear indexed like Gear.SLOTS, each in its own slot ("" otherwise).
+static func _clean_worn(raw: Variant) -> PackedStringArray:
+	if raw is PackedStringArray:
+		raw = Array(raw)
+	var items := clean_items(raw, Gear.SLOTS.size())
+	var out := PlayerInventory.blank(Gear.SLOTS.size())
+	for i in items.size():
+		if Gear.slot_of(items[i]) == Gear.SLOTS[i]:
+			out[i] = items[i]
+	return out
 
 
 ## Known item strings, in a list of `size` slots ("" for anything else).
@@ -106,6 +139,15 @@ static func clean_items(raw: Variant, size: int) -> PackedStringArray:
 
 static func _as_int(value: Variant, fallback: int) -> int:
 	return int(value) if value is int or value is float else fallback  # JSON numbers are floats
+
+
+## Ability ids or "", one per key slot (log 0243); apply() checks they're owned.
+static func _clean_slots(raw: Variant) -> Array:
+	var out := []
+	for i in Abilities.SLOT_ACTIONS.size():
+		var id: Variant = raw[i] if raw is Array and i < raw.size() else ""
+		out.append(id if id is String and Abilities.slot_of(id) == i else "")
+	return out
 
 
 static func _clean_abilities(raw: Variant) -> Array:

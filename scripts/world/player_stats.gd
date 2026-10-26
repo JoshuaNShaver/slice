@@ -6,9 +6,11 @@ extends Node
 ## Jumps are free (log 0087); energy pays for abilities (log 0086). Kills
 ## give XP (log 0028). `chits` are army pay (log 0204), earned on missions
 ## and by work and spent at the Quartermaster; `coins` are trade money, the
-## merchants' (log 0205). `abilities` are the ones you've learned.
+## merchants' (log 0205). `abilities` are the ones you've learned;
+## `ability_slots` the ones equipped to keys (log 0243).
 
 const MAX_CHITS := 1000000
+const SMITH_ORE_MAX := 200  # ore the Blacksmith will keep for you
 
 var player: PlayerShape
 var level := 1
@@ -25,7 +27,11 @@ var xp := 0  # toward the next level
 var chits := 0  # army pay (design log 0204)
 var coins := 0  # trade money (design logs 0204, 0205)
 var dock_held := 0  # a merchant's logs waiting at the dock (Market, log 0205)
+var smith_ore := 0  # rare ore left with the Blacksmith (log 0211)
 var abilities := PackedStringArray()  # learned ability ids (design log 0086)
+## What's equipped in each key slot (design log 0243), indexed like
+## Abilities.SLOT_ACTIONS; "" for an empty slot.
+var ability_slots := Abilities.fill_slots(PackedStringArray(), PackedStringArray())
 
 
 ## Server only, every physics step.
@@ -46,6 +52,8 @@ func level_up(rng: RandomNumberGenerator) -> void:
 	var new_max := Stats.max_hp(vigor)
 	hp += new_max - max_hp  # the new health arrives full
 	max_hp = new_max
+	if player != null and player.quests != null:
+		player.quests.check_offers.call_deferred()  # ranger school at 20 (log 0245)
 
 
 ## Server only. Jumps to `target` level (admin command, log 0125). Going

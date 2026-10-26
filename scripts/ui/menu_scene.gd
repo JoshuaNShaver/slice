@@ -15,7 +15,7 @@ extends Control
 ## little with the mouse; Low graphics (log 0094) leaves the fog out.
 
 ## Ground line, as a share of the height.
-const GROUND := 0.8
+const GROUND := 0.88
 ## How far each fog layer shifts as the mouse crosses the screen, in px.
 const SHIFT_FAR := 21.0
 const SHIFT_NEAR := 56.0
@@ -25,9 +25,9 @@ const STEP_TIME := 0.6
 ## Room kept between neighbours' stretches, in px.
 const ELBOW_ROOM := 28.0
 ## Where the houses and your heir stand, as shares of the width.
-const HOUSE_LEFT := 0.14
-const HOUSE_RIGHT := 0.8
-const FAMILY_AT := 0.42
+const HOUSE_LEFT := 0.17
+const HOUSE_RIGHT := 0.82
+const FAMILY_AT := 0.49
 const FAMILY_RADIUS := 44.0
 
 ## Your family, standing in the middle; null shows a plain new soldier.
@@ -80,8 +80,8 @@ func _draw() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 51
 	_draw_fog(ground, false)
-	var left_width := clampf(size.x * 0.23, 190.0, 260.0)
-	var right_width := clampf(size.x * 0.34, 300.0, 380.0)
+	var left_width := clampf(size.x * 0.32, 260.0, 370.0)
+	var right_width := clampf(size.x * 0.46, 420.0, 540.0)
 	var left := Vector2(size.x * HOUSE_LEFT, ground)
 	var right := Vector2(size.x * HOUSE_RIGHT, ground)
 	var walkers := _walkers(left, left_width, right, right_width)

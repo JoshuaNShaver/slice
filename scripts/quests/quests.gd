@@ -12,6 +12,10 @@ class_name Quests
 ## - AT_BIRTH: offered(newborn) -> bool, and INTRO_SPEAKER and INTRO: it
 ##   starts at a birth, and those lines are said once the birth's cutscene
 ##   ends (PlayerQuests.after_birth).
+## - Otherwise offered(you) -> bool, with you {sides, kind, apex, level,
+##   done: finished quest ids}: it starts once that's true (a level up, a
+##   quest finished, a save loaded; PlayerQuests.check_offers). Ranger
+##   school (log 0245).
 ##
 ## A step: {"text", "goals", "start", "then", "nag"}.
 ## - text: the objective, as the HUD shows it.
@@ -22,11 +26,16 @@ class_name Quests
 ##   on it, for "spawn" only). then: actions once it's done.
 ## - nag: [speaker, [lines]]: what that NPC says if you talk to them before
 ##   the step is done.
+## - back: [speaker, line, actions]: talking to that NPC while the step is
+##   under way says the line and runs the actions: the way back to a step's
+##   place if you left it (the home key out of ranger school's exam).
 ## Actions run in order; a cutscene waits until it has ended:
 ## {"cutscene": a SCENES id, "lead": [speaker, line]}, {"say": [speaker,
 ## line]}, {"give": item},
 ## {"spawn": enemy type, "at": floor point, "room": Rect2} (a bout, only you
-## fight it; it ends the "spar" goal won or lost), {"heal": true}.
+## fight it; it ends the "spar" goal won or lost), {"heal": true},
+## {"travel": "exam" | "camp" | "barracks"} (World.travel; like "spawn",
+## it runs again when a save loads on its step).
 ## Any action with "if": "won" or "lost" runs only after that outcome.
 ## A cutscene's "lead" is said in the world first, and the cutscene starts
 ## once it's had time to be read: talking to someone shouldn't cut
@@ -38,12 +47,15 @@ class_name Quests
 ## - equip: an item string (you put it on).
 ## - open: a HUD panel, "character" (your character sheet).
 ## - spar: a bout's enemy type; ends "won" or "lost".
-const EVENTS: Array[String] = ["talk", "kill", "equip", "open", "spar"]
+## - reach: a place the server sees you get to ("exam_pass": through ranger
+##   school's exam, RangerExam).
+const EVENTS: Array[String] = ["talk", "kill", "equip", "open", "spar", "reach"]
 ## What a player's own machine may report (the rest the server sees itself).
 const CLIENT_EVENTS := {"open": ["character"]}
 
 const ALL := {
 	"bootcamp": preload("res://scripts/quests/bootcamp_quest.gd"),
+	"ranger_school": preload("res://scripts/quests/ranger_school_quest.gd"),
 }
 
 

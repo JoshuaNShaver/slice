@@ -32,16 +32,19 @@ const NOUNS := {
 	"players": preload("res://scripts/admin/player_commands.gd"),
 	"enemies": preload("res://scripts/admin/enemy_commands.gd"),
 	"quests": preload("res://scripts/admin/quest_commands.gd"),
+	"items": preload("res://scripts/admin/item_commands.gd"),
+	"resources": preload("res://scripts/admin/resource_commands.gd"),
 }
 ## Roles that may run admin commands (Accounts.role_of).
 const ADMIN_ROLES: Array[String] = ["admin", "first_architect"]
 ## The terminal's own commands (ChatBox) and Diagnostics', which anyone may
 ## type; for Tab to complete (log 0163).
-const PLAYER_WORDS: Array[String] = ["help", "hello", "bye", "diagnostics", "diag", "simulate"]
+const PLAYER_WORDS: Array[String] = ["help", "hello", "bye", "diagnostics", "diag", "simulate", "view"]
 ## What can follow these first words: {word: [next words]}, then for
 ## deeper words "word1 word2": [...].
 const FOLLOWERS := {
 	"diagnostics": ["live"], "diag": ["live"], "simulate": ["lag", "stalls", "prod", "off"], "simulate lag": ["off"], "simulate stalls": ["off"],
+	"view": ["2d", "eyes", "eye", "fov", "range"], "view 2d": ["eyes", "eye"], "view eyes": ["2d"], "view eye": ["2d"],
 }
 
 ## Peer id -> short id, the small number `players` shows. Handed out
@@ -238,6 +241,7 @@ static func help() -> String:
 		lines.append("  %s: %s" % [noun, NOUNS[noun].HELP])
 	lines.append("  %s: %s" % [Diagnostics.COMMANDS[0].trim_prefix(ESCAPE), Diagnostics.HELP])
 	lines.append("  %s %s" % [Diagnostics.SIMULATE.trim_prefix(ESCAPE), Diagnostics.SIMULATE_HELP])
+	lines.append("  %s %s" % [FlatView.COMMAND.trim_prefix(ESCAPE), FlatView.HELP])
 	return "\n".join(lines)
 
 
@@ -250,6 +254,7 @@ static func player_help() -> String:
 		"  bye: say goodbye and close the terminal",
 		"  %s: %s" % [Diagnostics.COMMANDS[0].trim_prefix(ESCAPE), Diagnostics.HELP],
 		"  %s %s" % [Diagnostics.SIMULATE.trim_prefix(ESCAPE), Diagnostics.SIMULATE_HELP],
+		"  %s %s" % [FlatView.COMMAND.trim_prefix(ESCAPE), FlatView.HELP],
 	])
 
 

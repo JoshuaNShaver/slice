@@ -22,13 +22,13 @@ extends Control
 ##     on a 720 px tall screen.
 ##   - look: "shape" (a polygon, the default), "line" (a woman: a line with
 ##     an eye, swaying a little; her peace-cry, book Part I §4) or "dummy"
-##     (a straw dummy on a stake).
+##     (a drill-yard wild shape: lumpy, flat on the ground, log 0224).
 ##   - halo: a priest's ring. cushion: it lies on a cushion (a newborn).
 ##   - wear: gear item strings, as PlayerInventory.equipped (crosshatch).
 ## beat: {"who": an actor id, or "" for narration, "text", "cues": [cue, ...]}
 ## cue: {"do", "who", ...}, starting when its beat does:
 ##   - move {to: x}: walks there. fade {alpha}: fades to that.
-##   - hop: bobs with excitement. fall: topples over and fades (straw).
+##   - hop: bobs with excitement. fall: topples over and fades (a wild shape bolts).
 ##   - jump {onto: actor id, height: share of the screen, hit: text}: leaps
 ##     up, flips, and comes down point first on `onto`, which shakes and
 ##     shows `hit`, then flips back upright and bounces back to where it
@@ -51,7 +51,6 @@ const JUMP_BACK := 0.6  # s bouncing back off it
 const STRUCK_TIME := 0.9  # s a struck actor shakes and shows its hit
 const MEASURE_TIME := 4.0  # s the calipers stay before fading
 const FLOOR := 0.62  # the stage floor, as a share of the height
-const STAKE := 0.9  # a dummy's stake, in its radii
 const TEXT_SIZE := 22
 const CARD_TEXT_SIZE := 26
 
@@ -61,6 +60,7 @@ const SETTINGS := {
 	"board": {},  # the Sanitary and Social Board's examining room
 	"temple": {},  # under the dome of the Circle
 	"yard": {},  # the barracks' drill yard
+	"camp": {},  # the rangers' island (log 0245)
 	"below": {"dark": true},  # the Undercroft
 	"card": {"card": true},
 	"card_below": {"card": true, "dark": true},
@@ -419,19 +419,18 @@ func _draw_setting(floor_y: float, ink: Color) -> void:
 			for i in 9:
 				var x := size.x * (0.14 + i * 0.09)
 				draw_line(Vector2(x, floor_y - size.y * 0.42), Vector2(x, floor_y - size.y * 0.4), faint, 2.0)
-		"yard":  # the drill yard's rail fence, and the barracks' flag
-			for end_x: float in [size.x * 0.06, size.x * 0.94]:
-				for k in 3:
-					var post := end_x + (k - 1) * size.x * 0.025
-					draw_line(Vector2(post, floor_y), Vector2(post, floor_y - size.y * 0.09), faint, 3.0)
-				for h: float in [0.07, 0.035]:
-					draw_line(Vector2(end_x - size.x * 0.04, floor_y - size.y * h),
-							Vector2(end_x + size.x * 0.04, floor_y - size.y * h), faint, 2.5)
-			var pole := Vector2(size.x * 0.86, floor_y)
-			draw_line(pole, pole + Vector2(0, -size.y * 0.4), faint, 3.0)
-			var cloth := PackedVector2Array([pole + Vector2(0, -size.y * 0.4), pole + Vector2(size.x * 0.05, -size.y * 0.37),
-					pole + Vector2(0, -size.y * 0.34)])
-			draw_colored_polygon(cloth, Color(ink, 0.08))
+		"yard":  # the barracks' hall overhead, on its mound (log 0222)
+			var mound := PackedVector2Array()
+			for i in 17:
+				var u := i / 16.0
+				mound.append(Vector2(size.x * (0.62 + 0.34 * u), size.y * 0.2 + sin(u * PI) * size.y * 0.05))
+			draw_polyline(mound, faint, 2.5, true)
+			draw_line(mound[0], mound[-1], faint, 2.5, true)
+		"camp":  # the island's cliff edge, and the sea far below
+			draw_line(Vector2(size.x * 0.88, floor_y), Vector2(size.x * 0.88, floor_y + size.y * 0.2), faint, 2.5, true)
+			for i in 6:
+				var x := size.x * (0.9 + i * 0.02)
+				draw_arc(Vector2(x, floor_y + size.y * 0.3), 8.0, PI * 1.15, PI * 1.85, 6, faint, 1.5, true)
 		"below":  # a crooked ceiling
 			var pts := PackedVector2Array()
 			for i in 13:
@@ -493,11 +492,11 @@ func _pose(who: String, floor_y: float, scale_r: float) -> Dictionary:
 		at.x += sin(struck * 70.0) * 5 * scale_r * (1.0 - struck / (STRUCK_TIME * 0.5))
 	var fell := _since(who, "fall")
 	if fell >= 0.0:
-		turn += PI * 0.5 * _share(_time - fell, CUE_TIME * 0.6)  # a dummy's head rolls off (_draw_actor)
+		turn += PI * 0.5 * _share(_time - fell, CUE_TIME * 0.6)  # rolls over (a wild shape bolts, _draw_actor)
 	var alpha := _alpha_of(who)
 	if fell >= 0.0:  # topples, then fades
 		alpha *= 1.0 - clampf((fell - CUE_TIME * 0.6) / CUE_TIME, 0.0, 1.0)
-	var tall := radius * (2.0 + (STAKE if actor.get("look", "") == "dummy" else 0.0))
+	var tall := radius * 2.0
 	return {"at": at, "turn": turn, "alpha": alpha, "radius": radius, "top": at - Vector2(0, tall)}
 
 
@@ -540,13 +539,10 @@ func _draw_actor(who: String, floor_y: float, scale_r: float, ink_base: Color) -
 		lowest_turned = maxf(lowest_turned, placed[-1].y)
 	var center := at - Vector2(0, lowest_turned + lift)
 	if look == "dummy":
-		# On a stake. Knocked down, its head drops off and rolls away.
-		draw_line(at, at - Vector2(0, radius * STAKE), Color(ink_base, float(_state[who].alpha)), 4.0, true)
-		center = at - Vector2(0, radius * STAKE + lowest)
+		# A wild shape, flat to the ground. Knocked down, it bolts.
 		var fell := _since(who, "fall")
 		if fell >= 0.0:
-			var drop := _share(_time - fell, CUE_TIME * 0.6)
-			center = center.lerp(at + Vector2(radius * 1.6, -lowest), drop)
+			center.x += radius * 3.0 * _share(_time - fell, CUE_TIME * 1.2)
 	var wear: Array = actor.get("wear", [])
 	if not wear.is_empty() and not dark and alpha > 0.99:
 		Gear.draw_shape(self, placed, sides, PackedStringArray(wear), center)

@@ -4,9 +4,9 @@ extends Ability
 ## Coming down, your sharpest corner turns to point down and you fall
 ## faster, as if the nose were heavy. Ends on landing. *Proposed* numbers.
 
-# Times PlayerMotion.JUMP_SPEED. 3.5 rises ~140 px, over 3 triangle heights
-# (42 px), to clear enemies (log 0090).
-const JUMP := 3.5
+# Times PlayerMotion.JUMP_SPEED. 1.5 rises ~250 px, about twice a plain
+# jump, to clear enemies (logs 0090, 0228).
+const JUMP := 1.5
 const GRAVITY := 2.0  # times gravity, coming down
 const STEER := 20.0  # turn rate (rad/s) per radian off target
 const TURN_ACCEL := 250.0  # rad/s²
@@ -21,7 +21,8 @@ var _corner := -1  # the corner turning to point down
 func _init() -> void:
 	id = "nose_dive"
 	name = "Nose dive"
-	action = "nose_dive"
+	slot = Abilities.UP
+	short = "Dive"
 	price = 1000  # chits (design log 0206)
 	text = "Leap high, over enemies. Coming down, your sharpest corner points down and you fall faster."
 

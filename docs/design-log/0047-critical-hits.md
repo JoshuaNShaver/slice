@@ -1,7 +1,7 @@
 # 0047: Critical hits
 
 - **Date:** 2026-10-18
-- **Status:** Accepted (luck formula now per 0049; momentum crit still open, DESIGN §9)
+- **Status:** Accepted (luck formula now per 0049; momentum crit answered by 0229)
 - **Decision:** Each player corner hit has a **10%** chance to crit, raised
   by luck like other good outcomes (×(1 + luck/50)). A crit deals **double
   damage** and its number floats up larger, in gold, with a "!". Enemies

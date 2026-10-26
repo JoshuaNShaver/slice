@@ -9,13 +9,15 @@ extends StaticBody2D
 ## Tradesman buys logs for chits, log 0204; the Boatwright launches boats,
 ## log 0201), a pier, the open sea (Ocean), and the Logging Isle, with its
 ## own pier and boatwright and a row of great trees (Timber, log 0202).
-## Past the isle the sea runs on to the world's west edge.
+## Past it, more sea and the Quarry Isle, with rocks of rare ore (OreRock,
+## log 0211); a ferryman on the Logging Isle's west shore launches boats
+## for it. Past the Quarry Isle the sea runs on to the world's west edge.
 ##
 ## Everyone builds the same coast from data (World); the trees and boats
 ## are spawned by the server.
 
 const EAST_X := Barracks.WEST_X  # -5400, where the barracks end
-const WEST_X := -16000.0  # the world's west edge, out at sea
+const WEST_X := -21500.0  # the world's west edge, out at sea
 const FLOOR_Y := Barracks.FLOOR_Y  # 120, the barracks' ground
 const SHORE_Y := 380.0  # the dock and the isle, a little above the sea
 const SEA_LEVEL := 420.0  # the calm sea (Ocean.LEVEL)
@@ -29,8 +31,13 @@ const GATE_X := -5700.0  # the Harbour Watch's post
 const SHORE_EDGE := -7500.0
 const ISLAND_EAST_TOP := -12150.0
 const ISLAND_WEST_TOP := -13900.0
-## Piers (x from, x to), their planks' top at SHORE_Y.
-const PIERS: Array[Vector2] = [Vector2(-7760, SHORE_EDGE), Vector2(ISLAND_EAST_TOP, -11900)]
+## The Quarry Isle's top, east and west (log 0211).
+const QUARRY_EAST_TOP := -18300.0
+const QUARRY_WEST_TOP := -19500.0
+## Piers (x from, x to), their planks' top at SHORE_Y: the dock, both
+## shores of the Logging Isle, and the Quarry Isle's.
+const PIERS: Array[Vector2] = [Vector2(-7760, SHORE_EDGE), Vector2(ISLAND_EAST_TOP, -11900),
+		Vector2(-14150, ISLAND_WEST_TOP), Vector2(QUARRY_EAST_TOP, -18050)]
 const PLANK := 14.0  # px thick
 ## Where you wake after drowning (log 0201).
 const SHORE_SPAWN := Vector2(-7000, SHORE_Y - 40)
@@ -38,6 +45,10 @@ const SHORE_SPAWN := Vector2(-7000, SHORE_Y - 40)
 ## The ground's surface, west to east.
 const SURFACE: Array[Vector2] = [
 	Vector2(WEST_X, SEABED_Y),
+	Vector2(-19800, SEABED_Y),
+	Vector2(QUARRY_WEST_TOP, SHORE_Y),
+	Vector2(QUARRY_EAST_TOP, SHORE_Y),
+	Vector2(-18000, SEABED_Y),
 	Vector2(-14200, SEABED_Y),
 	Vector2(ISLAND_WEST_TOP, SHORE_Y),
 	Vector2(ISLAND_EAST_TOP, SHORE_Y),
@@ -49,13 +60,18 @@ const SURFACE: Array[Vector2] = [
 	Vector2(EAST_X, FLOOR_Y),
 ]
 
+
 ## The isle's trees (Timber): the x of each trunk's foot.
 const TREES: Array[float] = [-12500.0, -12730.0, -12960.0, -13190.0, -13420.0, -13650.0]
+## The Quarry Isle's ore rocks (OreRock): the x of each one's middle.
+const ORE_ROCKS: Array[float] = [-18700.0, -18980.0, -19260.0]
 
 const SIGNS: Array[Dictionary] = [
 	{"pos": Vector2(-5560, FLOOR_Y - 110), "text": "The coast · workmen only"},
 	{"pos": Vector2(-7330, SHORE_Y - 110), "text": "The dock · logs bought here"},
 	{"pos": Vector2(-12380, SHORE_Y - 110), "text": "The Logging Isle"},
+	{"pos": Vector2(-13760, SHORE_Y - 110), "text": "West: the Quarry Isle"},
+	{"pos": Vector2(-18480, SHORE_Y - 110), "text": "The Quarry Isle · rare ore"},
 ]
 
 const WATCH := "The Harbour Watch"
@@ -81,6 +97,7 @@ const NPCS: Array[Dictionary] = [
 		"radius": 28.0, "role": "dock", "serves": "workmen",
 		"lines": [
 			"Logs! Bring me logs. Two hundred chits apiece, army scrip, good at the Quartermaster.",
+			"Rare ore from the Quarry Isle? Six hundred chits a lump.",
 			"The isle's trees are older than the Circle. Jump at them till they give.",
 		],
 	},
@@ -98,6 +115,26 @@ const NPCS: Array[Dictionary] = [
 		"apex": 45.0, "radius": 26.0, "role": "boats", "serves": "workmen",
 		"launch": Vector2(-11780, SEA_LEVEL - 25), "facing": 1,
 		"lines": ["Need a boat home? Fill your bag first. Logs don't fetch themselves."],
+	},
+	{
+		# Out west, to the Quarry Isle (log 0211).
+		"name": "The Ferryman", "at": Vector2(-13820, SHORE_Y), "sides": 3, "kind": "isosceles",
+		"apex": 48.0, "radius": 26.0, "role": "boats", "serves": "workmen",
+		"launch": Vector2(-14300, SEA_LEVEL - 25), "facing": -1,
+		"lines": [
+			"West to the Quarry Isle? Rougher water, and rock that fights back.",
+			"Ore's heavy, and the sea doesn't care what it cost you.",
+		],
+	},
+	{
+		"name": "The Quarryman", "at": Vector2(-18380, SHORE_Y), "sides": 3, "kind": "isosceles",
+		"apex": 52.0, "radius": 27.0, "role": "boats", "serves": "workmen",
+		"launch": Vector2(-17900, SEA_LEVEL - 25), "facing": 1,
+		"lines": [
+			"Hit the veins, not the rock. Well, hit the rock. Hard.",
+			"The Blacksmith in the Center pays in better steel. The Tradesman pays in chits.",
+			"A boat back east? Mind the swell. Rare ore sinks like the rest.",
+		],
 	},
 ]
 
@@ -190,48 +227,19 @@ func _draw() -> void:
 	draw_polyline(line, Palette.INK, 3.0, true)
 	draw_line(Vector2(WEST_X, TOP), Vector2(WEST_X, SEABED_Y), Palette.INK, 3.0, true)
 
-	_draw_gate()
 	for pier in PIERS:
 		_draw_pier(pier)
-	Buildings.draw_house(self, Vector2(-6700, SHORE_Y), 200.0, Palette.PARCHMENT_LIGHT, Palette.INK)
-	_draw_log_pile(Vector2(-7190, SHORE_Y))
-
-	var font := ThemeDB.fallback_font
-	for s in SIGNS:
-		var pos: Vector2 = s.pos
-		draw_line(pos + Vector2(0, -30), pos + Vector2(0, 110), Palette.INK_FADED, 2.0)
-		draw_string(font, pos + Vector2(-200, -38), s.text, HORIZONTAL_ALIGNMENT_CENTER, 400, 20, Palette.INK)
+	Buildings.draw_signs(self, SIGNS, Palette.INK)
 
 
-## The Watch's post: two posts and a raised bar.
-func _draw_gate() -> void:
-	for x in [GATE_X - 30.0, GATE_X + 30.0]:
-		draw_line(Vector2(x, FLOOR_Y), Vector2(x, FLOOR_Y - 120), Palette.INK, 4.0)
-	draw_line(Vector2(GATE_X + 30, FLOOR_Y - 110), Vector2(GATE_X - 60, FLOOR_Y - 190), Palette.INK, 3.0)
-
-
-## A pier: planks on posts that run down into the sea.
+## A pier: a plank over the water. No posts (log 0221): in the plane they
+## would wall off the sea under it, so it floats, as ledges do.
 func _draw_pier(pier: Vector2) -> void:
 	var plank := _plank(pier)
 	draw_colored_polygon(plank, Palette.PARCHMENT_LIGHT)
-	var x := pier.x + 20.0
-	while x < pier.y:
-		draw_line(Vector2(x, SHORE_Y + PLANK), Vector2(x, maxf(ground_y(x), SHORE_Y + PLANK)), Palette.INK, 3.0)
-		x += 80.0
 	plank.append(plank[0])
 	draw_polyline(plank, Palette.INK, 2.5, true)
 	var seam := pier.x + 26.0
 	while seam < pier.y:
 		draw_line(Vector2(seam, SHORE_Y + 2), Vector2(seam, SHORE_Y + PLANK - 2), Palette.INK_FADED, 1.0)
 		seam += 26.0
-
-
-## Logs stacked by the Dock Tradesman: circles of cut ends.
-func _draw_log_pile(base: Vector2) -> void:
-	var r := 14.0
-	for row in 3:
-		for k in 4 - row:
-			var c := base + Vector2(k * r * 2.0 + row * r, -r - row * r * 1.7)
-			draw_circle(c, r, Palette.PARCHMENT_LIGHT)
-			draw_arc(c, r, 0.0, TAU, 20, Palette.INK, 2.0, true)
-			draw_arc(c, r * 0.5, 0.0, TAU, 14, Palette.INK_FADED, 1.0, true)

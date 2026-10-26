@@ -83,7 +83,7 @@ func run() -> int:
 	_results.append("RESULT health hp=%d max=%d" % [p.stats.hp, p.stats.max_hp])
 
 	# Abilities: learn from the Quartermaster, then use each.
-	var qm_data: Dictionary = Barracks.NPCS[1].duplicate()
+	var qm_data: Dictionary = Barracks.npcs()[1].duplicate()
 	qm_data.at = p.position + Vector2(0, 20)
 	var qm := Npc.create(qm_data)
 	_root.add_child(qm)
@@ -114,6 +114,112 @@ func run() -> int:
 	_record("spike_up", p)
 	await _steps(200)
 
+	# Equipped abilities (log 0243): learning fills the slots; an emptied
+	# slot's ability can't be used; only an owned ability for that slot fits.
+	_check(Array(p.stats.ability_slots) == ["nose_dive", "spike_up", "rush"], "learning equips")
+	p.moves._submit_equip(Abilities.SIDE, "")
+	_check(p.stats.ability_slots[Abilities.SIDE] == "", "slot emptied")
+	var energy_before: float = p.stats.energy
+	p.moves._submit_ability("rush")
+	await _steps(2)
+	_check(p.stats.energy >= energy_before, "unequipped ability unused")
+	p.moves._submit_equip(Abilities.SIDE, "nose_dive")
+	_check(p.stats.ability_slots[Abilities.SIDE] == "", "wrong slot refused")
+	p.moves._submit_equip(Abilities.SIDE, "rush")
+	_check(p.stats.ability_slots[Abilities.SIDE] == "rush", "slot refilled")
+	_check(Abilities.fill_slots(PackedStringArray(["spike_up"]), PackedStringArray(["rush", "", ""]))
+			== PackedStringArray(["", "spike_up", ""]), "fill slots")
+
+	# Throwing tips (log 0242): a shot seeks the nearest enemy and hurts it.
+	var projectiles := Projectiles.new()
+	_root.add_child(projectiles)
+	var held_points: String = p.inventory.equipped[0]
+	_check(not p.moves.throw(), "no throw without tips")
+	p.quests.load_data(Quests.sanitize({"ranger_school": {"step": 99}}))  # a graduate (log 0241)
+	p.inventory.add_to_bag(Gear.item("points", Gear.SCOUT))
+	p.inventory._submit_equip(p.inventory.bag.find(Gear.item("points", Gear.SCOUT)))
+	_check(Gear.item_name(p.inventory.equipped[0]) == "Scout tips", "tips worn")
+	var target := Enemy.create({"name": "Target", "type": "sparring", "room": Rect2(-3000, -3000, 6000, 6000),
+			"pos": p.position + Vector2(-260, -90)})
+	_root.add_child(target)
+	var decoy := Enemy.create({"name": "Decoy", "type": "sparring", "room": Rect2(-3000, -3000, 6000, 6000),
+			"pos": p.position + Vector2(600, -90)})
+	_root.add_child(decoy)
+	await _steps(2)
+	var target_hp: int = target.hp
+	_check(p.moves.throw(), "throws")
+	_check(not p.moves.throw(), "throws wait")
+	_check(projectiles.count() == 1, "one shot")
+	await _steps(60)
+	_check(projectiles.count() == 0, "shot spent")
+	_check(target.hp < target_hp, "shot hurts the nearest")
+	_check(decoy.hp == decoy.max_hp, "decoy untouched")
+	_results.append("RESULT throw dealt=%d" % (target_hp - target.hp))
+
+	# Ranger abilities (log 0244), owned and equipped in place of the melee ones.
+	var owned := p.stats.abilities
+	owned.append_array(PackedStringArray(["volley", "charged_shot", "double_jump"]))
+	p.stats.abilities = owned
+	for id: String in ["volley", "charged_shot", "double_jump"]:
+		p.moves._submit_equip(Abilities.slot_of(id), id)
+	_check(Array(p.stats.ability_slots) == ["volley", "charged_shot", "double_jump"], "ranger slots")
+	p.stats.energy = Stats.MAX_ENERGY
+	# Volley: held, then let go: 3x the tips' shots, which seek the target.
+	target.hp = target.max_hp
+	p.moves._submit_ability("volley")
+	await _steps(20)
+	_check(p.moves.charging == "volley", "volley holds")
+	p.moves._submit_release("volley")
+	await _steps(2)
+	_check(projectiles.count() == VolleyAbility.SHOT_MULT, "volley throws three")
+	_check(p.moves.charging == "", "volley let go")
+	await _steps(150)
+	_check(target.hp < target.max_hp, "volley lands")
+	_results.append("RESULT volley dealt=%d" % (target.max_hp - target.hp))
+	# Charged shot: let go in the critical window, it crits.
+	p.stats.energy = Stats.MAX_ENERGY
+	target.hp = target.max_hp
+	p.moves._submit_ability("charged_shot")
+	var window_steps := ceili((ChargedShotAbility.CRIT_FROM + 0.1) * Engine.physics_ticks_per_second)
+	await _steps(window_steps)
+	p.moves._submit_release("charged_shot")
+	await _steps(60)
+	var charged := target.max_hp - target.hp
+	_check(charged >= roundi(Projectiles.shot_damage(p) * ChargedShotAbility.MAX_MULT * Stats.CRIT_MULT) - 1
+			or target.hp == 0, "charged shot crits")
+	_results.append("RESULT charged dealt=%d" % charged)
+	# A quick tap of a held move still goes off.
+	p.stats.energy = Stats.MAX_ENERGY
+	p.moves._submit_ability("charged_shot")
+	p.moves._submit_release("charged_shot")
+	await _steps(2)
+	_check(projectiles.count() == 1, "tapped charge throws")
+	await _steps(90)
+	# Double jump: only in the air, once until you land.
+	p.moves._submit_ability("double_jump")
+	await _steps(3)
+	_check(p.linear_velocity.y > -100.0, "no double jump on the ground")
+	p.motion._submit_jump()
+	await _steps(20)
+	var vy_before := p.linear_velocity.y
+	p.moves._submit_ability("double_jump")
+	await _steps(2)
+	_check(p.linear_velocity.y < vy_before - 100.0, "double jump")
+	await _steps(10)
+	vy_before = p.linear_velocity.y
+	p.moves._submit_ability("double_jump")
+	await _steps(2)
+	_check(p.linear_velocity.y >= vy_before - 30.0, "one double jump per leap")
+	await _steps(120)
+	target.queue_free()
+	decoy.queue_free()
+	p.inventory._submit_unequip(0, -1)
+	if held_points != "":
+		p.inventory._submit_equip(p.inventory.bag.find(held_points))
+	p.inventory.take_from_bag(Gear.item("points", Gear.SCOUT))
+	projectiles.queue_free()
+	await _steps(1)
+
 	# Saved progress round trip, through JSON like a family save.
 	var saved: Dictionary = p.progress()
 	var raw: Variant = JSON.parse_string(JSON.stringify(saved))
@@ -141,6 +247,11 @@ func run() -> int:
 	_check(boss_moved, "boss used a move")
 	_results.append("RESULT boss pos=%s hp=%d" % [_v(boss.position), boss.hp])
 	_record("after_boss", p)
+	# The boss can kill you in that time; the marriage below needs a living shape.
+	boss.queue_free()
+	p.dead = false
+	p.stats.hp = p.stats.max_hp
+	await _steps(2)
 
 	# Marriage: a new heir takes over the shape (design log 0030), and the
 	# wedding and birth play as a cutscene, with you kept safe (log 0168).

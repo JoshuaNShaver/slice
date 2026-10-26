@@ -50,8 +50,9 @@ func _resume() -> void:
 			continue
 		var step := _step(id)
 		for action: Dictionary in step.get("start", []):
-			if action.has("spawn"):
+			if action.has("spawn") or action.has("travel"):
 				_act(id, action)
+	check_offers()
 	_update_tracker()
 
 
@@ -106,6 +107,27 @@ func after_birth(scene: Dictionary, newborn: Dictionary) -> Dictionary:
 			wake.append([quest.get("INTRO_SPEAKER"), line])
 		scene.wake = wake
 	return scene
+
+
+## Server only. Starts any quest (not one offered at a birth) that this
+## player is now called to: reached its level, finished what it follows
+## (ranger school, log 0245).
+func check_offers() -> void:
+	if not multiplayer.is_server():
+		return
+	var done: Array = []
+	for id: String in _state:
+		if is_done(id):
+			done.append(id)
+	var you := {"sides": player.sides, "kind": player.kind, "apex": player.apex,
+			"level": player.stats.level, "done": done}
+	for id: String in Quests.ALL:
+		var quest: Script = Quests.ALL[id]
+		if quest.get("AT_BIRTH") or has_started(id) or not Quests.serves(id, player.sides, player.kind):
+			continue
+		if quest.offered(you):
+			start(id)
+			player.screen.tell("", "New quest: %s." % Quests.quest_name(id))
 
 
 ## Server only. Quest `id`'s place, {"step", "counts"}, or {} if it hasn't
@@ -183,6 +205,12 @@ func talk(npc_name: String) -> bool:
 			if Quests.goal_event(goal) == ["talk", npc_name]:
 				notify("talk", npc_name)
 				return true
+		var back: Array = step.get("back", [])
+		if back.size() == 3 and back[0] == npc_name:
+			player.screen.tell(npc_name, str(back[1]))
+			for action: Dictionary in back[2]:
+				_act(id, action)
+			return true
 		var nag: Array = step.get("nag", [])
 		if nag.size() == 2 and nag[0] == npc_name:
 			player.screen.tell(npc_name, (nag[1] as Array).pick_random())
@@ -275,8 +303,13 @@ func _act(id: String, action: Dictionary) -> void:
 		_spawn_bout(id, action)
 	elif action.has("heal"):
 		player.combat.heal_full()
+	elif action.has("travel"):
+		var world := _world()
+		if world != null and world.has_method("travel"):
+			world.travel(player, str(action.travel))
 	elif action.has("done"):
 		player.screen.tell("", "Quest complete: %s." % Quests.quest_name(id))
+		check_offers.call_deferred()  # one quest may lead to the next
 
 
 ## You as a cutscene casts you (Quests: scene(id, you)).
@@ -314,9 +347,10 @@ func _spawn_bout(id: String, action: Dictionary) -> void:
 
 
 func _bout_struck(enemy: Enemy, _p: PlayerShape, id: String) -> void:
-	if enemy.hits_landed == 1:
+	var limit := int(enemy.info().get("bout_hits", 2))
+	if enemy.hits_landed == limit - 1:
 		enemy.shout("Ha! One more like that and the bout's mine.")
-	elif enemy.hits_landed >= 2:
+	elif enemy.hits_landed >= limit:
 		_end_bout.call_deferred(id)
 		notify.call_deferred("spar", enemy.type, "lost")
 

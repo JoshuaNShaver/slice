@@ -16,8 +16,9 @@ extends Node
 # Rolling
 const SPIN_ACCEL := 5.0  # rad/s² you add while holding a roll key
 ## Extra push, as a multiple of gravity's pull at one radius. Above 1, any
-## shape can tip over its corner from rest.
-const TIP_ASSIST := .75
+## shape can tip over its corner from rest, so holding a roll key is enough
+## to tumble along, even for a flat-sided triangle or square (log 0228).
+const TIP_ASSIST := 1.4
 const BASE_SPIN := 5.0  # top spin (rad/s) you can push to right away
 const TOP_SPIN := 12.0  # top spin after holding the key for RAMP_TIME
 const RAMP_TIME := 1.5
@@ -25,7 +26,11 @@ const AIR_SPEED := 120.0  # top sideways speed you can steer to in the air
 const AIR_ACCEL := 150.0
 
 # Jumping
-const JUMP_SPEED := 150.0
+## Rises about 112 px under the default 980 px/s² gravity: twice the height
+## of a full-size shape, 2 * RADIUS (log 0228).
+const JUMP_SPEED := 470.0
+## How much more a jump points straight up than away from the slope.
+const JUMP_UPRIGHT := 4.0
 const FACE_BOUNCE := 1.3  # jump multiplier when bouncing off a face
 const CORNER_BOUNCE := 1.55  # ... and off a corner
 const FLIP_SPIN := 16.0  # rad/s spin a corner bounce gives you
@@ -242,8 +247,9 @@ func _jump(state: PhysicsDirectBodyState2D) -> void:
 	var power := 1.0
 	if bounce:
 		power = CORNER_BOUNCE if _landed_on_corner else FACE_BOUNCE
-	# Jump away from the ground, leaning with the slope.
-	var dir := (Vector2.UP + ground_normal).normalized()
+	# Jump up, leaning only a little with the slope: at full jump speed a
+	# bigger lean throws you downhill whichever way you're heading (log 0228).
+	var dir := (Vector2.UP * JUMP_UPRIGHT + ground_normal).normalized()
 	var v := state.linear_velocity
 	v += dir * (JUMP_SPEED * power - v.dot(dir))
 	if bounce and _landed_on_corner:

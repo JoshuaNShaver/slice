@@ -54,14 +54,14 @@ func run() -> void:
 func _cast(clip: String) -> Dictionary:
 	var all_moves := ["rush", "nose_dive", "spike_up"]
 	match clip:
-		"invasion":  # a squad of three in the barracks, ready to deploy
+		"invasion":  # a squad of three on the barracks' island, ready to deploy
 			return {
 				1: {"info": _info("Ashworth", 6, "regular"), "progress": _progress(16, all_moves),
-						"pos": Vector2(-2700, Barracks.FLOOR_Y - 60)},
+						"pos": Vector2(-4800, Barracks.island_y(-4800) - 60)},
 				2: {"info": _info("Copperfield", 4, "regular"), "progress": _progress(13, all_moves),
-						"pos": Vector2(-2800, Barracks.FLOOR_Y - 60)},
+						"pos": Vector2(-4900, Barracks.island_y(-4900) - 60)},
 				3: {"info": _info("Dunmore", 5, "regular"), "progress": _progress(14, all_moves),
-						"pos": Vector2(-2900, Barracks.FLOOR_Y - 60)},
+						"pos": Vector2(-5000, Barracks.island_y(-5000) - 60)},
 			}
 		"lift":
 			return {1: {"info": _info("Ashworth", 6, "regular"), "progress": _progress(8, []),

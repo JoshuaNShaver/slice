@@ -35,14 +35,33 @@ func _physics_process(_delta: float) -> void:
 		player.inventory._submit_drink.rpc_id(1, -1)
 	if Input.is_action_just_pressed("home"):
 		player.motion._submit_home.rpc_id(1)
-	for id: String in Abilities.ALL:
-		if Input.is_action_just_pressed(Abilities.ALL[id].action) and id in player.stats.abilities:
+	# Each key slot uses what's equipped in it (design log 0243).
+	for slot in Abilities.SLOT_ACTIONS.size():
+		var id := player.stats.ability_slots[slot]
+		if id != "" and Input.is_action_just_pressed(Abilities.SLOT_ACTIONS[slot]):
 			if player.playing_on:
 				player.moves.press(id)
 			player.moves._submit_ability.rpc_id(1, id)
+		if id != "" and Abilities.ALL[id].holds and Input.is_action_just_released(Abilities.SLOT_ACTIONS[slot]):
+			if player.playing_on:
+				player.moves.release(id)
+			player.moves._submit_release.rpc_id(1, id)
+	if Input.is_action_just_pressed("throw"):
+		player.moves._submit_throw.rpc_id(1)
 	for n in PlayerInventory.QUICK_SLOTS:
 		if Input.is_action_just_pressed("quick_%d" % (n + 1)):
 			player.inventory.request_use(PlayerInventory.BAG_SLOTS + n)
+
+
+## Left click in the world throws (log 0242); clicks on the HUD never get
+## here. Touch has its own Throw button, so taps that pose as clicks don't.
+func _unhandled_input(event: InputEvent) -> void:
+	if not player.is_local() or Touch.active or Controls.watching:
+		return
+	var click := event as InputEventMouseButton
+	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT \
+			and click.device != InputEvent.DEVICE_ID_EMULATION:
+		player.moves._submit_throw.rpc_id(1)
 
 
 func _send_move(move: float) -> void:

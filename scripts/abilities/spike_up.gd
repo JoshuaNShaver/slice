@@ -18,7 +18,8 @@ var _rotation := 0.0
 func _init() -> void:
 	id = "spike_up"
 	name = "Spike up"
-	action = "spike_up"
+	slot = Abilities.DOWN
+	short = "Spike"
 	price = 5000  # chits (design log 0206)
 	text = "Plant a face on the ground, sharpest corner up. Nearby enemies are thrown up onto it."
 

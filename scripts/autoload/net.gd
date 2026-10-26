@@ -398,6 +398,16 @@ func heir_born_on_server(id: int, heir: Dictionary) -> void:
 	_heir_born.rpc_id(id, heir)
 
 
+## Server only. An admin changed a player's shape (log 0213): save it, tell everyone.
+func reshaped_on_server(id: int, shape: Dictionary) -> void:
+	accounts.on_reshape(id, shape)
+	if players.has(id):
+		players[id].sides = shape.sides
+		players[id].kind = shape.kind
+		players[id].apex = shape.apex
+		_broadcast_players()
+
+
 ## Server only. Plays a cutscene (CutscenePlayer's format) on one player's
 ## screen. They can't be hurt until it ends (cutscene_done) or for
 ## CUTSCENE_SAFE_TIME. `then` runs on the server once it has ended (watched

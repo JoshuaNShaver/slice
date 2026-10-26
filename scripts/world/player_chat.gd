@@ -9,7 +9,8 @@ extends Node
 ## \diagnostics (log 0155) never goes out as a line: the owner pings the
 ## server and writes up the answers (Diagnostics). \diag live keeps
 ## pinging, once a second, for the HUD's live panel; \simulate lag slows
-## this game's connection (log 0159). Neither is sent either.
+## this game's connection (log 0159). Neither is sent either, nor \view,
+## how this player sees the world (FlatView, log 0238).
 
 const MAX_LENGTH := 160
 const BURST := 5  # lines...
@@ -45,6 +46,10 @@ func _ready() -> void:
 ## Owner. Sends a typed line to the server, or runs it if it's one of
 ## Diagnostics' commands.
 func send_line(text: String) -> void:
+	var view := FlatView.parse(text)
+	if not view.is_empty():
+		_notice(FlatView.apply(view))
+		return
 	var asked := Diagnostics.parse(text)
 	if asked.is_empty():
 		_submit_line.rpc_id(1, text)

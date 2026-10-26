@@ -38,36 +38,69 @@ Places and spawn points live in `scripts/world/regions.gd`.
 
 Dungeons and mazes are **procedurally generated**.
 
-**NPCs (log 0052):** every NPC serves some shapes and refuses others, fixed
+**Nothing is scenery (log 0221):** everything in the world is in the one
+plane and solid; no prop stands behind the shapes. Background props
+(gates, sign posts, fences, tents, crates, flags, stalls, columns) are
+removed or rebuilt as solid terrain (*proposed* list in the log); place
+names are handwriting in the margin. What a 3-D onlooker would see stays
+as art: water drawn over a hull, armor's colour, fog, ink and paper.
+
+**NPCs (logs 0052, 0223):** solid and immovable (elevator guards too):
+they stand in your way, and you jump them or stand on them. Today every
+shape can clear a square, triangle or pentagon by rolling in and jumping;
+the Priest (88 px) is too tall, so he stands on a dais over the plaza. Every NPC serves some shapes and refuses others, fixed
 per NPC (never a dice roll). Overworld NPCs serve regulars; most underworld
 NPCs refuse them. Press interact (E) by an NPC, elevator or door to use it.
 
-**Houses (logs 0053, 0060, 0059, 0187, 0188):** every overworld house is a regular
+**Houses (logs 0053, 0060, 0059, 0187, 0188, 0222):** every overworld house is a regular
 pentagon, as the book's law requires: roof to the north, men's large door
 on the west, women's small door on the east (log 0187), no windows.
 Every house is drawn open, its rooms showing (unlabelled), after the
 book's plan of the narrator's house with level floors (log 0188); both
-doors reach the ground. Still scenery: shapes pass in front, and the
-rooms are empty in the game (residents would overlap passers-by). They are NPC homes and
-scenery. Underworld houses break the law: crooked, lopsided, even
-triangles and squares.
+doors reach the ground. Houses are solid and big enough to go into (log
+0222): walls, floors and roof are terrain, doors are gaps, and the
+women's door is a slit no polygon fits. *Proposed (built):* 760 px across
+(820 in the Quarter), rooms about three shapes tall, floors climbing in
+~80 px steps (the Hall's treads, the middle floor, the Bedroom and the
+Sons' cells). **Raised** houses stand on a floating island, the road
+curving down into a valley beneath it (log 0226); islands are organic,
+each its own clod of earth. The valleys are broad and gentle (about
+14-15°, log 0231), with ~190 px of headroom, so a triangle rolls through,
+and nobody stands in them. Getting up onto one waits on the movement
+rework. **Sunken** ones stand at a road's
+end under an overhang, a dead end for men (the women's side is behind).
+Residents live in the rooms again. Players pass through each other (log
+0225). Underworld houses break the law: crooked, lopsided, even
+triangles and squares (2.6x their drawn size, log 0236).
 
-**The Center (log 0019):** a plaza. The land sinks west to the open
-barracks gate and rises east (a 35° slope) to the elevator up to the Noble
-Quarter. Jump-through ledges climb north; *proposed (log 0062):* they stay
-as platforming that later-game gear may be needed to finish. The old south
-hatch is the elevator down. The priest, a merchant, a workman and a
-shopkeeper (triangles) live here.
+**The Center (logs 0019, 0222):** a plaza. The land sinks west to the
+barracks and rises east (a 35° slope) past Merchants' Row. Solid ledges
+climb north (log 0225); *proposed (log 0062):* they stay as platforming
+that later-game gear may be needed to finish. The Priest preaches from a
+dais over the plaza. Over the low road west, a **raised house** on its
+island (the Workman's), the road dipping into a valley under it. At the
+east end, under the Noble Quarter's shelf, a **sunken house**: the
+Shopkeeper in the Hall, the Strongroom Keeper in the cellar; the
+Blacksmith stands at its door and the noble lift just west of it. The
+old south hatch is the elevator down. A merchant stands on the Row.
 
-**Elevators (logs 0054, 0066):** guards at both ends check your shape.
+**Elevators (logs 0054, 0066, 0227):** guards at both ends check your shape.
 - **Down to the underworld:** regulars with 5+ sides (log 0066). Any
   regular may ride up; irregulars never can.
 - **Up to the Noble Quarter:** regulars with 4+ sides.
-- The ride carries you through the rock in a cage, a few seconds long.
+- The ride is a plain platform, a few seconds long: a plate flush in the
+  ground at each stop, no cage (log 0226). The lift down runs in an open
+  shaft through the ground, capped at the top by a hatch (log 0227). Going
+  down is a straight fall: the guards open the hatch and you drop to the
+  Undercroft's floor. The platform only carries riders up (log 0237).
+  Standing on the hatch leaves it shut (log 0249).
 
 **The Noble Quarter (log 0063, proposed layout):** a plateau high above the
-Center's east end, its cliff too tall to jump. Pentagon houses, a lawyer
-(square) and a gentleman (hexagon). **The Physician** (a pentagon) heals
+Center's east end, its cliff too tall to jump; its shelf reaches west over
+the Center's sunken house (log 0222). Three raised houses over its street,
+yours the middle one, the street dipping into a valley under each; a lawyer
+(square) and a gentleman (hexagon) stand on the flats between, never under
+a house (log 0231). **The Physician** (a pentagon) heals
 regulars anywhere in the quarter. **Your house** is here (§5).
 
 **The Priests' Hill (log 0063, proposed layout):** east of the quarter,
@@ -87,7 +120,11 @@ birth, but some are recovered here.
 - **The Bonesetter** heals irregulars anywhere in the Undercroft.
 - **The Hedge Priest** (a circle who failed inspection) marries irregulars.
 - **The Fence** deals with anyone, regulars at a markup (no stock yet).
+- Some houses have an inner floor a jump up (100 px), where a resident
+  stands off the road: the Lodger, the Fence and the Squatter (log 0236).
 - Its other people refuse regulars. East is sealed for now.
+- Its crooked houses are big and solid, with a door at each foot: you
+  roll right through them (log 0222).
 - An irregular parent can have a regular heir (§5); that heir is sent up to
   the Center.
 
@@ -108,13 +145,21 @@ potion (§2b).
 Enemies chase players inside their own room only, and respawn after 12 s
 (the boss after 90 s). *Proposed* stats are in `scripts/world/enemy.gd`.
 
-**The barracks (logs 0061, 0067–0072, 0077):** west of the Center through
-an open gate (`scripts/world/barracks.gd`). East to west:
-- **The drill yard (log 0072):** straw dummies and sparring partners
+**The barracks (logs 0061, 0067–0072, 0077, 0232):** west of the Center
+(`scripts/world/barracks.gd`), all of it up on one big island (2,200 px
+across, its top ~285 px over the road), no hall. Two floating steps, each
+a jump up, climb from the road to its east tip; the road to the coast
+runs beneath in a gentle valley, nobody standing in it. East to west on
+the island:
+- **The Drill Sergeant**, at the top of the steps, runs bootcamp, the
+  first quest (§5c).
+- **The drill yard (logs 0072, 0224, 0234):** three wild shapes (the same
+  slanted rhombus with rounded corners, lying on the ground, no post;
+  *proposed:* harmless, shuffling, rolling away when hit) and sparring
+  partners
   (**recruits**, log 0182) for levels 1–5 (spar until about 3–5). Recruits
-  can't bring you below 1 health. It drops **leather** gear. **The Drill
-  Sergeant**, at its gate, runs bootcamp, the first quest (§5c).
-- **The Quartermaster** (equilateral) sells bronze, iron and steel,
+  can't bring you below 1 health. It drops **leather** gear.
+- **The Quartermaster** (equilateral) sells bronze, iron, steel and regimental (log 0210),
   provisions (§2b) and ability drills (§2c), for combatant pay. **The Surgeon** heals on request.
 - **The General** (a pentagon, proposed) gives missions; squads muster
   beside him for 10 s. A popup shows the timer, and the squad leaves early
@@ -130,9 +175,10 @@ guide; you may go under-leveled. Leaving early forfeits the pay.
 
 | Mission (log 0070, proposed) | Levels | Squad | Revolt | Soldiers | Boss | Pay* |
 |---|---|---|---|---|---|---|
-| Recon | 5–10 | up to 4 | 3–5 rebels; secretly 1 in 5 a Painted Noble (pay ×2) | 1 | secretly 1 in 10 (luck helps): a half-strength Captain (pay ×5) with a huddle (below) | 25 |
-| Invasion | 10–20 | up to 8 | 20–24 rebels and agitators, and 1–3 painted gentry (2× strength, use moves; log 0091) | 10 | none | 80 |
-| Special ops (assassination) | 20 | up to 2 | 5 bodyguards | none | always two: Chromatistes (gilded-buffed) and a Captain guarding him | 200 |
+| Recon | 5–10 | up to 4 | 3–5 rebels, 1–2 skirmishers; secretly 1 in 5 a Painted Noble (pay ×2) | 1 | secretly 1 in 10 (luck helps): a half-strength Captain (pay ×5) with a huddle (below) | 25 |
+| Invasion | 10–20 | up to 8 | 20–24 rebels and agitators, 4–6 skirmishers, and 1–3 painted gentry (2× strength, use moves; log 0091) | 10 | none | 80 |
+| Special ops (assassination) | 20 | up to 2 | 3 bodyguards, 2 skirmishers | none | always two: Chromatistes (gilded-buffed) and a Captain guarding him | 200 |
+| Fortress raid (rangers only, §2d) | 20 | up to 4 | the enemy boat's crew, the wall-walk's guards (more if the alarm's raised), the Castellan's | a troop of 8, once the drawbridge drops | the Castellan | 250 |
 
 Recon's extra foes are never announced (log 0088); the squad's soldier
 hints at them in a speech bubble once you're on the field. **The recon
@@ -163,7 +209,8 @@ fight. On invasion they hunt the Revolt anywhere on the field (log 0079).
 the barracks the ground slopes down to the sea. Only 45°+ triangles and
 higher ranks go on; the Harbour Watch turns sharper ones back at the gate
 ("workmen only"). At the dock: the Dock Tradesman, the Boatwright, the
-Harbourmaster and a pier. Then ~4,000 px of open sea, the Logging Isle
+Harbourmaster and a pier (a floating plank: no posts, log 0221); no
+house (log 0233). Then ~4,000 px of open sea, the Logging Isle
 (its own pier and the Boatwright's Mate), and sea to the world's west edge.
 - **Sailing (logs 0201, 0208; `Boat`):** the waves are calm at the shores
   and rough at sea, and make boats hard to sail. A boatwright launches
@@ -174,12 +221,25 @@ Harbourmaster and a pier. Then ~4,000 px of open sea, the Logging Isle
   about, which you need to step off onto a pier. Fall in and the screen
   goes dark: you wake on the shore, everything in the bag lost (worn gear
   kept).
+- **Stretches of sea (log 0215; `Ocean.STRETCHES`, numbers *proposed*):**
+  each crossing brings new trouble, rougher westward. The Sound (dock to
+  the Logging Isle) is the gentle one. The Narrows (Logging Isle to the
+  Quarry Isle): each 128 s spell of weather has a 50% chance of rain,
+  which comes on over 15 s and doubles the waves' height (log 0218). Weather follows the
+  server's clock, so everyone sees the same sky. Boats ride the waves;
+  they don't jump them (removed, log 0219).
 - **The Logging Isle (logs 0202, 0208; `Timber`):** 6 trees in a row,
   taller than the screen. Jump or roll a corner into one, as at an enemy:
   10,000 hidden health, and every 1,000 damage drops a log (loot to pick
   up) for one hitter, picked weighted by damage dealt. Felled trees regrow
   in 3 minutes. One log per bag slot, so a full bag is 10 logs, sold to
   the Dock Tradesman for 200 chits each (log 0204).
+- **The Quarry Isle (log 0211; `OreRock`, numbers *proposed*):** past more
+  sea west of the Logging Isle; the Ferryman on that isle's west shore
+  launches boats for it, and the Quarryman launches them home. Three ore
+  rocks: 8,000 hidden health, an ore per 2,000 (4 a rock), regrowing in 5
+  minutes. The Dock Tradesman pays 600 chits an ore. Trees and rocks are
+  both `WorldResource`s.
 - **Merchants (logs 0205, 0209; `Market`, numbers *proposed*):** a 55°+
   triangle trades between two markets.
   - The Harbourmaster sells logs from one stock shared by everyone, for
@@ -193,6 +253,32 @@ Harbourmaster and a pier. Then ~4,000 px of open sea, the Logging Isle
     booth's orders: up to 3, a new one every 90 s, 2–8 logs at about
     19–48 coins each, open 10 minutes. Some come in under the dock's
     price: buy cheap, hold, and wait.
+  - **Promissory notes (log 0212, *proposed* numbers):** the Harbourmaster
+    sells notes for coins, one per log at the dock's coin price, taken
+    from the log stock. Up to 50 stack in one bag slot, and booth orders
+    take them for logs (logs first, then notes). Drop a stack on another
+    to merge them.
+  - The Harbourmaster also sells rare ore (log 0211) from its own smaller
+    stock: 620–1,260 chits or 45–150 coins, no work orders or booths.
+
+**The Strongroom (log 0212)**: the Strongroom Keeper, in the cellar of the
+Center's sunken house (log 0222), sells a family its strongroom a chest at a time: the
+first for 1,000 coins, then (*proposed*) 3,000 and 8,000, 10 slots each.
+Drag items between it and the bag. It belongs to the family: every heir
+keeps it, and it's lost when the family ends (unlike the house chests,
+which are the player's, log 0042).
+
+**Heirlooms (log 0216):** a family with a strongroom also has five free
+heirloom slots, one per gear slot. At each succession the outgoing heir's
+worn armor is passed down into them; where a slot is already full, a panel
+shows the old piece and the new and you click the one your heirs keep (the
+other is lost). *Proposed:* the choice can wait (closed, then made at the
+Strongroom); the old piece stays until then, and an unanswered choice keeps
+the old piece at the next succession.
+
+**The Blacksmith (log 0211)** stands up the Center's east hill, past
+Merchants' Row, at the sunken house's door. He upgrades any piece of gear, worn or
+carried, up to +5 (§4). Ore you bring him stays with him on account.
 
 **Priests** (circles) marry you (§5): the priest on the Center plaza and the
 High Priest at the temple for regulars, the Hedge Priest for irregulars.
@@ -200,8 +286,9 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 ## 2. Player and movement
 
 - You are a regular polygon (or an irregular one, see §5).
-- **Left / right:** roll. **Space:** jump. **Up / Down / Shift:** nose
-  dive, spike up, rush (§2c, once learned). **E:** interact. **G:** pick up.
+- **Left / right:** roll. **Space:** jump. **Up / Down / Shift:** the
+  abilities equipped in those slots (§2c, log 0243). **Left click:** throw
+  (ranger tips, §2d; on touch, a Throw button). **E:** interact. **G:** pick up.
   **F:** drink a potion. **1–5:** quick-use slots (§4). **C:** home
   teleport (§2b). **Tab:** character
   sheet. **Esc:** menu.
@@ -218,8 +305,10 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 - *Proposed:* a regular n-gon holds still on slopes up to about 180°/n, so
   triangles grip steep ground and many-sided shapes slide. Terrain can gate
   shapes without doors.
-- **Feel: tumbly and gymnastic (log 0020).** Holding a roll key builds speed
-  over a few seconds, and downhill momentum can push you past it. Shapes
+- **Feel: tumbly and gymnastic (log 0020).** Holding a roll key is enough
+  to tumble along, for every shape (log 0228); it builds speed over a few
+  seconds, and downhill momentum can push you past it. A jump rises about
+  112 px, twice a full-size shape's height (log 0228). Shapes
   are a little bouncy and keep their spin.
 - **Bounce jumps:** jump again as you land. Off a face: higher than a normal
   jump. Off a corner: higher still, and you flip.
@@ -246,20 +335,27 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
 
 - That is the base. Actual damage is scaled by level and force (§4b): a
   level 1 triangle corner does 60, about 178 at level 20.
-- **Multi-hit (leaning yes):** more sides means more corner hits as you roll
-  over an enemy. A full turn always totals 360 damage, whatever the shape.
-  Few sides hit in big stomps, many sides in small hits.
+- **Multi-hit (log 0229):** every corner that strikes deals its damage, even
+  several at once. More sides means more corner hits as you roll over an
+  enemy. A full turn always totals 360 damage, whatever the shape. Few
+  sides hit in big stomps, many sides in small hits.
 - *Proposed (log 0027):* hits come from contact. A corner that strikes an
   enemy at 70+ px/s deals its damage, whether you land on the enemy or roll
   into it. Enemy corners hurt you by the same rule (flat damage per enemy
-  type, minus rigidity). The same pair can't hit again for 0.3 s, and after
-  being hit you can't be hit again for 0.6 s.
+  type, minus rigidity). The same corner can't hit the same target again
+  for 0.3 s, and after being hit you can't be hit again for 0.6 s.
 - **Damage numbers (log 0046):** every hit's damage floats up from the
   target and fades, for all players to see. Ink for damage to enemies, red
   for damage to players.
 - **Critical hits (log 0047):** each player corner hit has a 10% chance
   (raised by luck; irregulars start at 20%) to deal double damage, shown
   larger, in gold, with a "!". Enemies don't crit.
+- **Speed crits (log 0229):** at critical speed (*Proposed:* 650+ px/s,
+  going up not counted, and for 0.15 s after slowing) every corner hit
+  crits. Rolling and jumping stay under it; rush gets there, and a long
+  nose dive often does. While at it you look like a comet (log 0230): your
+  leading edge glows gold under ink, and a gold tail with ink streaks
+  streams out behind, longer the faster you go.
 - High ranks can bring triangles to fight for them.
 - All classes may use the same combat, or classes may get distinct combat.
   Undecided.
@@ -289,8 +385,11 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   | Voice | a pipe for your cry (an ability slot later) | mettle | nothing yet |
 
 - **Military tiers (logs 0071, 0072, 0077):** leather (drill yard drops),
-  then bronze, iron and steel (bought, a full set of four: 400 / 800 / 2,000 chits, log 0206; leather is the main set before working). *Proposed:*
-  +2 / 4 / 7 / 10, plating +3 / 6 / 10 / 15, so steel equals lilac. No
+  then bronze, iron, steel and regimental (bought, a full set of four: 400 / 800 / 2,000 / 10,000 chits, logs 0206, 0210; leather is the main set before working). *Proposed:*
+  +2 / 4 / 7 / 10 / 13, plating +3 / 6 / 10 / 15 / 19, so steel equals lilac.
+  Regimental caps carry a short red ribbon on every corner. At rest they
+  hang straight down and stir in the wind; moving, each trails straight
+  back behind its own corner, a moment late (log 0220). No
   pigment slot (colour is contraband), so no military sets.
 - **Tiers (log 0029):** each cave room drops the next tier: rose 1, mint 2,
   lilac 3, the Pretender's gilded 4. *Proposed:* +3 / 6 / 10 / 15, plating
@@ -312,10 +411,18 @@ High Priest at the temple for regulars, the Hedge Priest for irregulars.
   | Bronze | *proposed* +10 vigor |
   | Iron | *proposed* +10 rigidity |
   | Steel | *proposed* +10 torque |
+  | Regimental (log 0210) | +15 vigor, +20 force |
 
   A military set is its four slots (points, plating, eye, voice); pigment
   doesn't count.
 
+- **Upgrades (log 0211):** the Blacksmith raises a piece +1 to +5: 100,
+  200, 300 coins, then 500 coins and 10 rare ore, then 1,000 coins and 25.
+  *Proposed:* each level adds +10 / 20 / 30 / 50 / 80% of the piece's own
+  bonus (regimental caps: 13, 14, 16, 17, 20, 23 force). A full set's bonus
+  grows 10% per level of its lowest piece. Its halo is faint at +0 and
+  brightens to +4; at +5 it becomes a gilded circle, breathing, with motes
+  circling it. Icons show "+n".
 - **Bag (logs 0036, 0043, 0044):** 10 slots, plus 5 **quick-use slots**
   (keys 1–5) that are bag slots too. Nothing is taken by touch. The pickup
   key (G) grabs the nearest of your items, filling the bag before the quick
@@ -364,8 +471,83 @@ is one script in `scripts/abilities/` (log 0107).
 | Ability | Key | Price | What it does |
 |---|---|---|---|
 | Rush | Shift | 2,500 | Sideways speed and spin ×5, on the ground or in the air |
-| Nose dive | Up / W | 1,000 | A jump at 3.5× jump speed (rises over 3 triangle heights, clearing enemies); coming down, your sharpest corner turns to point down and gravity pulls 2× |
+| Nose dive | Up / W | 1,000 | A jump at 1.5× jump speed (rises ~250 px, about twice a jump, clearing enemies; log 0228); coming down, your sharpest corner turns to point down and gravity pulls 2× |
 | Spike up | Down / S | 5,000 | A face flat on the ground, sharpest corner up, held 1 s. Hostile enemies within 260 px are thrown up, helpless, and come down on it |
+
+- **Equipped, not just owned (log 0243):** *proposed*, three slots, W, S
+  and Shift, each holding one owned ability made for that key, swapped on
+  the character sheet. Melee and ranger abilities (§2d) mix freely.
+
+## 2d. Rangers (logs 0241–0254)
+
+- **A ranged build, not a class (log 0241).** Ranger gear throws small
+  spinning metal triangles: less damage than melee, more distance. Ranger
+  school (§5c) is the account's quest, done once; it starts for a 50°+
+  triangle at level 20. After it, any of the account's shapes, squares
+  included, may wear ranger gear and mix it with melee gear.
+- **Throwing tips (log 0242)** go in the Points slot. Left click (touch:
+  Throw) throws from your shape's center, seeking the nearest hostile
+  enemy, or the way you're rolling if none is in range. Each piece sets a
+  shot count and spread, so later gear throws n shots in fans.
+  *Proposed:* ~40% of your melee corner damage a shot, normal crits, no
+  speed crits; free, 0.4 s apart; stopped by terrain and houses; never
+  hurts players; gone after ~1.5 s.
+- **Camouflage (log 0254):** ranger tiers have a pigment piece, and a full
+  ranger set needs all five slots. It adds vigor and hides you: enemies see
+  you from closer (*proposed* Scout −10% … Ranger −40%) until 3 s after you
+  strike or are struck. Drawn as muted dappled patterns, one per tier.
+- **Abilities (log 0244):** **volley** (W): 3× your shot count in arcs,
+  farther the longer W is held, seeking the nearest enemy; **charged
+  shot** (S): one straight shot at the nearest enemy that doesn't seek
+  after release; holding charges damage (*proposed* up to 2×), and a glow
+  flashes at the critical hold time, when a release crits; **double
+  jump** (Shift slot): a second jump in mid-air (*proposed* free).
+  *Proposed:* 50 energy paid on release; volley held up to 1 s, seeking
+  from 0.4 s up the arc; charge full at 1.2 s, critical window 1.2–1.5 s
+  (a ring closes round you, gold in the window); coins: volley 600,
+  charged shot 900, double jump 400.
+- **The secret island (log 0246):** the Drill Sergeant sends graduates
+  (and those in training) to the rangers' island; the Ferryman brings you
+  back. There: the ranger quartermaster (starting gear for chits, the rest
+  for coins only), a Camp Medic, the Ranger Instructor and a yard of wild
+  shapes and throwing ranger recruits. Ranger armor follows the melee stat
+  curve. *Proposed:* Scout 100 chits a piece (set +10 luck); for coins,
+  Tracker 150 (+10 mettle), Outrider 300 (+10 torque), Pathfinder 750 (+15
+  luck), Ranger 2,000 (+15 luck, +20 force). **Rations** stack to 30 in one
+  slot and heal less than salt pork (*proposed* 15% over 8 s, 2 coins).
+- **Painted skirmishers (logs 0247, 0252):** Revolt rangers in all three
+  missions. *Proposed:* 50° triangles that keep their distance (back off
+  inside 300 px) and throw a dodgeable tip every 2–3 s from up to 600
+  px, at players and soldiers alike; recon 1–2, invasion 4–6 (×1.6
+  strength), special ops trades two bodyguards for them (×2.5). They
+  stand at the back. Held in a huddle, they still throw. Recon's soldier
+  warns of them.
+- **Fortress raid (logs 0248, 0250, 0253; `Fortress`):** the rangers' own
+  mission, up to 4. The General lists it for all but sends only those
+  through ranger school. You land on a dock. The boatman's rowboat waits
+  there and **rows across as soon as anyone speaks to it**. It holds at
+  the far landing while anyone's aboard, then rows home. While it's out,
+  the Boatman on the dock gives you one of your own. The crossing is a
+  storm (the fortress has its own sea, `Ocean.add_sea`: steady rain,
+  waves ×2.6, water only between its shores). **Keep still** aboard: a
+  passenger who stays put rides it out, and rolling about can throw you
+  over. **Falling in costs your bag and the mission:** the army
+  fishes you out to the barracks, with no pay. **An enemy boat** is
+  moored at the fortress pier, and you land just behind it. Its 3
+  **archers** lob fans of 5 slow-turning homing shots and stand to charge
+  a hard one. Its 2 **lookouts** run for the **back door** at the
+  crags' foot once you're within 700 px. The door is hung from a tunnel's
+  ceiling, rises for them and drops behind. If one gets in, **the
+  alarm**: 10 archers come down the crags and 5 pentagons and 2 hexagons
+  guard the winch. Kill the lookouts first and only 3 skirmishers hold
+  the wall. Then you climb crags up the sea wall and cross the
+  wall-walk. At the end, the **winch** on the gatehouse lets the
+  drawbridge down and a troop of 8 charges in. **Carminus, the
+  Castellan** (an irregular heptagon, boss) waits in his courtyard from
+  the start, goes after anyone inside the fortress, and throws volleys
+  and charged shots as well as his moves. His fall wins it. *Proposed:*
+  level 20; rowboats ~20 s across; crags rising 120 px (a bounce each);
+  wall guards ×2.5; 250 chits; the usual 1-in-5 certificate discharge.
 
 ## 4b. Stats (logs 0021–0023)
 
@@ -418,7 +600,8 @@ Values marked * are proposed tuning.
     bag. *Proposed:* 20 slots; everyone uses the same door, each sees their
     own chests; saved by the server with the account (log 0112). Stored gear carries over to later heirs, so
     only square-or-better runs benefit from past runs' gear; triangle runs
-    start with nothing. The chests belong to the player and outlive the
+    start with nothing, unless their family has bought a strongroom
+    (log 0212), which passes to its own heirs only. The chests belong to the player and outlive the
     family (log 0042): a new family gets them back on reaching a square.
   - **Triangles (log 0031):** only an **equilateral** triangle has a square
     heir (the book's rule). A new family's triangle is isosceles with a
@@ -500,6 +683,19 @@ Values marked * are proposed tuning.
   combat, then see the General for deployment (log 0193). Darren has 1000
   health, so he's hard to beat (log 0193). *Proposed (log 0182):* only you
   fight him; his second landed hit loses the bout.
+- **Ranger school (log 0245)**, the second quest, for a 50°+ triangle at
+  level 20 (bootcamp done): the Drill Sergeant says you've been selected
+  for a special operations unit. Blindfolded, you're taken to an entrance
+  exam, an instanced platforming maze; a Heroldt descendant is waiting at
+  the end. Then training like bootcamp with throwing tips: dummies,
+  recruits, and a bout with the Heroldt. Win or lose, the quest ends, and
+  ranger missions (§2d) and the secret island open. *Proposed (as built):*
+  he's **Edric Heroldt**; the exam is ledges over water (fall in: back to
+  the start) that fork twice into walled pockets, and end in a leap of
+  faith off the top ledge, down past the screen, to Edric's rowboat; he
+  rows you out under the east wall through the pass (log 0251); training is on the island,
+  where the bout is lost on Edric's fourth hit. Home (C) leaves the exam;
+  the Drill Sergeant sends you back to a fresh course (log 0249).
 - **Darren's line (log 0184, not built past bootcamp):** the Heroldts are
   your rivals and friends across the game, like Red in Pokémon: always a
   step ahead. Darren is your friend in the first mission, and is later
@@ -515,7 +711,7 @@ Values marked * are proposed tuning.
   under the title banner. Play opens "Select a Family" over the picture;
   online sign-in steps show in the same panel. Buttons and panels are
   drawn by hand; lettering is IM Fell English. The picture is one street
-  (no hills or anything "behind"): two big lawful houses, your first
+  (no hills or anything "behind"): two big lawful houses (bigger, log 0235), your first
   family's heir between them drawn as in the game. The right house's
   family is home in its rooms (logs 0187, 0188); neighbours tumble out of the men's (west) doors and back
   in, each on his own stretch so no one passes anyone. Fog drifts behind and in front with a little
@@ -655,6 +851,20 @@ As in the book, women are straight lines.
   `set <quest> <step|done>`, `delete`, all with `--id who`; `quests` and
   `quests get <quest>` show the quests themselves (log 0196). Tab
   completes commands, verbs, fields, quests and flags (log 0163).
+  `players set sides <3-64>` changes the heir's shape, keeping level and
+  gear; irregulars stay irregular, a triangle made a polygon is regular
+  and a polygon made a triangle equilateral (log 0213).
+  `items list [search]` lists every kind of item (id and name; the search
+  matches either, any case, with `*` for anything: `*steel*`), and
+  `items create <item> [count] [--id who]` puts items in a bag, gear
+  upgraded if named so (`points_9+3`), notes stacked (log 0214).
+  `resources list [which] [--kind tree|ore] [--felled|--standing]` lists the
+  trees and ore rocks (health left or when each grows back, where);
+  `resources deplete <which|all> [--id who] [--bag]` fells and quarries
+  them at once, their drops going to `who` (on the ground, or with `--bag`
+  in the bag, the rest on the ground), and `resources regrow <which|all>`
+  grows spent ones back. `which` is a name or a `*` pattern: `T*`, `O1`
+  (log 0217).
 - **Diagnostics (logs 0155, 0159):** anyone can type `\diagnostics` (`\diag`):
   5 pings to the server, then your fps and frame time, ping, how steadily
   your shape's updates arrive, and the server's fps, physics load, players,
@@ -708,6 +918,16 @@ As in the book, women are straight lines.
   torn parchment with pencilled buttons, fields and item slots; speech
   bubbles and the quest tracker are pencilled. All text is IM Fell English
   (the admin terminal keeps monospace).
+- **A Flatlander's view (logs 0238-0240, 0249, experiment):** `\view eyes` or
+  `\view eye` swaps the side view for what your shape sees: vertical bars,
+  up being up, of only what's solid and the sea (no lettering or
+  scenery). Ground and buildings are ink (chalk underground), people white
+  or their paint (a Revolt's red), water blue; all lighten with distance
+  until fog hides them at 450 px (`\view range`); beyond that, or in empty
+  air, the background. Each eye sees 120° (`\view fov`). Two eyes look west
+  and east; one eye turns as the mouse moves and sees the world upside
+  down when facing west. `\view 2d eyes` / `2d eye` draw them over the
+  side view; `\view 2d` is the default. Client only; HUD unchanged.
 - **Ink on paper and fog (logs 0191, 0194, proposed):** a shader over the
   world and the menu's picture, under the UI: ink bleed and paper grain,
   and Flatland's fog as depth: the farther from your shape, the paler the
@@ -726,7 +946,11 @@ As in the book, women are straight lines.
   diagonal, bronze cross-diagonal, iron square grid, steel triple. Cave
   gear keeps its chalk colours (contraband from below). NPCs can wear
   gear too: the Drill Sergeant wears full steel in the world, as in his
-  cutscenes (log 0199).
+  cutscenes (log 0199). *Proposed:* the regimental ribbons' red is the
+  regiment's colours, the one colour a soldier may wear (log 0210).
+- **Nothing behind the plane (log 0221):** no props drawn for shapes to
+  pass in front of. What a 3-D onlooker would see stays: water drawn over
+  a hull, armor's colour and hatching, fog, ink and paper.
 - **Hatching:** 2–3 crosshatch styles combined with palette colors as a
   learnable identity system (originally for dimensions; reuse for armor and
   factions).
@@ -751,8 +975,7 @@ As in the book, women are straight lines.
 12. Do stat caps differ by rank (sides), as Realm of the Mad God caps differ
     by class? Does rank change base stats?
 13. Confirm 20 chest slots in the square's house (log 0064).
-14. Momentum crits (log 0047): should a corner hit at very high speed
-    (e.g. 4× the minimum hit speed) always crit, rewarding movement?
+21. Is loot on the ground solid (log 0221)?
 15. What lies north of the Center (log 0062)? (West past the barracks is
     the coast, log 0200.)
 16. The noble lift takes regulars only (an irregular square can't ride).
@@ -762,6 +985,10 @@ As in the book, women are straight lines.
     member, metal stats.
 18. Confirm the coast's and the market's built numbers (logs 0208, 0209):
     boat handling, tree regrowth, dock prices and stock, booth orders.
-    What else do coins buy? (Mission pay stays low on purpose, so players
-    work early for better gear, log 0207.)
+    Coins buy the Blacksmith's upgrades (log 0211); what else? Only
+    merchants earn coins, so should soldiers and workmen have a way to
+    them? (Mission pay stays low on purpose, so players work early for
+    better gear, log 0207.)
+20. Confirm the upgrade scaling, the +5 look and the ore numbers (logs
+    0210, 0211).
 19. The coins' colour (log 0204): verdigris?

@@ -15,9 +15,12 @@ const ACTIONS: Array[Dictionary] = [
 	{"action": "roll_left", "label": "Roll left", "keys": [KEY_LEFT, KEY_A]},
 	{"action": "roll_right", "label": "Roll right", "keys": [KEY_RIGHT, KEY_D]},
 	{"action": "jump", "label": "Jump", "keys": [KEY_SPACE]},
-	{"action": "nose_dive", "label": "Nose dive", "keys": [KEY_UP, KEY_W]},
-	{"action": "spike_up", "label": "Spike up", "keys": [KEY_DOWN, KEY_S]},
-	{"action": "rush", "label": "Rush", "keys": [KEY_SHIFT]},
+	# Ability key slots (design log 0243): whatever's equipped in each.
+	{"action": "ability_up", "label": "Up ability", "keys": [KEY_UP, KEY_W]},
+	{"action": "ability_down", "label": "Down ability", "keys": [KEY_DOWN, KEY_S]},
+	{"action": "ability_side", "label": "Side ability", "keys": [KEY_SHIFT]},
+	# Throwing tips (log 0242): left click throws too, always.
+	{"action": "throw", "label": "Throw (or left click)", "keys": [KEY_Q]},
 	{"action": "interact", "label": "Talk / marry", "keys": [KEY_E]},
 	{"action": "pickup", "label": "Pick up", "keys": [KEY_G]},
 	{"action": "drink", "label": "Drink potion", "keys": [KEY_F]},
@@ -36,10 +39,14 @@ const ACTIONS: Array[Dictionary] = [
 ## buttons instead of keys. TouchControls labels its buttons with them.
 const TOUCH_NAMES := {
 	"roll_left": "Stick", "roll_right": "Stick", "jump": "Jump",
-	"nose_dive": "Dive", "spike_up": "Spike", "rush": "Rush",
+	"ability_up": "Up", "ability_down": "Down", "ability_side": "Side", "throw": "Throw",
 	"interact": "Use", "pickup": "Take", "drink": "Drink", "home": "Home",
 	"character_sheet": "Bag", "chat": "Chat", "menu": "Menu",
 }
+
+## Actions saved under older names: the ability slots were the moves'
+## own keys before abilities were equipped (design log 0243).
+const RENAMED := {"ability_up": "nose_dive", "ability_down": "spike_up", "ability_side": "rush"}
 
 ## True while the controls screen waits for a key, so gameplay ignores it.
 var capturing := false
@@ -170,6 +177,8 @@ func _load() -> void:
 		return
 	for entry in ACTIONS:
 		var saved: Variant = file.get_value("keys", entry.action, null)
+		if saved == null and RENAMED.has(entry.action):  # bound before the slots (log 0243)
+			saved = file.get_value("keys", RENAMED[entry.action], null)
 		if not saved is Array:
 			continue
 		var loaded: Array[Key] = []

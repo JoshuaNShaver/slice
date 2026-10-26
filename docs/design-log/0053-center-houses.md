@@ -1,7 +1,7 @@
 # 0053: Flatland houses in the Center
 
 - **Date:** 2026-10-18
-- **Status:** Accepted (details accepted in 0060)
+- **Status:** Accepted (details accepted in 0060); "scenery" superseded by 0221
 - **Decision:** The Center gets houses in the book's style, home to its
   more regular triangles.
 - **Proposed details:** as the book's law requires, houses are pentagons

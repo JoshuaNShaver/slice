@@ -217,6 +217,19 @@ func on_heir(id: int, heir: Dictionary) -> void:
 	keeper.save_family(sessions[id])
 
 
+## Server only. Same heir, new shape (admin `players set sides`, log 0213).
+func on_reshape(id: int, shape: Dictionary) -> void:
+	if not sessions.get(id, {}).has("slot"):
+		return
+	var family := family_of(id)
+	if family == null:
+		return
+	family.sides = shape.sides
+	family.kind = shape.kind
+	family.apex = shape.apex
+	keeper.save_family(sessions[id])
+
+
 ## Server only. The account unlocks `name` for good (log 0174); "" does nothing.
 func _unlock(id: int, unlock_name: String) -> void:
 	if unlock_name == "" or not sessions.has(id) or unlock_name in sessions[id].unlocks:

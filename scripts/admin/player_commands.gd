@@ -13,13 +13,13 @@ const VERBS := {
 	"get": {"usage": "players get [who]", "flags": ["id"],
 			"help": "One player's details."},
 	"set": {"usage": "players set <field> <value> [--id who]", "flags": ["id"],
-			"help": "Sets level, xp, chits, coins or hp. A new level rolls its stat gains, as leveling does."},
+			"help": "Sets level, xp, chits, coins, hp or sides. A new level rolls its stat gains, as leveling does; new sides keep the heir's level and gear."},
 	"levelup": {"usage": "players levelup [count] [--id who]", "flags": ["id"],
 			"help": "Levels up count times (default 1), rolling stat gains."},
 	"quests": {"noun": preload("res://scripts/admin/player_quest_commands.gd"),
 			"help": "a player's quests: list, get, start, set, delete"},
 }
-const FIELDS: Array[String] = ["level", "xp", "chits", "coins", "hp"]
+const FIELDS: Array[String] = ["level", "xp", "chits", "coins", "hp", "sides"]
 
 
 func words_for(verb: String) -> Array[String]:
@@ -97,6 +97,12 @@ func run_set(caller: PlayerShape, words: Array[String], flags: Dictionary) -> St
 		"hp":
 			s.hp = clampi(value, 1, s.max_hp)
 			value = s.hp
+		"sides":
+			if value < 3 or value > Net.MAX_SIDES:
+				return "Sides must be 3 to %d." % Net.MAX_SIDES
+			p.reshape(value)
+			return "%s is now %s." % [PlayerChat.name_of(p),
+					Family.with_article(Family.describe_shape(p.sides, p.kind, p.apex))]
 	return "%s: %s is now %d%s." % [PlayerChat.name_of(p), field, value,
 			" (level %d)" % s.level if field == "xp" else ""]
 

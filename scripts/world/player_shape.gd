@@ -36,6 +36,11 @@ const CHEST_SLOTS := PlayerInventory.CHEST_SLOTS  # Net checks saved chests with
 const GAP_START := 0.12
 ## ... and ends once updates are this fresh again.
 const GAP_END := 0.05
+const WAVE_FORM := 0.05  # s for the comet look to form at critical speed
+const WAVE_FADE := Combat.CRIT_SPEED_GRACE  # s to fade once you slow (your hits still crit meanwhile)
+const COMET_TAIL := 75.0  # px of tail at critical speed...
+const COMET_TAIL_MAX := 150.0  # ... growing with speed to this
+const COMET_STEPS := 8  # points per edge (and along the tail), for smooth fades
 
 var peer_id := 0
 var family_name := ""
@@ -80,6 +85,8 @@ var corner_angles: PackedFloat32Array
 var _collision: CollisionPolygon2D
 var _outline_dirty := true
 var _smoother: NetSmoother  # clients only
+var _wave := 0.0  # 0..1: the comet look at critical speed (logs 0229, 0230)
+var _wave_clock := 0.0
 ## Online, your own shape: running its own physics with your keys because
 ## the server's updates stopped coming (log 0173). Otherwise it's drawn from
 ## them, like every other shape.
@@ -144,11 +151,13 @@ static func create(data: Dictionary) -> PlayerShape:
 	config.property_set_replication_mode("Stats:energy", SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	var on_change: Array[String] = []
 	for stat: String in ["level", "vigor", "mettle", "force", "torque", "rigidity", "luck", "hp", "max_hp",
-			"xp", "chits", "coins", "abilities"]:
+			"xp", "chits", "coins", "smith_ore", "abilities", "ability_slots"]:
 		on_change.append("Stats:" + stat)
-	for items: String in ["bag", "equipped", "chest"]:
+	for items: String in ["bag", "equipped", "chest", "vault", "heirlooms", "heirloom_pending"]:
 		on_change.append("Inventory:" + items)
 	on_change.append("Quests:tracker")
+	on_change.append("Moves:charging")  # a held move's glow (log 0244)
+	on_change.append("Moves:charge")
 	for prop: String in ["sides", "kind", "apex", "generation"]:
 		on_change.append(".:" + prop)
 	for prop in on_change:
@@ -223,7 +232,19 @@ func _process(delta: float) -> void:
 			rotation = s.z
 	if _outline_dirty:
 		_rebuild_outline()
+	var fast := Combat.is_fast(drawn_velocity())
+	_wave = move_toward(_wave, 1.0 if fast else 0.0, delta / (WAVE_FORM if fast else WAVE_FADE))
+	_wave_clock = _wave_clock + delta if _wave > 0.0 else 0.0
 	queue_redraw()  # keeps the name tag upright as the shape turns
+
+
+## How fast this shape is going, as drawn: the server's own velocity, or on
+## a client the smoothed one from its updates.
+func drawn_velocity() -> Vector2:
+	if multiplayer.is_server() or playing_on or _smoother == null:
+		return linear_velocity
+	var v := _smoother.recent_velocity()
+	return Vector2(v.x, v.y)
 
 
 ## Your own shape online (log 0173): when the server's updates stop (a
@@ -280,6 +301,11 @@ func teleport(pos: Vector2) -> void:
 	motion.teleport(pos)
 
 
+## Server only. How much less far enemies see you: camouflage (log 0254).
+func stealth() -> float:
+	return combat.stealth()
+
+
 ## Server only. Thrown by a spike up (SpikeUpAbility calls this on players
 ## and enemies alike).
 func launch(velocity: Vector2, onto: Node2D) -> void:
@@ -300,12 +326,32 @@ static func _clean_items(raw: Variant, size: int) -> PackedStringArray:
 	return PlayerSave.clean_items(raw, size)
 
 
+## Server only (admin `players set sides`, log 0213). The same heir with a
+## new number of sides: level, stats and gear stay. Irregulars stay
+## irregular; a polygon made a triangle is equilateral, a triangle made a
+## polygon regular. Saved to the family at once.
+func reshape(new_sides: int) -> void:
+	var new_kind := kind
+	if new_sides == 3 and kind == "regular":
+		new_kind = "equilateral"
+	elif new_sides != 3 and kind in ["equilateral", "isosceles"]:
+		new_kind = "regular"
+	var new_apex := Family.clean_apex(new_sides, new_kind, apex)
+	sides = new_sides
+	kind = new_kind
+	apex = new_apex
+	_rebuild_outline()
+	Net.reshaped_on_server(peer_id, {"sides": sides, "kind": kind, "apex": apex})
+	quests.shape_changed()
+
+
 ## Server only. The heir takes over this shape, starting fresh at level 1 with
 ## no gear, back at the spawn point (design log 0030). The certificate used
 ## is already gone; spare certificates, potions and money are kept, gear is not.
 func become_heir(heir: Dictionary) -> void:
 	inventory.reset_for_heir()
 	stats.abilities = PackedStringArray()  # the heir hasn't been drilled (design log 0086)
+	stats.ability_slots = Abilities.fill_slots(stats.abilities, PackedStringArray())
 	sides = heir.sides
 	kind = heir.kind
 	apex = heir.apex
@@ -319,7 +365,11 @@ func become_heir(heir: Dictionary) -> void:
 
 
 func _draw() -> void:
+	if _wave > 0.0:
+		_draw_comet()
 	Gear.draw_shape(self, points, sides, inventory.equipped)
+	if moves.charging != "":
+		_draw_charge()
 
 	draw_set_transform(Vector2.ZERO, -rotation)
 	var font := ThemeDB.fallback_font
@@ -333,6 +383,87 @@ func _draw() -> void:
 		draw_rect(bar, Palette.PARCHMENT)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * stats.hp / maxf(stats.max_hp, 1), bar.size.y)), Palette.HEALTH)
 		draw_rect(bar, Palette.INK, false, 1.0)
+
+
+## A held move building (log 0244): a ring that closes round you as it
+## charges. In a charged shot's critical window it flashes gold: let go now.
+func _draw_charge() -> void:
+	var info: Dictionary = Abilities.ALL.get(moves.charging, {})
+	if info.is_empty():
+		return
+	var window: Vector2 = info.crit_window
+	var radius := RADIUS + 9.0
+	var full := window.x if window != Vector2.ZERO else VolleyAbility.MAX_HOLD
+	var k := clampf(moves.charge / full, 0.0, 1.0)
+	draw_set_transform(Vector2.ZERO, -rotation)
+	if window != Vector2.ZERO and moves.charge >= window.x and moves.charge <= window.y:
+		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 40.0)
+		draw_circle(Vector2.ZERO, radius + 4.0, Color(Palette.XP, 0.25 * pulse))
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(Palette.XP, pulse), 4.0, true)
+	else:
+		draw_arc(Vector2.ZERO, radius, -PI / 2.0, -PI / 2.0 + TAU * k, 40, Color(Palette.INK, 0.35 + 0.4 * k), 2.5, true)
+	draw_set_transform(Vector2.ZERO, 0.0)
+
+
+## At critical speed (logs 0229, 0230), like a comet: your leading edge
+## glows gold under an ink line, and a tail streams out behind, longer the
+## faster you go, with a few flickering ink streaks in it. Gold, as the
+## crits it promises.
+func _draw_comet() -> void:
+	var velocity := drawn_velocity()
+	var ahead := velocity.rotated(-rotation).normalized()
+	if ahead == Vector2.ZERO:
+		return
+	var side := ahead.orthogonal()
+	var half := 0.0  # your half-width across the way you're heading
+	for p in points:
+		half = maxf(half, absf(p.dot(side)))
+
+	# The tail: a gold taper from your flanks to a point behind.
+	var length := clampf(COMET_TAIL + (velocity.length() - Combat.CRIT_SPEED) * 0.08, COMET_TAIL, COMET_TAIL_MAX)
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
+	var left_colors := PackedColorArray()
+	for k in COMET_STEPS + 1:
+		var u := float(k) / COMET_STEPS
+		var width := half * pow(1.0 - u, 1.5)
+		left.append(-ahead * (u * length) + side * width)
+		right.append(-ahead * (u * length) - side * width)
+		left_colors.append(Color(Palette.XP, _wave * 0.75 * (1.0 - u)))
+	right.reverse()
+	var colors := left_colors.duplicate()
+	left_colors.reverse()
+	colors.append_array(left_colors)
+	left.append_array(right)
+	draw_polygon(left, colors)
+	for k in 3:
+		var across := side * half * (k - 1) * 0.55
+		var reach := length * (0.55 + 0.25 * sin(_wave_clock * 23.0 + k * 2.1))
+		var from := across - ahead * half * 0.6
+		draw_polyline_colors(PackedVector2Array([from, from - ahead * reach]),
+				PackedColorArray([Color(Palette.INK, _wave * 0.8), Color(Palette.INK, 0.0)]), 2.0, true)
+
+	# The head: the leading arc of your outline, glowing, brightest dead ahead.
+	var arc := PackedVector2Array()
+	var glow := PackedColorArray()
+	var gold := PackedColorArray()
+	var ink := PackedColorArray()
+	for i in points.size():
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		for k in COMET_STEPS:
+			var at := a.lerp(b, float(k) / COMET_STEPS)
+			var out := at.normalized()
+			var lead := pow(maxf(out.dot(ahead), 0.0), 1.5)
+			arc.append(at + out * (3.0 + 6.0 * lead))
+			glow.append(Color(Palette.XP, _wave * 0.55 * lead))
+			gold.append(Color(Palette.XP, _wave * 0.85 * lead))
+			ink.append(Color(Palette.INK, _wave * lead))
+	for list: Variant in [arc, glow, gold, ink]:
+		list.append(list[0])
+	draw_polyline_colors(arc, glow, 20.0, true)
+	draw_polyline_colors(arc, gold, 7.0, true)
+	draw_polyline_colors(arc, ink, 2.5, true)
 
 
 ## One pip per ability's worth of energy (design logs 0026, 0087). Faded when

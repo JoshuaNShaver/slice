@@ -104,6 +104,56 @@ func run() -> int:
 	_check(other.stats.hp == other.stats.max_hp, "hp clamped to max")
 	_check("Can't set" in _run_cmd(me, "\\players set luck 50"), "unlisted field refused")
 	_check("whole number" in _run_cmd(me, "\\players set chits lots"), "non-number refused")
+	var level_before: int = other.stats.level
+	answer = _run_cmd(me, "\\players set sides 5 --id oth")
+	_check(other.sides == 5 and other.kind != "isosceles" and other.apex == 0 and "pentagon" in answer,
+			"set sides: %s" % answer)
+	_check(other.stats.level == level_before and other.points.size() == 5, "same heir, new outline")
+	_check(Net.players.get(other.peer_id, {}).get("sides", 5) == 5, "player list has the new sides")
+	_check("3 to" in _run_cmd(me, "\\players set sides 2 --id oth"), "too few sides refused")
+
+	# Items (log 0214).
+	answer = _run_cmd(me, "\\items")
+	_check("potion" in answer and "points_9" in answer and "pigment_9" not in answer, "items lists the catalog")
+	answer = _run_cmd(me, "\\items list *STEEL*")
+	_check("Steel caps" in answer and "Rose" not in answer and "4 of" in answer, "pattern search, any case: %s" % answer)
+	_check("points_1" in _run_cmd(me, "\\items list points_*"), "pattern on ids")
+	_check("certificate" in _run_cmd(me, "\\items list cert"), "plain search is a substring")
+	_check("No items match" in _run_cmd(me, "\\items list *zzz*"), "no matches says so")
+	other.inventory.bag = PackedStringArray()
+	other.inventory.bag.resize(PlayerInventory.BAG_SIZE)
+	answer = _run_cmd(me, "\\items create points_9+3 2 --id oth")
+	_check(other.inventory.count_of("points_9+3") == 2 and "2 ×" in answer, "create upgraded gear: %s" % answer)
+	_run_cmd(me, "\\items create note 60 --id oth")
+	_check(other.inventory.count_notes() == 60, "notes stack")
+	_check("no item" in _run_cmd(me, "\\items create pigment_9"), "invalid item refused")
+	_check("1 to" in _run_cmd(me, "\\items create potion 0"), "bad count refused")
+	answer = _run_cmd(me, "\\items create potion 99 --id oth")
+	_check("didn't fit" in answer, "full bag says so: %s" % answer)
+	_check(AdminConsole.complete("\\items create pot", true).line == "\\items create potion ", "item id completes")
+
+	# World resources (log 0217).
+	for data: Dictionary in [{"name": "T0", "pos": Vector2(0, 0)}, {"name": "T1", "pos": Vector2(300, 0)},
+			{"name": "O0", "pos": Vector2(600, 0), "kind": "ore"}]:
+		world.add_child(WorldResource.create(data))
+	answer = _run_cmd(me, "\\resources")
+	_check("3 of 3" in answer and "10000/10000" in answer, "resources lists them: %s" % answer)
+	_check("1 of 3" in _run_cmd(me, "\\resources --kind ore"), "--kind filters")
+	_check("2 of 3" in _run_cmd(me, "\\resources list t*"), "name patterns")
+	_check("tree or ore" in _run_cmd(me, "\\resources --kind gold"), "bad kind refused")
+	_check("No resource" in _run_cmd(me, "\\resources deplete X9"), "unknown name refused")
+	me.inventory.bag = PackedStringArray()
+	me.inventory.bag.resize(PlayerInventory.BAG_SIZE)
+	answer = _run_cmd(me, "\\resources deplete all --bag")
+	_check(me.inventory.count_of(Gear.ORE) == 4 and me.inventory.count_of(Gear.LOG) == 11,
+			"deplete fills the bag, the rest past it: %s" % answer)
+	_check("Felled 2 trees and quarried 1 rock" in answer and "15 in the bag" in answer, "it says what: %s" % answer)
+	_check("3 of 3" in _run_cmd(me, "\\resources --felled") and "back in" in _run_cmd(me, "\\resources list o0"),
+			"spent ones show when they grow back")
+	_check("already spent" in _run_cmd(me, "\\resources deplete all"), "spent ones aren't depleted twice")
+	_check("Grew back 2 of 2" in _run_cmd(me, "\\resources regrow T*"), "regrow")
+	_check("2 of 3" in _run_cmd(me, "\\resources --standing"), "regrown ones stand")
+	_check("Nothing to regrow" in _run_cmd(me, "\\resources regrow t0"), "standing ones can't regrow")
 
 	# Enemies.
 	var spawn := Barracks.spawn_points()[3]  # a sparring partner
@@ -214,6 +264,27 @@ func run() -> int:
 	_check("no network" in Diagnostics.live_text([], {}, me), "live panel offline: %s" % Diagnostics.live_text([], {}, me))
 	me.chat.send_line("\\diag live")
 	_check(not PlayerChat.live, "\\diag live again turns off")
+
+	# \view (log 0238): a Flatlander's eyes, parsed here, never sent.
+	_check(FlatView.parse("hello").is_empty(), "\\view only for \\view")
+	var two := FlatView.parse("\\view eyes")
+	_check(two.get("eyes") == 2 and two.get("show_2d") == false, "\\view eyes hides the side view: %s" % two)
+	var over := FlatView.parse("\\view eye 2d")
+	_check(over.get("eyes") == 1 and over.get("show_2d") == true, "\\view eye 2d: %s" % over)
+	_check(FlatView.parse("\\view 2d").get("eyes") == 0, "\\view 2d is the side view")
+	_check(FlatView.parse("\\view eye eyes").has("error"), "one or two eyes, not both")
+	_check(FlatView.parse("\\view fov 90").get("fov") == 90.0, "\\view fov 90")
+	_check(FlatView.parse("\\view fov 999").get("fov") == FlatView.FOV_MAX, "fov at most FOV_MAX")
+	_check(FlatView.parse("\\view fov wide").has("error"), "fov needs a number")
+	_check(FlatView.parse("\\view range 50").get("range") == FlatView.RANGE_MIN, "\\view range at least RANGE_MIN")
+	_check(AdminConsole.complete("\\view 2d eye", false).options.size() == 2, "view offers eye and eyes")
+	_heard.clear()
+	me.chat.send_line("\\view 2d eyes")
+	_check(FlatView.eyes == 2 and FlatView.show_2d and _heard.is_empty() and "two eyes" in _notices[-1],
+			"\\view 2d eyes sets the view: %s" % _notices[-1])
+	me.chat.send_line("\\view 2d")
+	_check(FlatView.eyes == 0, "\\view 2d turns the eyes off")
+	_check("view" in their_help, "a player's help lists view")
 	var smoother := NetSmoother.new()
 	for i in 4:
 		smoother.push(PackedFloat32Array([0, 0, 0, 0, 0, 0, fmod(Time.get_ticks_usec() / 1e6, 4096.0)]))

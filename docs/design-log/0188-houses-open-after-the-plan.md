@@ -1,7 +1,7 @@
 # 0188: Every house is drawn open, after the book's plan
 
 - **Date:** 2026-10-21
-- **Status:** Accepted
+- **Status:** Accepted; houses as scenery, and the room layout, superseded by 0222
 - **Decision:** Every lawful house, in the game and on the menu, is drawn
   open to show its rooms, unlabelled, after the book's plan of the
   narrator's house with level floors for the side view: the Hall behind

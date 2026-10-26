@@ -23,6 +23,13 @@ extends Node
 ## While a muster or the return is counting down, each player in it sees the
 ## timer in a popup with a Ready button (design log 0081). A muster leaves
 ## once everyone in it is ready; after a victory, Ready sends you back at once.
+##
+## The fortress raid (logs 0248, 0250) is for rangers only and runs in a
+## Fortress: a rowboat waits at its dock, guards hold the wall-walk, and
+## letting the drawbridge down brings in the troop. The Castellan waits
+## in his courtyard; his fall wins it. Lookouts on the enemy's boat run for
+## the back door: one that gets in raises the alarm (log 0253). Falling into its sea is drowning (PlayerActions.drown):
+## the bag's lost and you're out, back at the barracks.
 
 const MUSTER_TIME := 10.0  # s for others to join a squad
 const RETURN_DELAY := 6.0  # s after victory before the squad goes back
@@ -34,6 +41,10 @@ const HUDDLE_SPREAD := 320.0  # px the huddle spreads round the Captain
 ## a marriage certificate, which the General gives back at the barracks (log 0092).
 const DISCHARGE_CHANCE := 0.2
 const GENERAL_DELAY := 0.6  # s after the return before the General speaks
+const WALL_LEASH := 320.0  # px the wall-walk's guards keep to their spot (log 0250)
+const BOAT_LEASH := 90.0  # px the enemy boat's archers keep to theirs (log 0253)
+const WINCH_LEASH := 260.0  # ... and the winch's guards
+const ALARM_EVERY := 0.6  # s between the alarm's archers coming down
 
 ## The recon soldier's hints that the stakes are higher (design log 0088).
 const NOBLE_HINTS: Array[String] = [
@@ -51,12 +62,18 @@ const BOSS_HINTS: Array[String] = [
 	"A Captain of the Revolt, on a scouting run? Wounded, by the look of him. This is our chance.",
 	"That's no scout at the back. A Captain. Half the man he was, but a Captain.",
 ]
+## The recon soldier's warning about the Revolt's throwers (log 0247).
+const SKIRMISHER_HINTS: Array[String] = [
+	"The ones hanging back, they throw. Watch for the glint and get out of the way.",
+	"Painted skirmishers at the back. Close on them fast, or keep moving.",
+	"See the ones keeping their distance? They'll pick at you. Don't stand still.",
+]
 
-var world: World
+var world: Node  # World (or a test's stand-in)
 
 ## mission type -> {"members": Array[int], "time": float, "ready": {peer id: true}}
 var _musters := {}
-## slot -> {"type", "node": Mission, "members": {peer id: true}, "foes": int,
+## slot -> {"type", "node": Mission or Fortress, "members": {peer id: true}, "foes": int,
 ## "boss": bool, "boss_down": bool, "done": bool, "grace": float,
 ## "spawned": Array[Enemy], "return_time": float, "pay_mult": int,
 ## "hints": Array[String] (the soldier's lines still to say), "hint_time": float,
@@ -71,11 +88,18 @@ func _ready() -> void:
 	_rng.randomize()
 
 
+func _player(id: int) -> PlayerShape:
+	return world.player(id)
+
+
 ## Server only. `player` took the General's orders.
 func request(player: PlayerShape, mission_type: String) -> void:
 	if not Mission.TYPES.has(mission_type) or _in_mission(player.peer_id):
 		return
 	var info: Dictionary = Mission.TYPES[mission_type]
+	if info.get("rangers", false) and not player.quests.is_done(RangerSchoolQuest.ID):
+		player.screen.tell("The General", "That one's for rangers. Get through ranger school first.")
+		return
 	for other: String in _musters.keys():
 		var old: Dictionary = _musters[other]
 		if old.members.has(player.peer_id):
@@ -152,7 +176,7 @@ func _show_muster(mission_type: String) -> void:
 	var muster: Dictionary = _musters[mission_type]
 	var title := "%s squad musters" % Mission.TYPES[mission_type].name
 	for id: int in muster.members:
-		var p := world.player(id)
+		var p := _player(id)
 		if p != null:
 			p.screen.show_countdown(title, muster.time, muster.ready.size(), muster.members.size(),
 					muster.ready.has(id))
@@ -191,7 +215,7 @@ func _players_in_barracks() -> Array[PlayerShape]:
 func _deploy(mission_type: String, member_ids: Array) -> void:
 	var squad: Array[PlayerShape] = []
 	for id: int in member_ids:
-		var p := world.player(id)
+		var p := _player(id)
 		if p != null:
 			p.screen.show_countdown("", 0.0, 0, 0, false)
 		if p != null and Regions.at(p.position).get("id", "") == "barracks" and not _in_mission(id):
@@ -205,9 +229,14 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 		return
 	var info: Dictionary = Mission.TYPES[mission_type]
 	_count += 1
-	var node: Mission = world.spawn_mission({
-		"name": "Mission%d" % _count, "type": mission_type, "slot": slot, "seed": _rng.randi(),
-	})
+	var fortress := mission_type == "fortress"
+	var node: Node2D
+	if fortress:
+		node = world.spawn_fortress({"name": "Fortress%d" % _count, "slot": slot})
+	else:
+		node = world.spawn_mission({
+			"name": "Mission%d" % _count, "type": mission_type, "slot": slot, "seed": _rng.randi(),
+		})
 	var inst := {
 		"type": mission_type, "node": node, "members": {}, "foes": 0, "boss": false,
 		"boss_down": false, "done": false, "grace": GRACE, "spawned": [], "return_time": 0.0,
@@ -217,9 +246,16 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 	for i in squad.size():
 		var p := squad[i]
 		inst.members[p.peer_id] = true
-		p.teleport(node.ground_point(220.0 + i * 60.0, PlayerShape.RADIUS + 20.0))
+		if fortress:
+			p.teleport((node as Fortress).point(Fortress.SQUAD_AT + Vector2(i * 60.0, 0), PlayerShape.RADIUS + 20.0))
+		else:
+			p.teleport((node as Mission).ground_point(220.0 + i * 60.0, PlayerShape.RADIUS + 20.0))
 		p.combat.heal_full()
 		p.screen.tell("", info.brief)
+	if fortress:
+		_fill_fortress(slot)
+		return
+	var field := node as Mission
 
 	var best_luck := 0
 	for p in squad:
@@ -237,24 +273,28 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 	var bosses := 0
 	var huddled_round: Enemy = null
 	for type: String in ordered:
-		var at := _rng.randf_range(0.42, 0.9) * node.width
+		var at := _rng.randf_range(0.42, 0.9) * field.width
 		var offset := 0.0
 		var strength := 1.0
 		# Invasion's gentry (log 0091): buffed, and they use the Revolt's moves.
 		var gentry: bool = info.has("gentry") and type in ["gentleman", "noble"]
+		if type == "skirmisher":
+			strength = info.get("skirmisher_strength", 1.0)
 		if is_boss.call(type):
-			at = node.width - 260.0 - bosses * 240.0  # a second boss stands guard in front
+			at = field.width - 260.0 - bosses * 240.0  # a second boss stands guard in front
 			bosses += 1
 			inst.boss = true
 			strength = info.get("boss_strength", 1.0)
 		elif huddle:
 			offset = _rng.randf_range(-HUDDLE_SPREAD, HUDDLE_SPREAD * 0.5)
-			at = node.width - 260.0 + offset
+			at = field.width - 260.0 + offset
 		elif gentry:
-			at = _rng.randf_range(0.7, 0.95) * node.width  # about the camp
+			at = _rng.randf_range(0.7, 0.95) * field.width  # about the camp
 			strength = info.gentry_strength
 		elif type == "noble":
-			at = node.width - 420.0  # among the camp's banners
+			at = field.width - 420.0  # among the camp's banners
+		elif type == "skirmisher":
+			at = _rng.randf_range(0.6, 0.92) * field.width  # throwers keep to the back (log 0247)
 		var enemy := _spawn(slot, type, at, strength, gentry)
 		inst.foes += 1
 		if huddle and is_boss.call(type):
@@ -272,6 +312,8 @@ func _deploy(mission_type: String, member_ids: Array) -> void:
 	elif "noble" in ordered and info.has("noble_pay"):
 		inst.pay_mult = info.noble_pay
 		inst.hints.append(NOBLE_HINTS.pick_random())
+	if mission_type == "recon" and "skirmisher" in ordered:
+		inst.hints.append(SKIRMISHER_HINTS.pick_random())
 	for i in info.allies:
 		var soldier := _spawn(slot, "soldier", 320.0 + i * 70.0)
 		# Recon: stays close, swinging past you (log 0078). Invasion: hunts the Revolt (log 0079).
@@ -289,6 +331,8 @@ func _revolt_for(mission_type: String, luck: int) -> Array[String]:
 			var captain := _rng.randf() < Stats.lucky_chance(info.boss, luck)
 			for i in _rng.randi_range(3, 5) * (2 if captain else 1):
 				out.append("rebel")
+			for i in _rng.randi_range(info.skirmishers.x, info.skirmishers.y):
+				out.append("skirmisher")  # log 0247
 			if captain:
 				out.append_array(["gentleman", "noble", info.boss_type])
 			elif _rng.randf() < Stats.lucky_chance(info.noble, luck):
@@ -299,9 +343,12 @@ func _revolt_for(mission_type: String, luck: int) -> Array[String]:
 				out.append("agitator" if i % 3 == 2 else "rebel")
 			for i in _rng.randi_range(info.gentry.x, info.gentry.y):
 				out.append(["gentleman", "noble"].pick_random())
+			for i in _rng.randi_range(info.skirmishers.x, info.skirmishers.y):
+				out.append("skirmisher")
 		"special_ops":
+			# Two of the five bodyguards are skirmishers (log 0247).
 			for i in 5:
-				out.append("bodyguard")
+				out.append("skirmisher" if i < info.skirmishers.x else "bodyguard")
 	var chance: float = info.boss
 	if chance > 0.0 and _rng.randf() < Stats.lucky_chance(chance, luck):
 		out.append(info.boss_type)
@@ -311,13 +358,23 @@ func _revolt_for(mission_type: String, luck: int) -> Array[String]:
 
 
 func _spawn(slot: int, type: String, local_x: float, strength := 1.0, moves := false) -> Enemy:
-	var inst: Dictionary = _active[slot]
-	var node: Mission = inst.node
+	var node: Mission = _active[slot].node
 	var lift: float = Enemy.TYPES[type].radius + 12.0
-	var enemy := world.spawn_enemy({
+	return _spawn_at(slot, type, node.ground_point(local_x, lift), strength, moves)
+
+
+## Spawns `type` standing on the world point `foot`.
+func _spawn_on(slot: int, type: String, foot: Vector2, strength := 1.0) -> Enemy:
+	return _spawn_at(slot, type, foot - Vector2(0, Enemy.TYPES[type].radius + 12.0), strength)
+
+
+func _spawn_at(slot: int, type: String, pos: Vector2, strength := 1.0, moves := false) -> Enemy:
+	var inst: Dictionary = _active[slot]
+	var node: Node2D = inst.node
+	var enemy: Enemy = world.spawn_enemy({
 		"name": "%s_%d" % [node.name, inst.spawned.size()],
 		"type": type,
-		"pos": node.ground_point(local_x, lift),
+		"pos": pos,
 		"room": Regions.mission_rect(slot),
 		"strength": strength,
 		"moves": moves,
@@ -325,6 +382,88 @@ func _spawn(slot: int, type: String, local_x: float, strength := 1.0, moves := f
 	inst.spawned.append(enemy)
 	enemy.died.connect(_on_died.bind(slot), CONNECT_ONE_SHOT)
 	return enemy
+
+
+# --- The fortress raid (logs 0248, 0250) ----------------------------------------
+
+## The boatman's rowboat at the dock; the enemy's boat at the landing,
+## with two lookouts and three archers (log 0253); a few skirmishers on the
+## wall-walk, each keeping to its stretch; and the Castellan in his
+## courtyard with two more, after anyone inside the fortress.
+func _fill_fortress(slot: int) -> void:
+	var inst: Dictionary = _active[slot]
+	var node: Fortress = inst.node
+	var info: Dictionary = Mission.TYPES.fortress
+	var strength: float = info.wall_strength
+	world.spawn_boat({"pos": node.point(Vector2(Fortress.DOCK_X, Fortress.SEA_LEVEL - 30.0)), "facing": 1,
+			"owner": 0, "rowed": true,
+			"route": Vector2(node.position.x + Fortress.DOCK_X, node.position.x + Fortress.LANDING_X)})
+	var deck := node.point(Vector2(Fortress.ENEMY_BOAT_X, Fortress.SEA_LEVEL - 30.0))
+	world.spawn_boat({"pos": deck, "facing": 1, "owner": 0, "rowed": true, "boatman": "",
+			"radius": Fortress.ENEMY_BOAT_RADIUS, "route": Vector2(deck.x, deck.x)})
+	for dx in Fortress.LOOKOUTS:
+		var lookout := _spawn_on(slot, "lookout", deck + Vector2(dx, 0), strength)
+		lookout.flee_to = node.point(Fortress.LOOKOUT_TO)
+		lookout.flee_range = info.lookout_sight
+		lookout.escaped.connect(_lookout_in.bind(slot), CONNECT_ONE_SHOT)
+	for dx in Fortress.ARCHERS:
+		var archer := _spawn_on(slot, "archer", deck + Vector2(dx, 0))
+		archer.leash = BOAT_LEASH  # they keep to their boat
+	for at in Fortress.WALK_GUARDS:
+		var guard := _spawn_on(slot, "skirmisher", node.point(at), strength)
+		guard.leash = WALL_LEASH
+	inst.boss = true
+	var castellan := _spawn_on(slot, info.boss_type, node.point(Fortress.KEEP_DOOR))
+	castellan.room = Rect2(node.position + Fortress.INSIDE.position, Fortress.INSIDE.size)
+	for i in 2:
+		_spawn_on(slot, "skirmisher", node.point(Fortress.KEEP_DOOR + Vector2(-140 + i * 280, 0)), strength)
+	node.gate_lowered.connect(_gate_lowered.bind(slot))
+
+
+## A lookout made it through the back door (log 0253): the alarm. Ten
+## archers come down the crags from the wall's top, a few at a time, and
+## five sentries and two wardens stand round the winch.
+func _lookout_in(lookout: Enemy, slot: int) -> void:
+	lookout.queue_free()  # deferred: inside a physics callback
+	if not _active.has(slot):
+		return
+	var inst: Dictionary = _active[slot]
+	if inst.get("alarm", false) or inst.done:
+		return
+	inst.alarm = true
+	var node: Fortress = inst.node
+	var info: Dictionary = Mission.TYPES.fortress
+	for id: int in inst.members:
+		var p := _player(id)
+		if p != null:
+			p.screen.tell("", "A bell rings inside the fortress. The lookout made it in.")
+			p.screen.tell("The Castellan", "To the walls! Archers, down to the shore! Guard the winch!")
+	for i in int(info.alarm_archers):
+		get_tree().create_timer(i * ALARM_EVERY).timeout.connect(func() -> void:
+			if _active.has(slot) and _active[slot] == inst and not inst.done:
+				_spawn_on(slot, "archer", node.point(Fortress.ALARM_ARCHERS_AT + Vector2((i % 3) * 50.0, 0))))
+	for i in Fortress.WINCH_GUARDS.size():
+		var type := "warden" if i in [2, 5] else "sentry"
+		var guard := _spawn_on(slot, type, node.point(Fortress.WINCH_GUARDS[i]))
+		guard.leash = WINCH_LEASH
+
+
+## The drawbridge is down: the troop charges in.
+func _gate_lowered(by: PlayerShape, slot: int) -> void:
+	if not _active.has(slot):
+		return
+	var inst: Dictionary = _active[slot]
+	var node: Fortress = inst.node
+	var info: Dictionary = Mission.TYPES.fortress
+	for id: int in inst.members:
+		var p := _player(id)
+		if p != null:
+			p.screen.tell("The Castellan", "The bridge! Who let down my bridge? To the gate, all of you!")
+			p.screen.tell(Enemy.TYPES.soldier.name, "%s's done it! Charge!" % ("Someone" if by == null else by.family_name))
+	for i in int(info.troop):
+		var at: float = lerpf(Fortress.TROOP_FROM, Fortress.TROOP_TO, float(i) / maxf(info.troop - 1, 1))
+		var soldier := _spawn_on(slot, "soldier", node.point(Vector2(at, 0)))
+		soldier.role = "charge"
 
 
 func _free_slot() -> int:
@@ -344,6 +483,10 @@ func _on_died(enemy: Enemy, slot: int) -> void:
 	var inst: Dictionary = _active[slot]
 	if enemy.is_boss():
 		inst.boss_down = true
+	if inst.type == "fortress":  # the Castellan's fall wins it (log 0250)
+		if enemy.is_boss() and not inst.done:
+			_win.call_deferred(slot)
+		return
 	inst.foes -= 1
 	if inst.foes <= 0 and not inst.done:
 		_win.call_deferred(slot)
@@ -368,10 +511,12 @@ func _watch(slot: int, delta: float) -> void:
 		return
 	var field := Regions.mission_rect(slot)
 	for id: int in inst.members.keys():
-		var p := world.player(id)
+		var p := _player(id)
 		if p == null or not field.has_point(p.position):
 			inst.members.erase(id)
-			if p != null:
+			if p != null and p.actions.drowning:
+				p.screen.tell("The General", "Fished out of the sea, were you? The raid goes on without you. No chits.")
+			elif p != null:
 				p.screen.tell("The General", "You left the front. No chits for deserters.")
 	if inst.members.is_empty():
 		_close(slot)
@@ -387,7 +532,7 @@ func _hint(inst: Dictionary, delta: float) -> void:
 	inst.hint_time = HINT_DELAY
 	var line: String = inst.hints.pop_front()
 	for id: int in inst.members:
-		var p := world.player(id)
+		var p := _player(id)
 		if p != null:
 			p.screen.tell(Enemy.TYPES.soldier.name, line)
 	if inst.offer_report:
@@ -401,7 +546,7 @@ func _hint(inst: Dictionary, delta: float) -> void:
 func _offer_report(inst: Dictionary, show: bool) -> void:
 	var info: Dictionary = Mission.TYPES[inst.type]
 	for id: int in inst.members:
-		var p := world.player(id)
+		var p := _player(id)
 		if p == null:
 			continue
 		if show:
@@ -419,11 +564,13 @@ func _win(slot: int) -> void:
 	var info: Dictionary = Mission.TYPES[inst.type]
 	var pay: int = info.pay * inst.pay_mult
 	for id: int in inst.members:
-		var p := world.player(id)
+		var p := _player(id)
 		if p == null:
 			continue
 		p.stats.add_chits(pay)
-		if inst.boss_down:
+		if inst.type == "fortress":
+			p.screen.tell("The General", "The fortress is ours. +%d chits. Report to me at the barracks." % pay)
+		elif inst.boss_down:
 			p.screen.tell("The General", "Their gentry is down. +%d chits. Report to me at the barracks." % pay)
 		elif inst.pay_mult > 1:
 			p.screen.tell("The General", "More than scouts out there, I hear. Well done. +%d chits." % pay)
@@ -440,7 +587,7 @@ func _return_squad(slot: int) -> void:
 	var boss_down: bool = _active[slot].boss_down
 	var i := 0
 	for id: int in _active[slot].members:
-		var p := world.player(id)
+		var p := _player(id)
 		if p == null:
 			continue
 		if field.has_point(p.position):
@@ -460,7 +607,7 @@ func _schedule_debrief(id: int) -> void:
 ## A boss win (design log 0092): the General rolls each member's discharge,
 ## like a promotion, once they're back. Rolled now, with today's luck.
 func _debrief(id: int) -> void:
-	var p := world.player(id)
+	var p := _player(id)
 	if p == null:
 		return
 	if _rng.randf() < Stats.lucky_chance(DISCHARGE_CHANCE, p.stats.luck):
@@ -479,4 +626,5 @@ func _close(slot: int) -> void:
 			(enemy as Node).queue_free()
 	if is_instance_valid(inst.node):
 		inst.node.queue_free()
+	world.remove_boats_in(Regions.mission_rect(slot))  # the fortress raid's rowboats
 	_active.erase(slot)

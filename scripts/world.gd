@@ -35,6 +35,7 @@ var _background: ParchmentBackground
 var _hud: Hud
 var _atmosphere: Atmosphere
 var _ink: InkPass
+var _flat: FlatView  # a Flatlander's eyes, \view (log 0238); not on a dedicated server
 var _place_id := ""
 var _enemies_root: Node2D
 var _enemy_spawner: MultiplayerSpawner
@@ -48,6 +49,8 @@ var _boats_root: Node2D
 var _boat_spawner: MultiplayerSpawner
 var _boat_count := 0
 var _trees_root: Node2D
+var _exam_spawner: MultiplayerSpawner  # ranger school's exam courses (log 0245)
+var _fortress_spawner: MultiplayerSpawner
 var _tree_spawner: MultiplayerSpawner
 var _camera_place := "-"
 var _rng := RandomNumberGenerator.new()
@@ -69,20 +72,13 @@ func _ready() -> void:
 	front.add_child(_ink)
 	_atmosphere = Atmosphere.new()
 	front.add_child(_atmosphere)
+	if DisplayServer.get_name() != "headless":
+		_flat = FlatView.new()  # over the side view and its dust, under the HUD
+		add_child(_flat)
 
 	add_to_group(GROUP)
 	_rng.randomize()
-	add_child(CenterTerrain.new())
-	add_child(Barracks.new())
-	add_child(Coast.new())
-	add_child(Market.new())
-	add_child(UpperEast.new())
-	add_child(Underworld.new())
-	add_child(Cave.new())
-	for lift: Dictionary in [CenterTerrain.LIFT_DOWN, CenterTerrain.LIFT_UP]:
-		add_child(Elevator.create(lift))
-	for data: Dictionary in CenterTerrain.NPCS + Barracks.NPCS + Coast.NPCS + Market.NPCS + UpperEast.NPCS + Underworld.NPCS:
-		add_child(Npc.create(data))
+	add_places(self)
 	var door := HouseDoor.new()
 	door.position = Buildings.men_door(UpperEast.HOME, UpperEast.HOME_WIDTH)
 	add_child(door)
@@ -92,11 +88,18 @@ func _ready() -> void:
 	_pickups_root = _add_spawned_root("Pickups", Pickup.create)
 	_pickup_spawner = get_node("PickupsSpawner")
 	_missions_root = _add_spawned_root("Missions", Mission.create)
-	_trees_root = _add_spawned_root("Trees", Timber.create)
+	_add_spawned_root("Fortresses", Fortress.create)  # the rangers' raid (log 0250)
+	_fortress_spawner = get_node("FortressesSpawner")
+	_trees_root = _add_spawned_root("Trees", WorldResource.create)
 	_tree_spawner = get_node("TreesSpawner")
+	_add_spawned_root("Exams", RangerExam.create)
+	_exam_spawner = get_node("ExamsSpawner")
 	_boats_root = _add_spawned_root("Boats", Boat.create)
 	_boat_spawner = get_node("BoatsSpawner")
 	add_child(Ocean.new())  # over the boats: their hulls sit in the water
+	var projectiles := Projectiles.new()  # thrown shots (log 0242)
+	projectiles.name = "Projectiles"
+	add_child(projectiles)
 	_mission_spawner = get_node("MissionsSpawner")
 	_missions = Missions.new()
 	_missions.name = "MissionControl"
@@ -147,8 +150,9 @@ func _process(delta: float) -> void:
 		if _hud.storage_open() and not me.inventory.can_use_chest():
 			_hud.close_storage()
 		var panel := _hud.open_panel_name()
-		var role: String = {"orders": "general", "shop": "quartermaster"}.get(panel, panel)
-		if panel != "" and not Npc.near_role(me, role):
+		var role := panel_role(panel)
+		# The heirloom choice (log 0216) is no one's counter: it stays open anywhere.
+		if panel != "" and panel != "heirlooms" and not Npc.near_role(me, role):
 			_hud.close_panel()
 		_follow_camera_limits(me)
 	if multiplayer.is_server():
@@ -165,6 +169,9 @@ func _process(delta: float) -> void:
 	_ink.origin = view - get_viewport().get_visible_rect().size / 2.0
 	_ink.under = _background.depth
 	_ink.focus = get_viewport().get_canvas_transform() * me.global_position if me != null else Vector2(NAN, NAN)
+	if _flat != null:
+		_flat.player = me
+		_flat.under = _background.depth
 
 
 func _local_player() -> PlayerShape:
@@ -176,6 +183,29 @@ func player(peer_id: int) -> PlayerShape:
 
 
 ## The camera stays inside the main world, or inside a mission's field.
+## Everything fixed in the world, the same on every peer: the ground of
+## every region, the floating mounds and the houses on them (logs 0221,
+## 0222), the lifts and the people (log 0223). Tests build it too.
+static func add_places(root: Node) -> void:
+	root.add_child(CenterTerrain.new())
+	root.add_child(Barracks.new())
+	root.add_child(Coast.new())
+	root.add_child(Market.new())
+	root.add_child(UpperEast.new())
+	root.add_child(Underworld.new())
+	root.add_child(Cave.new())
+	root.add_child(RangerCamp.new())  # the rangers' secret island (log 0246)
+	for data: Dictionary in CenterTerrain.mounds() + Barracks.mounds() + UpperEast.mounds():
+		root.add_child(Mound.create(data))
+	for data: Dictionary in CenterTerrain.HOUSES + UpperEast.houses() + Underworld.houses():
+		root.add_child(House.create(data))
+	for lift: Dictionary in [CenterTerrain.LIFT_DOWN, CenterTerrain.LIFT_UP]:
+		root.add_child(Elevator.create(lift))
+	for data: Dictionary in CenterTerrain.npcs() + Barracks.npcs() + Coast.NPCS + Market.NPCS + UpperEast.npcs() \
+			+ Underworld.npcs() + RangerCamp.npcs():
+		root.add_child(Npc.create(data))
+
+
 func _world_bounds() -> Rect2:
 	return Rect2(Coast.WEST_X - 100, UpperEast.TOP, UpperEast.EAST_X - Coast.WEST_X + 200,
 			Underworld.BOTTOM - 200 - UpperEast.TOP)
@@ -183,7 +213,8 @@ func _world_bounds() -> Rect2:
 
 func _follow_camera_limits(me: PlayerShape) -> void:
 	var slot := Regions.mission_slot_at(me.position)
-	var key := str(slot)
+	var own := Regions.camera_rect(me.position)  # an exam or the rangers' island (log 0245)
+	var key := str(slot) + str(own)
 	if key == _camera_place:
 		return
 	_camera_place = key
@@ -192,6 +223,8 @@ func _follow_camera_limits(me: PlayerShape) -> void:
 		bounds = Regions.mission_rect(slot)
 		var west := Mission.origin(slot).x - 200.0
 		bounds = Rect2(west, bounds.position.y, bounds.end.x - west, bounds.size.y)
+	elif own.has_area():
+		bounds = own
 	_set_camera_limits(bounds)
 	_camera.reset_smoothing()
 
@@ -290,14 +323,78 @@ func interact(who: PlayerShape) -> void:
 		target.interact(who)
 
 
+## The NPC role whose counter a HUD panel belongs to: walk away from every
+## NPC with that role and the panel closes (the panel's own name otherwise).
+static func panel_role(panel: String) -> String:
+	return {"orders": "general", "shop": "quartermaster", "ranger_shop": "ranger_quartermaster"}.get(panel, panel)
+
+
+## Server only. Sends `who` somewhere far (ranger school, log 0245):
+## "exam" (their own exam course), "camp" (the rangers' island) or
+## "barracks" (by the Drill Sergeant). False if it couldn't (no exam free).
+func travel(who: PlayerShape, where: String) -> bool:
+	match where:
+		"exam":
+			return open_exam(who)
+		"camp":
+			who.motion.teleport(RangerCamp.SPAWN)
+		"barracks":
+			who.motion.teleport(Vector2(-3150, Barracks.island_y(-3150) - 40.0))
+		_:
+			return false
+	return true
+
+
+## Server only. Puts `who` at the start of their own exam course, making
+## one in a free slot if they haven't one. False if every slot is taken.
+func open_exam(who: PlayerShape) -> bool:
+	var slot := -1
+	var taken := {}
+	for node in get_tree().get_nodes_in_group(RangerExam.GROUP):
+		var exam := node as RangerExam
+		taken[exam.slot] = true
+		if exam.owner_peer == who.peer_id:
+			slot = exam.slot
+	if slot < 0:
+		for i in Regions.EXAM_SLOTS:
+			if not taken.has(i):
+				slot = i
+				break
+		if slot < 0:
+			who.screen.tell("", "Every exam course is taken. Try again shortly.")
+			return false
+		_exam_spawner.spawn({"name": "X%d" % slot, "slot": slot, "owner": who.peer_id})
+	who.motion.teleport(RangerExam.start_of(slot))
+	return true
+
+
 ## Server only (a boatwright, Npc "boats", design log 0201): a boat for
 ## `who` on the water at `at`, bow toward `facing`, with them on its deck
-## behind the mast. Their old boat, if any, goes.
-func launch_boat(who: PlayerShape, at: Vector2, facing: int) -> void:
+## behind the mast. Their old boat, if any, goes. With a `route` (its
+## dock's x, its landing's), a rowboat (the fortress raid's, log 0250).
+func launch_boat(who: PlayerShape, at: Vector2, facing: int, route: Variant = null) -> void:
 	_remove_boat_of(who.peer_id)
+	var data := {"pos": at, "facing": facing, "owner": who.peer_id}
+	if route != null:
+		data.merge({"rowed": true, "route": route})
+	var boat := spawn_boat(data)
+	who.teleport(at + Vector2(-facing * boat.radius * 0.5, -PlayerShape.RADIUS - 12.0))
+
+
+## Server only. A boat from Boat.create data (less its name), on every peer.
+func spawn_boat(data: Dictionary) -> Boat:
 	_boat_count += 1
-	_boat_spawner.spawn({"name": "B%d" % _boat_count, "pos": at, "facing": facing, "owner": who.peer_id})
-	who.teleport(at + Vector2(-facing * Boat.RADIUS * 0.5, -PlayerShape.RADIUS - 12.0))
+	var named := data.duplicate()
+	named.name = "B%d" % _boat_count
+	return _boat_spawner.spawn(named)
+
+
+## Server only. Every boat inside `rect` goes (a mission's, when it closes).
+func remove_boats_in(rect: Rect2) -> void:
+	for boat: Boat in _boats_root.get_children():
+		if rect.has_point(boat.position):
+			_boats_root.remove_child(boat)
+			boat.queue_free()
 
 
 ## Server only.
@@ -308,11 +405,15 @@ func _remove_boat_of(peer_id: int) -> void:
 			boat.queue_free()
 
 
-## Server only. The Logging Isle's trees (design log 0202).
+## Server only. The Logging Isle's trees (design log 0202) and the Quarry
+## Isle's ore rocks (log 0211).
 func _spawn_trees() -> void:
 	for i in Coast.TREES.size():
 		var x := Coast.TREES[i]
 		_tree_spawner.spawn({"name": "T%d" % i, "pos": Vector2(x, Coast.ground_y(x))})
+	for i in Coast.ORE_ROCKS.size():
+		var x := Coast.ORE_ROCKS[i]
+		_tree_spawner.spawn({"name": "O%d" % i, "pos": Vector2(x, Coast.ground_y(x)), "kind": "ore"})
 
 
 ## Server only (PlayerActions._submit_mission): the General's orders.
@@ -353,7 +454,7 @@ func _on_heir_born(heir: Dictionary) -> void:
 
 ## The cave's and the drill yard's enemies, which come back after dying.
 func _spawn_all_enemies() -> void:
-	var points := Cave.spawn_points() + Barracks.spawn_points()
+	var points := Cave.spawn_points() + Barracks.spawn_points() + RangerCamp.spawn_points()
 	for i in points.size():
 		_respawn_enemy(i, points[i])
 
@@ -377,6 +478,11 @@ func spawn_enemy(data: Dictionary) -> Enemy:
 ## Server only. Spawns a mission's battlefield (Mission.create data).
 func spawn_mission(data: Dictionary) -> Mission:
 	return _mission_spawner.spawn(data)
+
+
+## Server only. Spawns a fortress raid's instance (Fortress.create data, log 0250).
+func spawn_fortress(data: Dictionary) -> Fortress:
+	return _fortress_spawner.spawn(data)
 
 
 func _on_enemy_died(enemy: Enemy, index: int, point: Dictionary) -> void:

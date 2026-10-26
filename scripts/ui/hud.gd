@@ -21,6 +21,17 @@ extends CanvasLayer
 ## - The dock's market and your booth on Merchants' Row (design log 0205):
 ##   opened by the Harbourmaster and the Market Clerk, refreshed from the
 ##   server after each trade (show_market).
+## - The family strongroom (design log 0212): its chests, a grid that grows
+##   as the family buys them, and a button for the next one. Drag between
+##   it and the bag, as with the house chests.
+## - Heirlooms (design log 0216): the strongroom's five free slots for the
+##   last generations' armor. After a marriage, where a slot was already
+##   full, a panel shows the old piece and the new; click the one to pass
+##   down. It opens by itself once the cutscene ends, and from the
+##   strongroom while a choice waits.
+## - The Blacksmith's forge (design log 0211): your worn and carried gear,
+##   each with what the next upgrade costs and gives; refilled whenever
+##   what it shows changes.
 ## - Every panel has an ✕ in its top right corner; the use key that opened
 ##   the chests, orders or shop closes them again (design log 0129).
 ## - Top right: a countdown popup while a squad musters or heads
@@ -78,15 +89,32 @@ var _chest_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.chest
 var _storage: Control
 var _orders: Control
 var _shop: Control
+var _ranger_shop: Control  # the ranger quartermaster's (log 0246)
+var _ranger_pay: Label
 var _market: Control  # the dock's logs (log 0205)
 var _market_body: VBoxContainer
 var _booth: Control  # your booth's orders
 var _booth_body: VBoxContainer
+var _vault: Control  # the family's strongroom (log 0212)
+var _vault_grid: GridContainer
+var _vault_slots: Array[ItemSlot] = []  # indexed like PlayerInventory.vault
+var _vault_buy: Button
+var _heirloom_row: Control  # the strongroom's heirloom slots
+var _heirloom_slots: Array[ItemSlot] = []  # indexed like Gear.SLOTS
+var _heirloom_waiting: Button  # "Choose what's passed down"
+var _heirlooms: Control  # the choice panel (log 0216)
+var _heirloom_body: VBoxContainer
+var _heirloom_shown := ""  # the pending pieces the panel last showed
+var _smith: Control  # the Blacksmith's upgrades (log 0211)
+var _smith_body: VBoxContainer
+var _smith_shown := ""  # what the smith's panel was last filled from
 var _work_amount := 5  # logs a work order will ask for
 var _market_data := {}
 var _shop_pay: Label
 var _ability_buttons := {}  # ability id -> its buy button in the shop
 var _abilities_label: Label  # character sheet
+var _slot_buttons: Array[Button] = []  # character sheet: one per ability key slot (log 0243)
+var _slot_labels: Array[Label] = []
 var _character_page: Control  # equipment and stats
 var _purse_page: Control
 var _page_buttons: Array[Button] = []
@@ -252,6 +280,7 @@ func update(me: PlayerShape) -> void:
 	_set_text(_chits_label, _money(me.stats.chits))
 	_set_text(_coins_label, _money(me.stats.coins))
 	_set_text(_shop_pay, "Your chits: %s" % _money(me.stats.chits))
+	_set_text(_ranger_pay, "Chits: %s · coins: %s" % [_money(me.stats.chits), _money(me.stats.coins)])
 	_update_abilities(me)
 	_update_tracker(me.quests.tracker)
 	_health_bar.set_values(me.stats.hp, me.stats.max_hp)
@@ -266,9 +295,11 @@ func update(me: PlayerShape) -> void:
 		_gear_slots[i].item = me.inventory.equipped[i]
 	for i in _chest_slots.size():
 		_chest_slots[i].item = me.inventory.chest[i]
-	var full_set := Gear.set_tier(me.inventory.equipped)
-	_set_text(_set_label, "Full set: none" if full_set == 0 else "Full %s set: %s" % [
-			Gear.TIERS[full_set].name.to_lower(), Gear.describe_bonus(Gear.TIERS[full_set].set)])
+	_set_text(_set_label, _set_text_for(me.inventory.equipped))
+	if _smith.visible:
+		_fill_smith(me)
+	_update_vault(me)
+	_update_heirlooms(me)
 	_announce_changes(me)
 	_set_text(_character_title, "The %s family: %s" % [me.family_name, Family.describe_shape(me.sides, me.kind, me.apex)])
 	_set_text(_stat_values["level"], str(me.stats.level))
@@ -306,8 +337,15 @@ func open_panel(panel: String) -> void:
 	_storage.visible = false
 	_orders.visible = panel == "orders"
 	_shop.visible = panel == "shop"
+	_ranger_shop.visible = panel == "ranger_shop"
 	_market.visible = panel == "market"
 	_booth.visible = panel == "booth"
+	_smith.visible = panel == "smith"
+	_vault.visible = panel == "vault"
+	_heirlooms.visible = panel == "heirlooms"
+	if _smith.visible and _me != null and is_instance_valid(_me):
+		_smith_shown = ""
+		_fill_smith(_me)
 
 
 ## "orders", "shop" or "" (neither is open).
@@ -316,18 +354,30 @@ func open_panel_name() -> String:
 		return "orders"
 	if _shop != null and _shop.visible:
 		return "shop"
+	if _ranger_shop != null and _ranger_shop.visible:
+		return "ranger_shop"
 	if _market != null and _market.visible:
 		return "market"
 	if _booth != null and _booth.visible:
 		return "booth"
+	if _smith != null and _smith.visible:
+		return "smith"
+	if _vault != null and _vault.visible:
+		return "vault"
+	if _heirlooms != null and _heirlooms.visible:
+		return "heirlooms"
 	return ""
 
 
 func close_panel() -> void:
 	_orders.visible = false
 	_shop.visible = false
+	_ranger_shop.visible = false
 	_market.visible = false
 	_booth.visible = false
+	_smith.visible = false
+	_vault.visible = false
+	_heirlooms.visible = false
 
 
 ## The use key pressed again: closes the chests, orders or shop it opened.
@@ -536,7 +586,8 @@ func _announce_changes(me: PlayerShape) -> void:
 	var items := {}
 	for item in me.inventory.bag + me.inventory.equipped:
 		if item != "":
-			items[item] = items.get(item, 0) + 1
+			var base := Gear.base_item(item)  # an upgrade isn't a new find
+			items[base] = items.get(base, 0) + 1
 	var now := {"level": me.stats.level, "items": items, "sides": me.sides, "set": Gear.set_tier(me.inventory.equipped)}
 	if _seen.get("sides") == now.sides:  # not when an heir takes over
 		if now.level > _seen.level:
@@ -546,7 +597,7 @@ func _announce_changes(me: PlayerShape) -> void:
 				think("Picked up: " + Gear.item_name(item))
 		if now["set"] > 0 and now["set"] != _seen.get("set", 0):
 			var tier: Dictionary = Gear.TIERS[now["set"]]
-			think("Full %s set! %s" % [tier.name.to_lower(), Gear.describe_bonus(tier.set)])
+			think("Full %s set! %s" % [tier.name.to_lower(), Gear.describe_bonus(Gear.set_bonus(me.inventory.equipped))])
 	_seen = now
 
 
@@ -611,10 +662,18 @@ func _build() -> void:
 	_root.add_child(_orders)
 	_shop = _build_shop()
 	_root.add_child(_shop)
+	_ranger_shop = _build_ranger_shop()
+	_root.add_child(_ranger_shop)
 	_market = _build_trade_panel(true)
 	_root.add_child(_market)
 	_booth = _build_trade_panel(false)
 	_root.add_child(_booth)
+	_smith = _build_smith()
+	_root.add_child(_smith)
+	_vault = _build_vault()
+	_root.add_child(_vault)
+	_heirlooms = _build_heirloom_choice()
+	_root.add_child(_heirlooms)
 
 	_on_controls_changed()
 
@@ -814,8 +873,12 @@ func _bag_slot(i: int) -> ItemSlot:
 	var slot := ItemSlot.new()
 	slot.drag_source = {"bag": i}
 	slot.accepts = func(data: Dictionary) -> bool:
-		if data.has("chest"):
+		if data.has("chest") or data.has("vault"):
 			return true
+		if data.has("heirloom") and _me != null:
+			# Back into an heirloom slot goes only gear for that slot.
+			var swapped := _me.inventory.bag[i]
+			return swapped == "" or Gear.slot_of(swapped) == Gear.SLOTS[data.heirloom]
 		if not data.has("worn") or _me == null:
 			return true
 		# Taking gear off: into an empty slot, or swapping with gear for the same slot.
@@ -828,6 +891,10 @@ func _bag_slot(i: int) -> ItemSlot:
 			_me.inventory.request_swap(data.bag, i)
 		elif data.has("chest"):
 			_me.inventory.request_swap(PlayerInventory.CHEST_BASE + data.chest, i)
+		elif data.has("vault"):
+			_me.inventory.request_swap(PlayerInventory.VAULT_BASE + data.vault, i)
+		elif data.has("heirloom"):
+			_me.inventory.request_swap(PlayerInventory.HEIRLOOM_BASE + data.heirloom, i)
 		elif data.has("worn"):
 			_me.inventory.request_unequip(data.worn, i))
 	slot.double_clicked.connect(func() -> void:
@@ -916,7 +983,24 @@ func _build_character() -> Control:
 		var value := Label.new()
 		_stat_values[stat] = value
 		stats.add_child(_row(stat.capitalize(), value))
+	# Equipped abilities (design log 0243): click a slot to cycle through
+	# the owned abilities made for it.
+	stats.add_child(_heading("Abilities"))
+	_slot_buttons.clear()
+	_slot_labels.clear()
+	for slot in Abilities.SLOT_ACTIONS.size():
+		var button := Button.new()
+		button.custom_minimum_size.x = 110
+		button.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+		button.tooltip_text = "Click: equip the next ability you own for this key"
+		button.pressed.connect(_cycle_slot.bind(slot))
+		var row := _row("", button)
+		_slot_labels.append(row.get_child(0) as Label)
+		_slot_buttons.append(button)
+		stats.add_child(row)
 	_abilities_label = _faded("")
+	_abilities_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_abilities_label.custom_minimum_size.x = 200
 	stats.add_child(_abilities_label)
 	columns.add_child(stats)
 
@@ -1132,7 +1216,7 @@ func _build_shop() -> Control:
 	drills_label.text = "Drills"
 	drills_label.custom_minimum_size.x = 120
 	drills.add_child(drills_label)
-	for id: String in Abilities.ALL:
+	for id: String in Abilities.sold_by("quartermaster"):
 		var button := Button.new()
 		button.tooltip_text = "%s\n%d energy a use." % [Abilities.ALL[id].text, roundi(Abilities.ALL[id].cost)]
 		button.pressed.connect(func() -> void:
@@ -1151,21 +1235,135 @@ func _build_shop() -> Control:
 	return panel
 
 
-## Shop buttons say what's learned; the character sheet lists it with keys.
+## Equips the next owned ability for a key slot, then none, round again.
+func _cycle_slot(slot: int) -> void:
+	if _me == null:
+		return
+	var options: Array[String] = [""]
+	for id: String in Abilities.ALL:
+		if id in _me.stats.abilities and Abilities.slot_of(id) == slot:
+			options.append(id)
+	var at := options.find(_me.stats.ability_slots[slot])
+	_me.moves.request_equip(slot, options[(at + 1) % options.size()])
+
+
+## Shop buttons say what's learned; the character sheet shows what's
+## equipped to each key (log 0243).
 func _update_abilities(me: PlayerShape) -> void:
+	for slot in _slot_buttons.size():
+		var id := me.stats.ability_slots[slot]
+		_set_text(_slot_labels[slot], "%s (%s)" % [Abilities.SLOT_NAMES[slot],
+				Controls.describe(Abilities.SLOT_ACTIONS[slot])])
+		var text := Abilities.ability_name(id) if id != "" else "—"
+		if _slot_buttons[slot].text != text:
+			_slot_buttons[slot].text = text
 	var known: Array[String] = []
 	for id: String in Abilities.ALL:
 		var info: Dictionary = Abilities.ALL[id]
 		var learned := id in me.stats.abilities
-		if learned:
-			known.append("%s (%s)" % [info.name, Controls.describe(info.action)])
+		if learned and id not in me.stats.ability_slots:
+			known.append(info.name)
 		var button: Button = _ability_buttons.get(id)
 		if button != null:
-			var text := "%s · %s" % [info.name, "learned" if learned else "%s chits" % _money(info.price)]
+			var text := "%s · %s" % [info.name, "learned" if learned else "%s %s" % [_money(info.price), info.currency]]
 			if button.text != text:
 				button.text = text
 			button.disabled = learned
-	_set_text(_abilities_label, "Abilities: " + (", ".join(known) if not known.is_empty() else "none"))
+	_set_text(_abilities_label, "Also owned: " + ", ".join(known) if not known.is_empty() else "")
+
+
+## The ranger quartermaster's stores (log 0246): a row per ranger tier,
+## Scout for chits and the rest for coins, rations, and the ranger drills.
+func _build_ranger_shop() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	var header := HBoxContainer.new()
+	var title := _heading(RangerCamp.QUARTERMASTER)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	_ranger_pay = Label.new()
+	header.add_child(_ranger_pay)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
+	column.add_child(header)
+
+	var rows: Array = [["Rations", [Gear.RATION]]]
+	var by_tier := {}
+	for item in Gear.shop_stock("ranger"):
+		var tier := Gear.tier_of(item)
+		if not by_tier.has(tier):
+			by_tier[tier] = []
+			rows.append([Gear.TIERS[tier].name, by_tier[tier]])
+		by_tier[tier].append(item)
+	var width := 0
+	for row: Array in rows:
+		width = maxi(width, row[1].size())
+	var grid := GridContainer.new()
+	grid.columns = width + 1
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 10)
+	for row: Array in rows:
+		var label := Label.new()
+		label.text = row[0]
+		label.custom_minimum_size = Vector2(120, ItemSlot.SIZE)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		grid.add_child(label)
+		for i in width - row[1].size():
+			grid.add_child(Control.new())
+		for item: String in row[1]:
+			grid.add_child(_ranger_cell(item))
+	column.add_child(grid)
+
+	var drills := HBoxContainer.new()
+	drills.add_theme_constant_override("separation", 8)
+	var drills_label := Label.new()
+	drills_label.text = "Drills"
+	drills_label.custom_minimum_size.x = 120
+	drills.add_child(drills_label)
+	for id: String in Abilities.sold_by("ranger"):
+		var info: Dictionary = Abilities.ALL[id]
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.tooltip_text = "%s\n%s" % [info.text, "Free to use." if info.cost <= 0.0 else "%d energy a use." % roundi(info.cost)]
+		button.pressed.connect(func() -> void:
+			if _me != null:
+				_me.actions.request_learn(id))
+		_ability_buttons[id] = button
+		drills.add_child(button)
+	column.add_child(drills)
+	var note := _faded("Rations stack, %d to a slot, and heal %d%% over %d s." % [Gear.RATION_STACK,
+			roundi(Gear.RATION_HEAL * 100), roundi(Stats.MEAL_TIME)])
+	column.add_child(note)
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
+	return panel
+
+
+## "100 chits" or "600 coins": what the ranger quartermaster asks.
+static func _ranger_price_text(item: String) -> String:
+	var price := Gear.ranger_price(item)
+	if price.is_empty():
+		return ""
+	var currency: String = price.keys()[0]
+	return "%s %s" % [_money(price[currency]), currency]
+
+
+func _ranger_cell(item: String) -> Control:
+	var cell := VBoxContainer.new()
+	cell.add_theme_constant_override("separation", 2)
+	var slot := ItemSlot.new("", "Double-click: buy for %s" % _ranger_price_text(item))
+	slot.item = item
+	slot.double_clicked.connect(func() -> void:
+		if _me != null:
+			_me.actions.request_ranger_buy(item))
+	cell.add_child(slot)
+	var price := _faded(_ranger_price_text(item))
+	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cell.add_child(price)
+	return cell
 
 
 ## An item box with its price centred underneath.
@@ -1248,6 +1446,35 @@ func _fill_market() -> void:
 			row.add_child(_trade_button("Buy %d" % count, "buy_coins" if with_coins else "buy_chits", count))
 		_market_body.add_child(row)
 
+	# Promissory notes (log 0212): paper for logs, for coins, stacking in the bag.
+	var notes_row := HBoxContainer.new()
+	notes_row.add_theme_constant_override("separation", 8)
+	var notes_label := Label.new()
+	notes_label.text = "Notes: %s coins a log" % _money(int(d.coin_price))
+	notes_label.custom_minimum_size.x = 180
+	notes_row.add_child(notes_label)
+	for count in [1, 10, 25, 50]:
+		notes_row.add_child(_trade_button("Buy %d" % count, "buy_notes", count))
+	_market_body.add_child(notes_row)
+	var notes_note := _faded("A promissory note fills a booth order like a log, and %d stack in one slot." % Gear.NOTE_STACK)
+	notes_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notes_note.custom_minimum_size.x = 500
+	_market_body.add_child(notes_note)
+
+	# Rare ore (log 0211): its own stock and price, no work orders.
+	_market_body.add_child(_faded("Rare ore in stock: %d." % int(d.get("ore_stock", 0))))
+	for with_coins: bool in [false, true]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var each: int = d.get("ore_coin_price" if with_coins else "ore_chit_price", 0)
+		var label := Label.new()
+		label.text = "%s %s an ore" % [_money(each), "coins" if with_coins else "chits"]
+		label.custom_minimum_size.x = 180
+		row.add_child(label)
+		for count in [1, 5, 10]:
+			row.add_child(_trade_button("Buy %d" % count, "buy_ore_coins" if with_coins else "buy_ore_chits", count))
+		_market_body.add_child(row)
+
 	var work_left := int(d.work_left)
 	if work_left > 0:
 		_market_body.add_child(_faded("Your work order: %d logs still to come." % work_left))
@@ -1290,8 +1517,12 @@ func _fill_booth() -> void:
 		child.queue_free()
 	var d := _market_data
 	_booth_body.add_child(_money_row())
-	var logs := _me.inventory.count_of(Gear.LOG) if _me != null and is_instance_valid(_me) else 0
-	_booth_body.add_child(_faded("In your bag: %d logs. The dock sells at %s coins a log." % [logs, _money(int(d.coin_price))]))
+	var have := _me != null and is_instance_valid(_me)
+	var log_count := _me.inventory.count_of(Gear.LOG) if have else 0
+	var note_count := _me.inventory.count_notes() if have else 0
+	var logs := log_count + note_count  # notes fill orders like logs (log 0212)
+	_booth_body.add_child(_faded("In your bag: %d logs and %d notes. The dock sells at %s coins a log." % [
+			log_count, note_count, _money(int(d.coin_price))]))
 	var orders: Array = d.orders
 	if orders.is_empty():
 		_booth_body.add_child(_faded("No orders yet. Buyers come by every minute or two."))
@@ -1332,6 +1563,322 @@ func _trade_button(text: String, action: String, amount: int) -> Button:
 		if _me != null and is_instance_valid(_me):
 			_me.actions.request_market(action, amount))
 	return button
+
+
+## "Full regimental set +3: +20 vigor, +26 force", or "Full set: none".
+static func _set_text_for(worn: PackedStringArray) -> String:
+	var tier := Gear.set_tier(worn)
+	if tier == 0:
+		return "Full set: none"
+	var level := Gear.set_level(worn)
+	return "Full %s set%s: %s" % [Gear.TIERS[tier].name.to_lower(), " +%d" % level if level > 0 else "",
+			Gear.describe_bonus(Gear.set_bonus(worn))]
+
+
+## The family strongroom (design log 0212): a grid of the chests bought so
+## far, rebuilt when that changes, and a button for the next.
+func _build_vault() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	var header := HBoxContainer.new()
+	var title := _heading("Your family's strongroom")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
+	column.add_child(header)
+	var about := _faded("Kept for every heir of this family, safe from the sea. If the family ends, it's lost.")
+	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	about.custom_minimum_size.x = BAG_COLUMNS * (ItemSlot.SIZE + 8) + 120
+	column.add_child(about)
+	_vault_grid = _slot_grid(BAG_COLUMNS)
+	column.add_child(_vault_grid)
+	# Heirlooms (log 0216): free slots, filled at each marriage.
+	var heirlooms := VBoxContainer.new()
+	heirlooms.add_theme_constant_override("separation", 6)
+	heirlooms.add_child(_heading("Heirlooms"))
+	var heirlooms_about := _faded("Free. What each heir wore is passed down here when the next takes over.")
+	heirlooms_about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	heirlooms_about.custom_minimum_size.x = BAG_COLUMNS * (ItemSlot.SIZE + 8) + 120
+	heirlooms.add_child(heirlooms_about)
+	var heirloom_grid := _slot_grid(Gear.SLOTS.size())
+	for i in Gear.SLOTS.size():
+		var slot := ItemSlot.new(Gear.SLOT_INFO[Gear.SLOTS[i]].label, "Drag to the bag, or double-click: take")
+		slot.drag_source = {"heirloom": i}
+		slot.accepts = func(data: Dictionary) -> bool:
+			return data.has("bag") and Gear.slot_of(str(data.item)) == Gear.SLOTS[i]
+		slot.dropped.connect(func(data: Dictionary) -> void:
+			if _me != null:
+				_me.inventory.request_swap(data.bag, PlayerInventory.HEIRLOOM_BASE + i))
+		slot.double_clicked.connect(func() -> void:
+			if _me == null:
+				return
+			var free := _me.inventory.bag.find("")
+			if free != -1:
+				_me.inventory.request_swap(PlayerInventory.HEIRLOOM_BASE + i, free))
+		_heirloom_slots.append(slot)
+		heirloom_grid.add_child(slot)
+	heirlooms.add_child(heirloom_grid)
+	_heirloom_waiting = Button.new()
+	_heirloom_waiting.focus_mode = Control.FOCUS_NONE
+	_heirloom_waiting.text = "Choose what's passed down"
+	_heirloom_waiting.pressed.connect(func() -> void: open_panel("heirlooms"))
+	heirlooms.add_child(_heirloom_waiting)
+	_heirloom_row = heirlooms
+	column.add_child(heirlooms)
+	_vault_buy = Button.new()
+	_vault_buy.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	_vault_buy.pressed.connect(func() -> void:
+		if _me != null and is_instance_valid(_me):
+			_me.actions.request_buy_chest())
+	column.add_child(_vault_buy)
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
+	return panel
+
+
+func _update_vault(me: PlayerShape) -> void:
+	var vault := me.inventory.vault
+	if _vault_slots.size() != vault.size():
+		for slot in _vault_slots:
+			slot.queue_free()
+		_vault_slots.clear()
+		for i in vault.size():
+			var slot := ItemSlot.new("", "Drag to the bag, or double-click: take")
+			slot.drag_source = {"vault": i}
+			slot.accepts = func(data: Dictionary) -> bool:
+				return data.has("bag") or data.has("vault")
+			slot.dropped.connect(func(data: Dictionary) -> void:
+				if _me == null:
+					return
+				var from: int = data.bag if data.has("bag") else PlayerInventory.VAULT_BASE + data.vault
+				_me.inventory.request_swap(from, PlayerInventory.VAULT_BASE + i))
+			slot.double_clicked.connect(func() -> void:
+				if _me == null:
+					return
+				var free := _me.inventory.bag.find("")
+				if free != -1:
+					_me.inventory.request_swap(PlayerInventory.VAULT_BASE + i, free))
+			_vault_slots.append(slot)
+			_vault_grid.add_child(slot)
+	for i in vault.size():
+		_vault_slots[i].item = vault[i]
+	var owned := me.inventory.vault_chests()
+	if owned >= PlayerInventory.VAULT_PRICES.size():
+		_set_button_text(_vault_buy, "Every chest bought")
+		_vault_buy.disabled = true
+	else:
+		var price := PlayerInventory.VAULT_PRICES[owned]
+		_set_button_text(_vault_buy, "Buy %s chest: %s coins (you have %s)" % ["your first" if owned == 0 else "another",
+				_money(price), _money(me.stats.coins)])
+		_vault_buy.disabled = me.stats.coins < price
+
+
+## Heirloom slots in the strongroom, and the choice panel: opened by itself
+## once a new choice is waiting and no cutscene is playing (log 0216).
+func _update_heirlooms(me: PlayerShape) -> void:
+	_heirloom_row.visible = me.inventory.vault_chests() > 0
+	for i in _heirloom_slots.size():
+		_heirloom_slots[i].item = me.inventory.heirlooms[i]
+	var pending := me.inventory.heirloom_pending
+	var waiting := pending.count("") < pending.size()
+	_heirloom_waiting.visible = waiting
+	var shown := ",".join(pending) + "|" + ",".join(me.inventory.heirlooms)
+	if shown == _heirloom_shown:
+		return
+	if not waiting:
+		_heirloom_shown = shown
+		if _heirlooms.visible:
+			close_panel()
+		return
+	if cutscene_playing():
+		return  # after the wedding and the birth
+	var first_time := _heirloom_shown.get_slice("|", 0) != ",".join(pending)
+	_heirloom_shown = shown
+	_fill_heirloom_choice(me)
+	if first_time and open_panel_name() == "":
+		open_panel("heirlooms")
+
+
+func _build_heirloom_choice() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = 740
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	var header := HBoxContainer.new()
+	var title := _heading("What is passed down?")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
+	column.add_child(header)
+	var about := _faded("The family's heirloom slot already holds a piece. Click the one your heirs keep; the other is lost. You can choose later at the Strongroom.")
+	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	about.custom_minimum_size.x = 720
+	column.add_child(about)
+	_heirloom_body = VBoxContainer.new()
+	_heirloom_body.add_theme_constant_override("separation", 12)
+	column.add_child(_heirloom_body)
+	_add_close_button(panel, close_panel)
+	return panel
+
+
+func _fill_heirloom_choice(me: PlayerShape) -> void:
+	for child in _heirloom_body.get_children():
+		child.queue_free()
+	for i in Gear.SLOTS.size():
+		var fresh := me.inventory.heirloom_pending[i]
+		if fresh == "":
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var label := Label.new()
+		label.text = Gear.SLOT_INFO[Gear.SLOTS[i]].label
+		label.custom_minimum_size.x = 80
+		row.add_child(label)
+		row.add_child(_heirloom_pick(i, me.inventory.heirlooms[i], false))
+		var or_label := _faded("or")
+		row.add_child(or_label)
+		row.add_child(_heirloom_pick(i, fresh, true))
+		_heirloom_body.add_child(row)
+
+
+## One side of a choice: the piece, its name and what it gives. Clicking
+## anywhere on it keeps it.
+func _heirloom_pick(slot: int, item: String, is_new: bool) -> Button:
+	var button := Button.new()
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(300, ItemSlot.SIZE + 16)
+	button.tooltip_text = Gear.describe(item)
+	var inside := HBoxContainer.new()
+	inside.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inside.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	inside.add_theme_constant_override("separation", 8)
+	var icon := ItemSlot.new()
+	icon.item = item
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inside.add_child(icon)
+	var text := Label.new()
+	var stat: String = Gear.SLOT_INFO[Gear.SLOTS[slot]].stat
+	text.text = "%s\n%s · +%d %s" % [Gear.item_name(item), "new" if is_new else "kept", Gear.bonuses(item)[stat], stat]
+	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inside.add_child(text)
+	button.add_child(inside)
+	button.pressed.connect(func() -> void:
+		if _me != null and is_instance_valid(_me):
+			_me.inventory.request_choose_heirloom(slot, is_new))
+	return button
+
+
+## The Blacksmith (design log 0211): a panel whose body _fill_smith fills
+## from your gear, your coins and the ore he holds for you.
+func _build_smith() -> Control:
+	var panel := _centered_panel()
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = 560
+	column.add_theme_constant_override("separation", 10)
+	panel.add_child(column)
+	var header := HBoxContainer.new()
+	var title := _heading("The Blacksmith")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var clear_of_close := Control.new()
+	clear_of_close.custom_minimum_size.x = CLOSE_SIZE + 8
+	header.add_child(clear_of_close)
+	column.add_child(header)
+	_smith_body = VBoxContainer.new()
+	_smith_body.add_theme_constant_override("separation", 8)
+	column.add_child(_smith_body)
+	var costs: Array[String] = []
+	for level in range(1, Gear.MAX_UPGRADE + 1):
+		costs.append("+%d: %s" % [level, _upgrade_cost_text(level)])
+	var note := _faded("Each piece goes to +5. " + " · ".join(costs) + ". Ore you bring stays with him.")
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 540
+	column.add_child(note)
+	column.add_child(_faded("%s or %s to close" % [Controls.describe("interact"), Controls.describe("menu")]))
+	_add_close_button(panel, close_panel)
+	return panel
+
+
+static func _upgrade_cost_text(level: int) -> String:
+	var cost: Dictionary = Gear.UPGRADE_COST[level]
+	var text := "%s coins" % _money(int(cost.coins))
+	if int(cost.ore) > 0:
+		text += " and %d ore" % int(cost.ore)
+	return text
+
+
+## Rows for each worn piece, then each piece in the bag. Rebuilt only when
+## something it shows changes.
+func _fill_smith(me: PlayerShape) -> void:
+	var shown := "%s|%s|%d|%d" % [",".join(me.inventory.equipped), ",".join(me.inventory.bag), me.stats.coins,
+			me.stats.smith_ore]
+	if shown == _smith_shown:
+		return
+	_smith_shown = shown
+	for child in _smith_body.get_children():
+		child.queue_free()
+	var money := HBoxContainer.new()
+	money.add_theme_constant_override("separation", 8)
+	money.add_child(MoneyIcon.new("coins", 22))
+	var coins := Label.new()
+	coins.text = _money(me.stats.coins)
+	coins.custom_minimum_size.x = 90
+	money.add_child(coins)
+	var ore := Label.new()
+	ore.text = "Rare ore with him: %d" % me.stats.smith_ore
+	money.add_child(ore)
+	_smith_body.add_child(money)
+	var any := false
+	for i in Gear.SLOTS.size():
+		if Gear.is_gear(me.inventory.equipped[i]):
+			_smith_body.add_child(_smith_row(me, me.inventory.equipped[i], PlayerActions.UPGRADE_WORN + i, true))
+			any = true
+	for i in PlayerInventory.BAG_SIZE:
+		if Gear.is_gear(me.inventory.bag[i]):
+			_smith_body.add_child(_smith_row(me, me.inventory.bag[i], i, false))
+			any = true
+	if not any:
+		_smith_body.add_child(_faded("Nothing to work on. Wear or carry the gear you want upgraded."))
+
+
+func _smith_row(me: PlayerShape, item: String, where: int, worn: bool) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var slot := ItemSlot.new()
+	slot.item = item
+	row.add_child(slot)
+	var label := Label.new()
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var stat: String = Gear.SLOT_INFO[Gear.slot_of(item)].stat
+	var better := Gear.upgraded(item)
+	var button := Button.new()
+	button.focus_mode = Control.FOCUS_NONE  # keep Space for jumping
+	if better == "":
+		label.text = "%s%s\n+%d %s: finished" % [Gear.item_name(item), " (worn)" if worn else "",
+				Gear.bonuses(item)[stat], stat]
+		button.text = "+5"
+		button.disabled = true
+	else:
+		var level := Gear.plus_of(better)
+		label.text = "%s%s\n+%d → +%d %s · %s" % [Gear.item_name(item), " (worn)" if worn else "",
+				Gear.bonuses(item)[stat], Gear.bonuses(better)[stat], stat, _upgrade_cost_text(level)]
+		var cost: Dictionary = Gear.UPGRADE_COST[level]
+		var ore_have := me.stats.smith_ore + me.inventory.count_of(Gear.ORE)
+		button.text = "Upgrade to +%d" % level
+		button.disabled = me.stats.coins < int(cost.coins) or ore_have < int(cost.ore)
+		button.pressed.connect(func() -> void:
+			if _me != null and is_instance_valid(_me):
+				_me.actions.request_upgrade(where))
+	row.add_child(label)
+	row.add_child(button)
+	return row
 
 
 ## Esc: who's here, and the way out.
@@ -1536,6 +2083,11 @@ func _faded(text: String) -> Label:
 	label.text = text
 	label.add_theme_color_override("font_color", Palette.INK_FADED)
 	return label
+
+
+func _set_button_text(button: Button, text: String) -> void:
+	if button.text != text:
+		button.text = text
 
 
 func _set_text(label: Label, text: String) -> void:
